@@ -1,21 +1,23 @@
-from fastapi import FastAPI, Query
-from .scrapers.indeed_scraper import scrape_indeed
-from .models import Job
-from .schemas import JobResponse
-from typing import List
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from app.scrapers.indeed_scraper import scrape_indeed
 
 app = FastAPI()
+
+# Allow frontend requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
 
-@app.get("/scrape/indeed", response_model=List[JobResponse])
-def get_indeed_jobs(query: str = "Software Engineer", location: str = "London"):
-    jobs_data = scrape_indeed(query, location)
-    return jobs_data
-
-@app.get("/api/jobs", response_model=List[JobResponse])
-def get_jobs_stub():
-    # Placeholder, DB connection needed
-    return []
+@app.get("/scrape/indeed")
+async def scrape_indeed_endpoint(query: str, location: str):
+    results = await scrape_indeed(query, location)
+    return results
