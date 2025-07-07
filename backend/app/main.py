@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .scrapers.indeed_scraper import scrape_indeed
+from app.scrapers.indeed_scraper import scrape_indeed
 
 app = FastAPI()
 
