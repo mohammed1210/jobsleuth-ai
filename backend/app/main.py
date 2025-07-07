@@ -1,10 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.scrapers.indeed_scraper_playwright import scrape_indeed
+from app.scrapers.indeed_scraper_playwright import scrape_indeed_playwright
 
 app = FastAPI()
 
-# Allow frontend requests
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,6 +17,6 @@ def health_check():
     return {"status": "ok"}
 
 @app.get("/scrape/indeed")
-def scrape_indeed_endpoint(query: str, location: str):
-    results = scrape_indeed(query, location)
-    return results
+async def scrape_indeed_endpoint(query: str, location: str):
+    results = await scrape_indeed_playwright(query, location)
+    return {"results": results}
