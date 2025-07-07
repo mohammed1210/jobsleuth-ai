@@ -18,6 +18,6 @@ def health_check():
     return {"status": "ok"}
 
 @app.get("/scrape/indeed")
-async def scrape_indeed_endpoint(query: str, location: str):
-    results = await scrape_indeed(query, location)
+def scrape_indeed_endpoint(query: str, location: str):
+    results = scrape_indeed(query, location)
     return results
