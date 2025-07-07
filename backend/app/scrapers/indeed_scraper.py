@@ -1,26 +1,40 @@
+
 import requests
 from bs4 import BeautifulSoup
 
-def scrape_indeed(query: str, location: str, limit: int = 10):
-    url = f"https://uk.indeed.com/jobs?q={query}&l={location}&limit={limit}"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    res = requests.get(url, headers=headers)
-    soup = BeautifulSoup(res.text, "html.parser")
+def scrape_indeed(query, location):
     jobs = []
+    query = query.replace(" ", "+")
+    location = location.replace(" ", "+")
+    url = f"https://www.indeed.co.uk/jobs?q={query}&l={location}"
 
-    for card in soup.select("a.tapItem"):
-        title = card.select_one("h2 span")
-        company = card.select_one(".companyName")
-        loc = card.select_one(".companyLocation")
-        link = "https://uk.indeed.com" + card.get("href")
-        job = {
-            "title": title.text.strip() if title else "N/A",
-            "company": company.text.strip() if company else "N/A",
-            "location": loc.text.strip() if loc else "N/A",
-            "salary": None,
-            "link": link,
-            "source": "Indeed",
-            "date_posted": None
-        }
-        jobs.append(job)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+
+    response = requests.get(url, headers=headers)
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    for div in soup.find_all("a", attrs={"class": "tapItem"}):
+        title_elem = div.find("h2", {"class": "jobTitle"})
+        company_elem = div.find("span", {"class": "companyName"})
+        location_elem = div.find("div", {"class": "companyLocation"})
+
+        title = title_elem.get_text(strip=True) if title_elem else None
+        company = company_elem.get_text(strip=True) if company_elem else None
+        location = location_elem.get_text(strip=True) if location_elem else None
+
+        job_link = "https://www.indeed.co.uk" + div.get("href") if div.get("href") else None
+
+        if title and company and job_link:
+            jobs.append({
+                "title": title,
+                "company": company,
+                "location": location,
+                "salary": None,
+                "link": job_link,
+                "source": "Indeed",
+                "date_posted": None
+            })
+
     return jobs
