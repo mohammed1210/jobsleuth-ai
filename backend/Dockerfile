@@ -3,6 +3,7 @@ FROM python:3.12-slim
 
 # Install system dependencies for Playwright
 RUN apt-get update && apt-get install -y \
+    wget \
     libglib2.0-0 \
     libnspr4 \
     libnss3 \
@@ -20,6 +21,11 @@ RUN apt-get update && apt-get install -y \
     libxcb1 \
     libxkbcommon0 \
     libasound2 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libgtk-3-0 \
+    libcups2 \
+    libxshmfence1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -29,7 +35,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Playwright browsers
+# Install Playwright and browsers
 RUN pip install playwright
 RUN playwright install --with-deps
 
