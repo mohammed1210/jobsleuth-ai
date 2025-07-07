@@ -8,6 +8,7 @@ async def scrape_indeed_playwright(query: str, location: str, max_results: int =
     url = f"https://www.indeed.co.uk/jobs?q={query_str}&l={location_str}"
 
     async with async_playwright() as p:
+        # Headless False for debugging if running locally
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context()
         page = await context.new_page()
@@ -22,8 +23,18 @@ async def scrape_indeed_playwright(query: str, location: str, max_results: int =
         except:
             print("No cookie popup or already accepted.")
 
-        # Wait for job cards to load
-        await page.wait_for_selector("a.tapItem", timeout=15000)
+        # Take screenshot before waiting for selector
+        print("Taking debug screenshot...")
+        await page.screenshot(path="page_debug.png", full_page=True)
+        print("✅ Screenshot saved as page_debug.png")
+
+        # Wait for job cards to load (extended timeout)
+        try:
+            await page.wait_for_selector("a.tapItem", timeout=30000)
+        except Exception as e:
+            print(f"❌ Selector wait failed: {e}")
+            await browser.close()
+            return []
 
         job_cards = await page.query_selector_all("a.tapItem")
         for i, card in enumerate(job_cards):
