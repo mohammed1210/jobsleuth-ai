@@ -1,0 +1,20 @@
+backend/**:
+  - backend
+
+frontend/**:
+  - frontend
+
+supabase/**:
+  - database
+
+docs/**:
+  - documentation
+
+.github/**:
+  - ci/cd
+
+'**/*.test.{js,ts,tsx}':
+  - tests
+
+'**/*.test.py':
+  - tests

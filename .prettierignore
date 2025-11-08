@@ -1,0 +1,9 @@
+node_modules
+.next
+out
+dist
+build
+coverage
+*.pyc
+__pycache__
+.ruff_cache
