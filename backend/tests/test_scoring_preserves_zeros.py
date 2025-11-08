@@ -1,6 +1,5 @@
 """Test scoring service preserves zeros."""
 
-import pytest
 
 from services.scoring import compute_heuristic_score
 
@@ -14,13 +13,13 @@ def test_scoring_preserves_zero_salary():
         "salary_max": 0,
         "raw": {"description": "Unpaid internship"},
     }
-    
+
     result = compute_heuristic_score(job, "Python developer with React experience")
-    
+
     # Score should be computed (not skipped due to 0 being falsy)
     assert result["fit_score"] is not None
     assert isinstance(result["fit_score"], (int, float))
-    
+
     # Check that salary factor was included (even with 0 values)
     salary_factors = [f for f in result["factors"] if "Salary" in f["name"]]
     assert len(salary_factors) > 0, "Salary factor should be present even when salary is 0"
@@ -35,7 +34,7 @@ def test_scoring_distinguishes_zero_from_none():
         "salary_max": 0,
         "raw": {},
     }
-    
+
     job_with_none = {
         "title": "Intern",
         "company": "StartupCo",
@@ -43,18 +42,18 @@ def test_scoring_distinguishes_zero_from_none():
         "salary_max": None,
         "raw": {},
     }
-    
+
     result_zero = compute_heuristic_score(job_with_zero, None)
     result_none = compute_heuristic_score(job_with_none, None)
-    
+
     # Both should compute scores
     assert result_zero["fit_score"] is not None
     assert result_none["fit_score"] is not None
-    
+
     # Check factors
     zero_salary_factors = [f for f in result_zero["factors"] if "Salary" in f["name"]]
     none_salary_factors = [f for f in result_none["factors"] if "Salary" in f["name"]]
-    
+
     # Both should have salary factors (0 and None are both valid)
     assert len(zero_salary_factors) > 0
     assert len(none_salary_factors) > 0
@@ -67,19 +66,19 @@ def test_scoring_zero_skills_match():
         "company": "EnterpriseCo",
         "raw": {"description": "Java Spring Boot expert needed"},
     }
-    
+
     # Resume with no matching skills
     resume = "I am a graphic designer with Photoshop and Illustrator skills"
-    
+
     result = compute_heuristic_score(job, resume)
-    
+
     # Score should be computed
     assert result["fit_score"] is not None
-    
+
     # Skills match factor should exist and might be 0
     skills_factors = [f for f in result["factors"] if "Skills" in f["name"]]
     assert len(skills_factors) > 0
-    
+
     # The score itself might be 0.0 (valid), not None
     if skills_factors:
         assert skills_factors[0]["score"] is not None
@@ -94,7 +93,7 @@ def test_scoring_never_returns_none_score():
         {"title": "Manager", "company": "Corp", "salary_min": 0, "raw": {}},
         {"title": "Designer", "company": "Agency", "salary_min": None, "raw": {}},
     ]
-    
+
     for job in jobs:
         result = compute_heuristic_score(job, None)
         assert result["fit_score"] is not None, f"fit_score should never be None for job: {job}"

@@ -7,7 +7,6 @@ A simple health check endpoint is provided for monitoring deployments.
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
 from routes import (
     digests,
     jobs,
@@ -49,4 +48,3 @@ app.include_router(scrape.router)
 async def health() -> dict[str, bool]:
     """Simple health check endpoint."""
     return {"ok": True}
-

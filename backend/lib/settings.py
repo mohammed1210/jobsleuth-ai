@@ -1,7 +1,6 @@
 """Settings and configuration for JobSleuth AI backend."""
 
 import os
-from typing import Optional
 
 from pydantic_settings import BaseSettings
 
@@ -21,20 +20,20 @@ class Settings(BaseSettings):
     PRICE_ID_INVESTOR: str = os.getenv("PRICE_ID_INVESTOR", "")
 
     # OpenAI
-    OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
+    OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
 
     # Email
-    RESEND_API_KEY: Optional[str] = os.getenv("RESEND_API_KEY")
-    MAILGUN_API_KEY: Optional[str] = os.getenv("MAILGUN_API_KEY")
-    MAILGUN_DOMAIN: Optional[str] = os.getenv("MAILGUN_DOMAIN")
+    RESEND_API_KEY: str | None = os.getenv("RESEND_API_KEY")
+    MAILGUN_API_KEY: str | None = os.getenv("MAILGUN_API_KEY")
+    MAILGUN_DOMAIN: str | None = os.getenv("MAILGUN_DOMAIN")
     EMAIL_FROM: str = os.getenv("EMAIL_FROM", "noreply@jobsleuth.ai")
 
     # Scraping
-    PROVIDER_API_KEY: Optional[str] = os.getenv("PROVIDER_API_KEY")
+    PROVIDER_API_KEY: str | None = os.getenv("PROVIDER_API_KEY")
     SCRAPE_PROVIDER: str = os.getenv("SCRAPE_PROVIDER", "off")
     FEATURE_SCRAPE_INTERNAL: bool = os.getenv("FEATURE_SCRAPE_INTERNAL", "false").lower() == "true"
     HEADLESS: bool = os.getenv("HEADLESS", "true").lower() == "true"
-    PROXY_URL: Optional[str] = os.getenv("PROXY_URL")
+    PROXY_URL: str | None = os.getenv("PROXY_URL")
 
     # Auth
     AUTH_SCRAPER_KEY: str = os.getenv("AUTH_SCRAPER_KEY", "change-me-in-production")
@@ -45,6 +44,7 @@ class Settings(BaseSettings):
 
     class Config:
         """Pydantic config."""
+
         env_file = ".env"
         case_sensitive = True
 

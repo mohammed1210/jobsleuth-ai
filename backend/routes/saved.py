@@ -1,18 +1,17 @@
 """Saved jobs routes for JobSleuth AI."""
 
-from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Header
-from pydantic import BaseModel
-
+from fastapi import APIRouter, Header, HTTPException
 from lib.auth import require_auth
 from lib.supabase import supabase
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/saved-jobs", tags=["saved"])
 
 
 class SaveJobRequest(BaseModel):
     """Request body for saving a job."""
+
     job_id: str
 
 
@@ -24,20 +23,26 @@ async def save_job(
     """Save a job for the current user."""
     try:
         token = require_auth(authorization)
-        
+
         # Get user from token
         auth_response = supabase.auth.get_user(token)
-        if not auth_response or not hasattr(auth_response, 'user') or not auth_response.user:
+        if not auth_response or not hasattr(auth_response, "user") or not auth_response.user:
             raise HTTPException(status_code=401, detail="Invalid token")
-        
+
         user_id = auth_response.user.id
-        
+
         # Insert saved job (RLS will enforce user_id match)
-        response = supabase.table("saved_jobs").insert({
-            "user_id": user_id,
-            "job_id": request.job_id,
-        }).execute()
-        
+        response = (
+            supabase.table("saved_jobs")
+            .insert(
+                {
+                    "user_id": user_id,
+                    "job_id": request.job_id,
+                }
+            )
+            .execute()
+        )
+
         return {"ok": True, "data": response.data}
     except HTTPException:
         raise
@@ -52,21 +57,23 @@ async def get_saved_jobs(
     """Get all saved jobs for the current user."""
     try:
         token = require_auth(authorization)
-        
+
         # Get user from token
         auth_response = supabase.auth.get_user(token)
-        if not auth_response or not hasattr(auth_response, 'user') or not auth_response.user:
+        if not auth_response or not hasattr(auth_response, "user") or not auth_response.user:
             raise HTTPException(status_code=401, detail="Invalid token")
-        
+
         user_id = auth_response.user.id
-        
+
         # Get saved jobs with job details (RLS enforces user_id)
-        response = supabase.table("saved_jobs")\
-            .select("*, jobs(*)")\
-            .eq("user_id", user_id)\
-            .order("created_at", desc=True)\
+        response = (
+            supabase.table("saved_jobs")
+            .select("*, jobs(*)")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
             .execute()
-        
+        )
+
         return {"jobs": response.data}
     except HTTPException:
         raise

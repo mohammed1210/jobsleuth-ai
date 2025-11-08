@@ -1,13 +1,15 @@
 """Stripe customer portal route for JobSleuth AI backend."""
 
+import os
+
+import stripe
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
-import stripe
-import os
 
 router = APIRouter(prefix="/stripe")
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_xxx")
+
 
 @router.post("/create-portal-session")
 async def create_portal_session(customer_id: str) -> JSONResponse:
