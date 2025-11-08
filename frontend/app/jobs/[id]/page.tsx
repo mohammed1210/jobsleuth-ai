@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import HeaderClient from '@/components/HeaderClient';
 
 export default function JobDetailPage() {
   const params = useParams();
@@ -52,22 +53,20 @@ export default function JobDetailPage() {
             <li>Excellent problem-solving skills</li>
           </ul>
         `,
-        required_skills: ['JavaScript', 'TypeScript', 'React', 'Node.js'],
+        required_skills: ['JavaScript', 'TypeScript', 'React', 'Node.js', 'AWS', 'Docker'],
       };
       
       setJob(mockJob);
       
-      // Mock AI score if feature is enabled
-      if (featureAiFit) {
-        setAiScore({
-          overall_score: 0.82,
-          skills_score: 0.75,
-          title_score: 0.88,
-          location_score: 0.90,
-          salary_score: 0.80,
-          seniority_score: 0.85,
-        });
-      }
+      // Mock AI score - always show for demonstration
+      setAiScore({
+        overall_score: 0.85,
+        skills_score: 0.80,
+        title_score: 0.90,
+        location_score: 0.88,
+        salary_score: 0.82,
+        seniority_score: 0.87,
+      });
       
       setLoading(false);
     } catch (error) {
@@ -101,154 +100,219 @@ export default function JobDetailPage() {
 
   if (loading) {
     return (
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        <div className="text-center py-12">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-200 border-t-indigo-600"></div>
-          <p className="mt-2 text-gray-600">Loading job details...</p>
-        </div>
-      </main>
+      <div className="min-h-screen">
+        <HeaderClient />
+        <main className="max-w-5xl mx-auto px-6 py-12">
+          <div className="text-center py-20">
+            <div className="inline-flex items-center justify-center">
+              <div className="w-12 h-12 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin"></div>
+            </div>
+            <p className="mt-4 text-lg text-gray-600 font-medium">Loading job details...</p>
+          </div>
+        </main>
+      </div>
     );
   }
 
   if (!job) {
     return (
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        <div className="text-center py-12">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Job Not Found</h1>
-          <Link href="/jobs" className="text-indigo-600 hover:text-indigo-700">
-            ← Back to Jobs
-          </Link>
-        </div>
-      </main>
+      <div className="min-h-screen">
+        <HeaderClient />
+        <main className="max-w-5xl mx-auto px-6 py-12">
+          <div className="text-center py-20">
+            <h1 className="text-3xl font-bold text-gray-900 mb-4">Job Not Found</h1>
+            <Link href="/jobs" className="btn-primary inline-flex items-center">
+              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              Back to Jobs
+            </Link>
+          </div>
+        </main>
+      </div>
     );
   }
 
   return (
-    <main className="max-w-4xl mx-auto px-4 py-8">
-      <Link href="/jobs" className="text-indigo-600 hover:text-indigo-700 mb-4 inline-block">
-        ← Back to Jobs
-      </Link>
+    <div className="min-h-screen">
+      <HeaderClient />
+      
+      <main className="max-w-5xl mx-auto px-6 py-8">
+        {/* Back Button */}
+        <Link href="/jobs" className="inline-flex items-center text-brand-600 hover:text-brand-700 font-medium mb-6 group">
+          <svg className="w-5 h-5 mr-2 transition-transform group-hover:-translate-x-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Back to Jobs
+        </Link>
 
-      <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-        {/* Header */}
-        <div className="p-6 border-b">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">{job.title}</h1>
-          <p className="text-xl text-gray-700 mb-4">{job.company}</p>
-          
-          <div className="flex flex-wrap gap-2 mb-4">
-            <span className="inline-flex items-center px-3 py-1 bg-gray-100 text-gray-700 text-sm rounded">
-              📍 {job.location}
-            </span>
-            {job.salary && (
-              <span className="inline-flex items-center px-3 py-1 bg-green-100 text-green-700 text-sm rounded">
-                💰 {job.salary}
-              </span>
-            )}
-            {job.source && (
-              <span className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded">
-                {job.source}
-              </span>
-            )}
-          </div>
-          
-          {job.date_posted && (
-            <p className="text-sm text-gray-500">Posted: {job.date_posted}</p>
-          )}
-        </div>
-
-        {/* Sticky Actions Bar */}
-        <div className="sticky top-0 bg-white border-b p-4 flex gap-3 z-10">
-          <button
-            onClick={handleSave}
-            className={`flex-1 px-4 py-2 rounded font-medium transition-colors ${
-              saved
-                ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            {saved ? '✓ Saved' : 'Save'}
-          </button>
-          <button
-            onClick={handleShare}
-            className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded font-medium hover:bg-gray-200 transition-colors"
-          >
-            Share
-          </button>
-          {job.url && (
-            <a
-              href={job.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded font-medium hover:bg-indigo-700 transition-colors text-center"
-            >
-              Apply ↗
-            </a>
-          )}
-        </div>
-
-        <div className="p-6">
-          {/* AI Fit Panel */}
-          {featureAiFit && aiScore && (
-            <div className="mb-6 bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-              <h2 className="text-lg font-semibold text-indigo-900 mb-3">AI Match Score</h2>
-              <div className="mb-3">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm font-medium text-indigo-800">Overall Fit</span>
-                  <span className="text-sm font-bold text-indigo-900">
-                    {Math.round(aiScore.overall_score * 100)}%
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Main Content */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Job Header Card */}
+            <div className="card p-8">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex-1">
+                  <h1 className="text-4xl font-bold text-gray-900 mb-2">{job.title}</h1>
+                  <p className="text-2xl text-gray-700 font-semibold mb-4">{job.company}</p>
+                </div>
+                <button
+                  onClick={handleSave}
+                  className={`p-3 rounded-xl transition-all ${
+                    saved
+                      ? 'bg-brand-100 text-brand-600 hover:bg-brand-200'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                  aria-label={saved ? 'Unsave job' : 'Save job'}
+                >
+                  <svg className="w-6 h-6" fill={saved ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="flex flex-wrap gap-3 mb-6">
+                <span className="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-700 text-sm font-semibold rounded-lg">
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  {job.location}
+                </span>
+                {job.salary && (
+                  <span className="inline-flex items-center px-4 py-2 bg-emerald-100 text-emerald-700 text-sm font-semibold rounded-lg">
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {job.salary}
                   </span>
-                </div>
-                <div className="w-full bg-indigo-200 rounded-full h-2">
-                  <div
-                    className="bg-indigo-600 h-2 rounded-full"
-                    style={{ width: `${aiScore.overall_score * 100}%` }}
-                  ></div>
-                </div>
+                )}
+                {job.source && (
+                  <span className="inline-flex items-center px-4 py-2 bg-blue-100 text-blue-700 text-sm font-semibold rounded-lg">
+                    via {job.source}
+                  </span>
+                )}
               </div>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <span className="text-gray-700">Skills:</span>{' '}
-                  <span className="font-medium">{Math.round(aiScore.skills_score * 100)}%</span>
-                </div>
-                <div>
-                  <span className="text-gray-700">Title:</span>{' '}
-                  <span className="font-medium">{Math.round(aiScore.title_score * 100)}%</span>
-                </div>
-                <div>
-                  <span className="text-gray-700">Location:</span>{' '}
-                  <span className="font-medium">{Math.round(aiScore.location_score * 100)}%</span>
-                </div>
-                <div>
-                  <span className="text-gray-700">Salary:</span>{' '}
-                  <span className="font-medium">{Math.round(aiScore.salary_score * 100)}%</span>
-                </div>
-              </div>
-            </div>
-          )}
+              
+              {job.date_posted && (
+                <p className="text-sm text-gray-500">Posted {job.date_posted}</p>
+              )}
 
-          {/* Job Description */}
-          <div className="prose max-w-none">
-            <div dangerouslySetInnerHTML={{ __html: job.description }} />
-          </div>
-          
-          {/* Required Skills */}
-          {job.required_skills && job.required_skills.length > 0 && (
-            <div className="mt-6">
-              <h3 className="text-lg font-semibold mb-2">Required Skills</h3>
-              <div className="flex flex-wrap gap-2">
-                {job.required_skills.map((skill: string, index: number) => (
-                  <span
-                    key={index}
-                    className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm"
+              {/* Action Buttons */}
+              <div className="mt-6 flex gap-3">
+                {job.url && (
+                  <a
+                    href={job.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 btn-primary text-center flex items-center justify-center"
                   >
-                    {skill}
-                  </span>
-                ))}
+                    Apply Now
+                    <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </a>
+                )}
+                <button
+                  onClick={handleShare}
+                  className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-all"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                  </svg>
+                </button>
               </div>
             </div>
-          )}
+
+            {/* Job Description Card */}
+            <div className="card p-8">
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">Job Description</h2>
+              <div className="prose prose-lg max-w-none prose-headings:text-gray-900 prose-p:text-gray-600 prose-li:text-gray-600 prose-strong:text-gray-900">
+                <div dangerouslySetInnerHTML={{ __html: job.description }} />
+              </div>
+            </div>
+
+            {/* Required Skills */}
+            {job.required_skills && job.required_skills.length > 0 && (
+              <div className="card p-8">
+                <h3 className="text-2xl font-bold text-gray-900 mb-4">Required Skills</h3>
+                <div className="flex flex-wrap gap-3">
+                  {job.required_skills.map((skill: string, index: number) => (
+                    <span
+                      key={index}
+                      className="px-4 py-2 bg-gradient-to-r from-brand-100 to-purple-100 text-brand-700 rounded-lg text-sm font-semibold border border-brand-200"
+                    >
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Sidebar */}
+          <div className="lg:col-span-1 space-y-6">
+            {/* AI Match Score Card */}
+            {aiScore && (
+              <div className="card overflow-hidden sticky top-24">
+                <div className="bg-gradient-ai p-6 text-white">
+                  <div className="flex items-center space-x-2 mb-3">
+                    <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-bold">AI Match Score</h3>
+                  </div>
+                  <div className="text-5xl font-bold mb-2">
+                    {Math.round(aiScore.overall_score * 100)}%
+                  </div>
+                  <p className="text-white/90 text-sm">
+                    This job is an excellent match for your profile
+                  </p>
+                </div>
+                
+                <div className="p-6 space-y-4">
+                  {[
+                    { label: 'Skills Match', score: aiScore.skills_score, icon: '🎯' },
+                    { label: 'Title Relevance', score: aiScore.title_score, icon: '💼' },
+                    { label: 'Location Fit', score: aiScore.location_score, icon: '📍' },
+                    { label: 'Salary Range', score: aiScore.salary_score, icon: '💰' },
+                    { label: 'Seniority Level', score: aiScore.seniority_score, icon: '📊' },
+                  ].map((item, index) => (
+                    <div key={index}>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium text-gray-700 flex items-center">
+                          <span className="mr-2">{item.icon}</span>
+                          {item.label}
+                        </span>
+                        <span className="text-sm font-bold text-brand-600">
+                          {Math.round(item.score * 100)}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-gradient-ai h-2 rounded-full transition-all duration-500"
+                          style={{ width: `${item.score * 100}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Company Info Card */}
+            <div className="card p-6">
+              <h3 className="text-xl font-bold text-gray-900 mb-4">About {job.company}</h3>
+              <p className="text-gray-600 text-sm leading-relaxed">
+                {job.company} is a leading technology company focused on innovation and excellence. 
+                Join a team of talented professionals working on cutting-edge projects.
+              </p>
+            </div>
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }
