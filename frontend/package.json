@@ -15,7 +15,7 @@
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "@supabase/supabase-js": "^2.39.0"
+    "@supabase/supabase-js": "^2.45.4"
   },
   "devDependencies": {
     "tailwindcss": "^3.4.14",
