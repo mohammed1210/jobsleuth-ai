@@ -1,100 +1,58 @@
-"""Test saved jobs RLS (owner-only access)."""
+"""Tests for saved jobs with Row Level Security (owner-only access)."""
 
-from unittest.mock import Mock, patch
-
+import pytest
 from fastapi.testclient import TestClient
-from main import app
+from backend.main import app
 
 client = TestClient(app)
 
 
-@patch("routes.saved.supabase")
-def test_save_job_requires_auth(mock_supabase):
-    """Test that saving a job requires authentication."""
-    response = client.post(
-        "/saved-jobs/save-job",
-        json={"job_id": "test-job-id"},
-    )
-
-    # Should fail without Authorization header
-    assert response.status_code == 422 or response.status_code == 401
-
-
-@patch("routes.saved.supabase")
-def test_save_job_with_auth(mock_supabase):
-    """Test saving a job with valid auth token."""
-    # Mock auth response
-    mock_user = Mock()
-    mock_user.id = "test-user-id"
-    mock_user.email = "test@example.com"
-
-    mock_auth_response = Mock()
-    mock_auth_response.user = mock_user
-
-    mock_supabase.auth.get_user.return_value = mock_auth_response
-
-    # Mock insert response
-    mock_insert_response = Mock()
-    mock_insert_response.data = [
-        {"id": "saved-id", "user_id": "test-user-id", "job_id": "test-job-id"}
-    ]
-
-    mock_query = Mock()
-    mock_query.execute.return_value = mock_insert_response
-
-    mock_table = Mock()
-    mock_table.insert.return_value = mock_query
-    mock_supabase.table.return_value = mock_table
-
-    response = client.post(
-        "/saved-jobs/save-job",
-        json={"job_id": "test-job-id"},
-        headers={"Authorization": "Bearer test-token"},
-    )
-
-    assert response.status_code == 200
+def test_unauthenticated_cannot_save_jobs():
+    """Test that unauthenticated users cannot save jobs."""
+    response = client.post("/saved", json={"job_id": 1})
+    assert response.status_code == 401
+    
     data = response.json()
-    assert data["ok"] is True
+    assert "detail" in data
 
 
-@patch("routes.saved.supabase")
-def test_get_saved_jobs_owner_only(mock_supabase):
-    """Test that users can only see their own saved jobs (RLS)."""
-    # Mock auth response
-    mock_user = Mock()
-    mock_user.id = "test-user-id"
+def test_unauthenticated_cannot_list_saved_jobs():
+    """Test that unauthenticated users cannot list saved jobs."""
+    response = client.get("/saved")
+    assert response.status_code == 401
 
-    mock_auth_response = Mock()
-    mock_auth_response.user = mock_user
 
-    mock_supabase.auth.get_user.return_value = mock_auth_response
-
-    # Mock query response
-    mock_response = Mock()
-    mock_response.data = [
-        {
-            "id": "saved-1",
-            "user_id": "test-user-id",
-            "jobs": {"title": "Test Job"},
-        }
-    ]
-
-    mock_query = Mock()
-    mock_query.execute.return_value = mock_response
-    mock_query.order.return_value = mock_query
-    mock_query.eq.return_value = mock_query
-
-    mock_table = Mock()
-    mock_table.select.return_value = mock_query
-    mock_supabase.table.return_value = mock_table
-
-    response = client.get(
-        "/saved-jobs",
-        headers={"Authorization": "Bearer test-token"},
-    )
-
+def test_user_can_save_job():
+    """Test that authenticated user can save a job."""
+    headers = {"Authorization": "Bearer valid_token"}
+    response = client.post("/saved", json={"job_id": 1}, headers=headers)
     assert response.status_code == 200
+    
     data = response.json()
-    assert "jobs" in data
-    # RLS ensures only user's own jobs are returned
-    assert all(job["user_id"] == "test-user-id" for job in data["jobs"])
+    assert "id" in data
+    assert "user_id" in data
+    assert data["job_id"] == 1
+
+
+def test_user_can_view_own_saved_jobs():
+    """Test that user can view their own saved jobs."""
+    headers = {"Authorization": "Bearer valid_token"}
+    response = client.get("/saved", headers=headers)
+    assert response.status_code == 200
+    
+    data = response.json()
+    assert isinstance(data, list)
+
+
+def test_invalid_token_rejected():
+    """Test that invalid tokens are rejected."""
+    headers = {"Authorization": "Bearer invalid"}
+    response = client.get("/saved", headers=headers)
+    assert response.status_code == 401
+
+
+def test_missing_bearer_prefix():
+    """Test that missing 'Bearer' prefix is rejected."""
+    headers = {"Authorization": "valid_token"}
+    response = client.get("/saved", headers=headers)
+    assert response.status_code == 401

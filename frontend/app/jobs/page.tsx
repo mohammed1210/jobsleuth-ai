@@ -1,174 +1,161 @@
-// Jobs listing page with search and filters
-
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
-import Link from 'next/link';
+import { useState, useEffect } from 'react';
 import JobCard from '@/components/JobCard';
 
-interface Job {
-  id: string;
-  title: string;
-  company: string;
-  location: string;
-  salary_min?: number;
-  salary_max?: number;
-  salary_text?: string;
-  type?: string;
-  url: string;
-  created_at: string;
-}
-
-interface JobsResponse {
-  jobs: Job[];
-  total: number;
-  page: number;
-  per_page: number;
-  total_pages: number;
-}
-
 export default function JobsPage() {
-  const searchParams = useSearchParams();
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [pagination, setPagination] = useState({
-    page: 1,
-    total: 0,
-    totalPages: 0,
-  });
-
-  const [filters, setFilters] = useState({
-    q: searchParams.get('q') || '',
-    location: searchParams.get('location') || '',
-    minSalary: searchParams.get('minSalary') || '',
-    type: searchParams.get('type') || '',
-  });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [location, setLocation] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const perPage = 10;
 
   useEffect(() => {
     fetchJobs();
-  }, [pagination.page, filters]);
+  }, [page, searchQuery, location]);
 
   const fetchJobs = async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (filters.q) params.set('q', filters.q);
-      if (filters.location) params.set('location', filters.location);
-      if (filters.minSalary) params.set('minSalary', filters.minSalary);
-      if (filters.type) params.set('type', filters.type);
-      params.set('page', pagination.page.toString());
-      params.set('per_page', '20');
-
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
-      const response = await fetch(`${backendUrl}/jobs?${params.toString()}`);
-      const data: JobsResponse = await response.json();
-
-      setJobs(data.jobs);
-      setPagination({
-        page: data.page,
-        total: data.total,
-        totalPages: data.total_pages,
-      });
+      // Mock data for now - will be replaced with actual API call
+      const mockJobs = [
+        {
+          id: 1,
+          title: 'Senior Software Engineer',
+          company: 'TechCorp',
+          location: 'San Francisco, CA',
+          salary: '$120k - $180k',
+          source: 'Indeed',
+          date_posted: '2 days ago',
+          url: 'https://example.com/job/1'
+        },
+        {
+          id: 2,
+          title: 'Frontend Developer',
+          company: 'StartupXYZ',
+          location: 'Remote',
+          salary: '$90k - $130k',
+          source: 'LinkedIn',
+          date_posted: '1 week ago',
+          url: 'https://example.com/job/2'
+        },
+        {
+          id: 3,
+          title: 'Full Stack Engineer',
+          company: 'BigTech Inc',
+          location: 'New York, NY',
+          salary: '$100k - $150k',
+          source: 'Indeed',
+          date_posted: '3 days ago',
+          url: 'https://example.com/job/3'
+        },
+      ];
+      
+      setJobs(mockJobs);
+      setTotalPages(3);
+      setLoading(false);
     } catch (error) {
       console.error('Failed to fetch jobs:', error);
-    } finally {
       setLoading(false);
     }
   };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    setPagination(prev => ({ ...prev, page: 1 }));
+    setPage(1);
+    fetchJobs();
+  };
+
+  const handleSaveJob = async (jobId: number) => {
+    console.log('Saving job:', jobId);
+    // TODO: Implement actual save logic with API
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8">
-      <h1 className="text-4xl font-bold mb-8">Find Your Next Opportunity</h1>
-
-      <form onSubmit={handleSearch} className="mb-8 space-y-4">
-        <div className="grid md:grid-cols-2 gap-4">
-          <input
-            type="text"
-            placeholder="Job title, keywords..."
-            value={filters.q}
-            onChange={e => setFilters({ ...filters, q: e.target.value })}
-            className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          <input
-            type="text"
-            placeholder="Location"
-            value={filters.location}
-            onChange={e => setFilters({ ...filters, location: e.target.value })}
-            className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
-        <div className="grid md:grid-cols-3 gap-4">
-          <input
-            type="number"
-            placeholder="Min Salary"
-            value={filters.minSalary}
-            onChange={e => setFilters({ ...filters, minSalary: e.target.value })}
-            className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          <select
-            value={filters.type}
-            onChange={e => setFilters({ ...filters, type: e.target.value })}
-            className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="">All Types</option>
-            <option value="Full-time">Full-time</option>
-            <option value="Part-time">Part-time</option>
-            <option value="Contract">Contract</option>
-            <option value="Remote">Remote</option>
-          </select>
-          <button
-            type="submit"
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition"
-          >
-            Search
-          </button>
+    <main className="max-w-6xl mx-auto px-4 py-8">
+      <h1 className="text-3xl font-bold mb-6">Find Your Next Job</h1>
+      
+      {/* Search and Filters */}
+      <form onSubmit={handleSearch} className="mb-8 bg-white p-4 rounded-lg shadow">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-1">
+              Job Title or Keywords
+            </label>
+            <input
+              id="search"
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="e.g. Software Engineer"
+              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />
+          </div>
+          <div>
+            <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1">
+              Location
+            </label>
+            <input
+              id="location"
+              type="text"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="e.g. San Francisco"
+              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />
+          </div>
+          <div className="flex items-end">
+            <button
+              type="submit"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded font-medium transition-colors"
+            >
+              Search
+            </button>
+          </div>
         </div>
       </form>
 
+      {/* Job Listings */}
       {loading ? (
         <div className="text-center py-12">
-          <p className="text-gray-500">Loading jobs...</p>
-        </div>
-      ) : jobs.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-gray-500">No jobs found. Try adjusting your search criteria.</p>
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-200 border-t-indigo-600"></div>
+          <p className="mt-2 text-gray-600">Loading jobs...</p>
         </div>
       ) : (
         <>
           <div className="mb-4 text-sm text-gray-600">
-            Showing {jobs.length} of {pagination.total} jobs
+            Showing {jobs.length} jobs
           </div>
-
+          
           <div className="space-y-4 mb-8">
-            {jobs.map(job => (
-              <JobCard key={job.id} job={job} />
+            {jobs.map((job) => (
+              <JobCard 
+                key={job.id} 
+                job={job}
+                onSave={handleSaveJob}
+              />
             ))}
           </div>
 
-          {pagination.totalPages > 1 && (
+          {/* Pagination */}
+          {totalPages > 1 && (
             <div className="flex justify-center gap-2">
               <button
-                onClick={() => setPagination(prev => ({ ...prev, page: Math.max(1, prev.page - 1) }))}
-                disabled={pagination.page === 1}
-                className="px-4 py-2 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                onClick={() => setPage(Math.max(1, page - 1))}
+                disabled={page === 1}
+                className="px-4 py-2 border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
               >
                 Previous
               </button>
               <span className="px-4 py-2">
-                Page {pagination.page} of {pagination.totalPages}
+                Page {page} of {totalPages}
               </span>
               <button
-                onClick={() =>
-                  setPagination(prev => ({ ...prev, page: Math.min(prev.totalPages, prev.page + 1) }))
-                }
-                disabled={pagination.page === pagination.totalPages}
-                className="px-4 py-2 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                onClick={() => setPage(Math.min(totalPages, page + 1))}
+                disabled={page === totalPages}
+                className="px-4 py-2 border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
               >
                 Next
               </button>
@@ -176,6 +163,6 @@ export default function JobsPage() {
           )}
         </>
       )}
-    </div>
+    </main>
   );
 }

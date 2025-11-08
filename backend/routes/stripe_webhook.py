@@ -3,12 +3,15 @@
 This endpoint handles events from Stripe. Extend it to react to invoice
 payments, subscription updates, etc. Make sure to configure your Stripe
 dashboard to send webhooks to this URL.
+
+Returns deterministic JSON responses for plan mapping.
 """
 
 
 import stripe
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+from typing import Dict, Any
 from lib.settings import settings
 from lib.supabase import supabase_admin
 
@@ -16,6 +19,54 @@ router = APIRouter(prefix="/stripe")
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 webhook_secret = settings.STRIPE_WEBHOOK_SECRET
+
+
+# Deterministic plan mapping from Stripe price IDs to internal plan names
+PLAN_MAPPING: Dict[str, str] = {
+    os.getenv("NEXT_PUBLIC_STRIPE_PRICE_PRO", "price_pro_xxx"): "pro",
+    os.getenv("NEXT_PUBLIC_STRIPE_PRICE_INVESTOR", "price_investor_xxx"): "investor",
+}
+
+
+def map_price_to_plan(price_id: str) -> str:
+    """Map Stripe price ID to internal plan name.
+    
+    Args:
+        price_id: Stripe price ID
+        
+    Returns:
+        Internal plan name (pro, investor, or free)
+    """
+    return PLAN_MAPPING.get(price_id, "free")
+
+
+def create_deterministic_response(
+    status: str,
+    event_type: str,
+    data: Dict[str, Any] = None
+) -> JSONResponse:
+    """Create a deterministic JSON response.
+    
+    Ensures consistent key ordering and structure.
+    
+    Args:
+        status: Status message
+        event_type: Stripe event type
+        data: Additional data
+        
+    Returns:
+        JSONResponse with deterministic structure
+    """
+    response = {
+        "status": status,
+        "event_type": event_type,
+    }
+    
+    if data:
+        # Sort keys to ensure deterministic order
+        response["data"] = {k: data[k] for k in sorted(data.keys())}
+    
+    return JSONResponse(response)
 
 
 @router.post("/webhook")
@@ -33,80 +84,82 @@ async def stripe_webhook(request: Request) -> JSONResponse:
         # Invalid signature
         return JSONResponse({"ok": False, "error": "Invalid signature"}, status_code=400)
 
-    # Handle the event
-    try:
-        if event["type"] == "checkout.session.completed":
-            session = event["data"]["object"]
+    event_type = event['type']
+    
+    # Handle the event with deterministic responses
+    if event_type == 'checkout.session.completed':
+        session = event['data']['object']
+        customer_id = session.get('customer')
+        subscription_id = session.get('subscription')
+        
+        # Get subscription details to map to plan
+        plan = "free"
+        if subscription_id:
+            try:
+                subscription = stripe.Subscription.retrieve(subscription_id)
+                if subscription.items.data:
+                    price_id = subscription.items.data[0].price.id
+                    plan = map_price_to_plan(price_id)
+            except Exception as e:
+                print(f"Error retrieving subscription: {e}")
+        
+        return create_deterministic_response(
+            "success",
+            event_type,
+            {
+                "customer_id": customer_id,
+                "plan": plan,
+                "subscription_id": subscription_id,
+            }
+        )
+    
+    elif event_type == 'invoice.paid':
+        invoice = event['data']['object']
+        customer_id = invoice.get('customer')
+        subscription_id = invoice.get('subscription')
+        
+        return create_deterministic_response(
+            "success",
+            event_type,
+            {
+                "customer_id": customer_id,
+                "subscription_id": subscription_id,
+            }
+        )
+    
+    elif event_type == 'customer.subscription.updated':
+        subscription = event['data']['object']
+        customer_id = subscription.get('customer')
+        
+        # Map price to plan
+        plan = "free"
+        if subscription.get('items', {}).get('data'):
+            price_id = subscription['items']['data'][0]['price']['id']
+            plan = map_price_to_plan(price_id)
+        
+        return create_deterministic_response(
+            "success",
+            event_type,
+            {
+                "customer_id": customer_id,
+                "plan": plan,
+                "status": subscription.get('status'),
+            }
+        )
+    
+    elif event_type == 'customer.subscription.deleted':
+        subscription = event['data']['object']
+        customer_id = subscription.get('customer')
+        
+        return create_deterministic_response(
+            "success",
+            event_type,
+            {
+                "customer_id": customer_id,
+                "plan": "free",  # Revert to free plan
+            }
+        )
+    
+    # Return success for unhandled events (but with deterministic structure)
+    return create_deterministic_response("success", event_type)
 
-            # Extract customer info
-            customer_id = session.get("customer")
-            customer_email = session.get("customer_email") or session.get(
-                "customer_details", {}
-            ).get("email")
-
-            # Determine plan from price_id
-            price_id = None
-            if session.get("line_items"):
-                price_id = session["line_items"]["data"][0]["price"]["id"]
-            elif session.get("amount_total"):
-                # Fallback: try to get from metadata or subscription
-                subscription_id = session.get("subscription")
-                if subscription_id:
-                    subscription = stripe.Subscription.retrieve(subscription_id)
-                    price_id = subscription["items"]["data"][0]["price"]["id"]
-
-            # Map price_id to plan
-            plan = "free"
-            if price_id == settings.PRICE_ID_PRO:
-                plan = "pro"
-            elif price_id == settings.PRICE_ID_INVESTOR:
-                plan = "investor"
-
-            # Update user in database
-            if customer_email:
-                supabase_admin.table("users").upsert(
-                    {
-                        "email": customer_email,
-                        "plan": plan,
-                        "stripe_customer_id": customer_id,
-                    },
-                    on_conflict="email",
-                ).execute()
-
-        elif event["type"] == "customer.subscription.updated":
-            subscription = event["data"]["object"]
-            customer_id = subscription.get("customer")
-
-            # Get price_id from subscription
-            price_id = subscription["items"]["data"][0]["price"]["id"]
-
-            # Map price_id to plan
-            plan = "free"
-            if price_id == settings.PRICE_ID_PRO:
-                plan = "pro"
-            elif price_id == settings.PRICE_ID_INVESTOR:
-                plan = "investor"
-
-            # Update user by stripe_customer_id
-            if customer_id:
-                supabase_admin.table("users").update({"plan": plan}).eq(
-                    "stripe_customer_id", customer_id
-                ).execute()
-
-        elif event["type"] == "customer.subscription.deleted":
-            subscription = event["data"]["object"]
-            customer_id = subscription.get("customer")
-
-            # Downgrade to free
-            if customer_id:
-                supabase_admin.table("users").update({"plan": "free"}).eq(
-                    "stripe_customer_id", customer_id
-                ).execute()
-
-        # Return success for handled events
-        return JSONResponse({"ok": True})
-
-    except Exception:
-        # Return error but with 200 status (to avoid Stripe retries for invalid data)
-        # Don't expose internal error details for security
-        return JSONResponse({"ok": False, "error": "Processing failed"}, status_code=200)

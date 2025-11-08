@@ -1,111 +1,131 @@
-// Saved jobs page - shows user's saved jobs
-
 'use client';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
 import JobCard from '@/components/JobCard';
-
-interface SavedJob {
-  id: string;
-  created_at: string;
-  jobs: {
-    id: string;
-    title: string;
-    company: string;
-    location?: string;
-    salary_text?: string;
-    type?: string;
-    url: string;
-  };
-}
+import Link from 'next/link';
 
 export default function SavedJobsPage() {
-  const [savedJobs, setSavedJobs] = useState<SavedJob[]>([]);
+  const [savedJobs, setSavedJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
-    fetchSavedJobs();
+    checkAuth();
   }, []);
 
-  const fetchSavedJobs = async () => {
-    try {
-      const token = localStorage.getItem('supabase_token');
-
-      if (!token) {
-        setError('Please sign in to view saved jobs');
-        setLoading(false);
-        return;
-      }
-
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
-      const response = await fetch(`${backendUrl}/saved-jobs`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch saved jobs');
-      }
-
-      const data = await response.json();
-      setSavedJobs(data.jobs || []);
-    } catch (err) {
-      console.error('Failed to fetch saved jobs:', err);
-      setError('Failed to load saved jobs');
-    } finally {
+  const checkAuth = async () => {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL as string,
+      process.env.NEXT_PUBLIC_SUPABASE_KEY as string,
+    );
+    
+    const { data } = await supabase.auth.getUser();
+    
+    if (data.user) {
+      setUser(data.user);
+      fetchSavedJobs(data.user.id);
+    } else {
       setLoading(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="max-w-6xl mx-auto px-6 py-12 text-center">
-        <p className="text-gray-500">Loading saved jobs...</p>
-      </div>
-    );
-  }
+  const fetchSavedJobs = async (userId: string) => {
+    setLoading(true);
+    try {
+      // Mock data for now - will be replaced with actual API call
+      const mockSavedJobs = [
+        {
+          id: 1,
+          title: 'Senior Software Engineer',
+          company: 'TechCorp',
+          location: 'San Francisco, CA',
+          salary: '$120k - $180k',
+          source: 'Indeed',
+          date_posted: '2 days ago',
+          url: 'https://example.com/job/1',
+          saved_at: '2024-01-15'
+        },
+        {
+          id: 2,
+          title: 'Frontend Developer',
+          company: 'StartupXYZ',
+          location: 'Remote',
+          salary: '$90k - $130k',
+          source: 'LinkedIn',
+          date_posted: '1 week ago',
+          url: 'https://example.com/job/2',
+          saved_at: '2024-01-14'
+        },
+      ];
+      
+      setSavedJobs(mockSavedJobs);
+      setLoading(false);
+    } catch (error) {
+      console.error('Failed to fetch saved jobs:', error);
+      setLoading(false);
+    }
+  };
 
-  if (error) {
+  const handleUnsave = async (jobId: number) => {
+    // Remove from saved jobs
+    setSavedJobs(savedJobs.filter(job => job.id !== jobId));
+    // TODO: Implement actual unsave logic with API
+  };
+
+  if (!user && !loading) {
     return (
-      <div className="max-w-6xl mx-auto px-6 py-12 text-center">
-        <p className="text-red-600 mb-4">{error}</p>
-        <Link href="/account" className="text-blue-600 hover:underline">
-          Go to Account
-        </Link>
-      </div>
+      <main className="max-w-4xl mx-auto px-4 py-8">
+        <div className="text-center py-12">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Sign In Required</h1>
+          <p className="text-gray-600 mb-6">You need to sign in to view your saved jobs.</p>
+          <Link 
+            href="/magic-login"
+            className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded font-medium"
+          >
+            Sign In
+          </Link>
+        </div>
+      </main>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-8">
-      <h1 className="text-4xl font-bold mb-8">Saved Jobs</h1>
+    <main className="max-w-6xl mx-auto px-4 py-8">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold mb-2">Saved Jobs</h1>
+        <p className="text-gray-600">
+          {savedJobs.length} {savedJobs.length === 1 ? 'job' : 'jobs'} saved
+        </p>
+      </div>
 
-      {savedJobs.length === 0 ? (
-        <div className="text-center py-12 border rounded-lg">
-          <p className="text-gray-500 mb-4">You haven't saved any jobs yet</p>
-          <Link
+      {loading ? (
+        <div className="text-center py-12">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-200 border-t-indigo-600"></div>
+          <p className="mt-2 text-gray-600">Loading saved jobs...</p>
+        </div>
+      ) : savedJobs.length === 0 ? (
+        <div className="text-center py-12 bg-gray-50 rounded-lg">
+          <p className="text-gray-600 mb-4">You haven't saved any jobs yet.</p>
+          <Link 
             href="/jobs"
-            className="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition"
+            className="inline-block text-indigo-600 hover:text-indigo-700 font-medium"
           >
-            Browse Jobs
+            Browse Jobs →
           </Link>
         </div>
       ) : (
         <div className="space-y-4">
-          {savedJobs.map(savedJob => (
-            <JobCard
-              key={savedJob.id}
-              job={{
-                ...savedJob.jobs,
-                id: savedJob.jobs.id,
-              }}
+          {savedJobs.map((job) => (
+            <JobCard 
+              key={job.id} 
+              job={job}
+              onSave={handleUnsave}
+              saved={true}
             />
           ))}
         </div>
       )}
-    </div>
+    </main>
   );
 }

@@ -3,6 +3,14 @@ uvicorn[standard]>=0.27.0
 sqlalchemy>=2.0.0
 psycopg2-binary
 python-dotenv
+beautifulsoup4
+requests
+playwright
+pytest
+pytest-asyncio
+httpx
+openai
+stripe
 stripe>=7.0.0
 supabase>=2.3.0
 openai>=1.10.0

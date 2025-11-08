@@ -1,6 +1,8 @@
 // Pricing page for JobSleuth AI
 export const dynamic = 'force-dynamic';
 
+import UpgradeButton from '@/components/UpgradeButton';
+
 const PRICE_PRO = process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO || 'price_pro_xxx';
 const PRICE_INVESTOR = process.env.NEXT_PUBLIC_STRIPE_PRICE_INVESTOR || 'price_investor_xxx';
 
@@ -14,50 +16,60 @@ export default function PricingPage() {
       <div className="text-center mb-12">
         <h1 className="text-4xl font-bold mb-4">Choose Your Plan</h1>
         <p className="text-xl text-gray-600">
-          Find the perfect plan for your job search journey
+          Get the features you need to accelerate your job search
         </p>
       </div>
-
+      
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <section className="border rounded-lg p-8 hover:shadow-lg transition">
-          <h2 className="text-2xl font-semibold mb-2">Free</h2>
-          <div className="text-4xl font-bold mb-4">$0</div>
-          <p className="text-gray-600 mb-6">Perfect for getting started</p>
-          <ul className="space-y-3 mb-8">
+        {/* Free Plan */}
+        <section className="border-2 border-gray-200 rounded-lg p-6 flex flex-col">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold mb-2">Free</h2>
+            <div className="mb-4">
+              <span className="text-4xl font-bold">$0</span>
+              <span className="text-gray-600">/month</span>
+            </div>
+            <p className="text-gray-600">Perfect for getting started</p>
+          </div>
+          
+          <ul className="mb-6 space-y-3 flex-grow">
             <li className="flex items-start">
               <span className="text-green-500 mr-2">✓</span>
-              <span>Browse all job listings</span>
+              <span>Browse jobs</span>
             </li>
             <li className="flex items-start">
               <span className="text-green-500 mr-2">✓</span>
-              <span>Save up to 5 jobs</span>
+              <span>Save up to 3 listings</span>
             </li>
             <li className="flex items-start">
               <span className="text-green-500 mr-2">✓</span>
               <span>Basic search filters</span>
             </li>
-            <li className="flex items-start">
-              <span className="text-gray-300 mr-2">✗</span>
-              <span className="text-gray-400">AI fit scoring</span>
-            </li>
-            <li className="flex items-start">
-              <span className="text-gray-300 mr-2">✗</span>
-              <span className="text-gray-400">Resume tools</span>
-            </li>
           </ul>
-          <button className="w-full px-6 py-3 border border-gray-300 rounded-lg font-semibold hover:bg-gray-50 transition">
-            Current Plan
-          </button>
+          
+          <div className="border-t pt-4">
+            <span className="text-gray-500">Current Plan</span>
+          </div>
         </section>
 
-        <section className="border-2 border-blue-600 rounded-lg p-8 hover:shadow-lg transition relative">
-          <div className="absolute top-0 right-0 bg-blue-600 text-white px-3 py-1 text-sm font-semibold rounded-bl-lg rounded-tr-lg">
-            Popular
+        {/* Pro Plan */}
+        <section className="border-2 border-indigo-500 rounded-lg p-6 flex flex-col relative">
+          <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+            <span className="bg-indigo-500 text-white px-4 py-1 rounded-full text-sm font-medium">
+              Most Popular
+            </span>
           </div>
-          <h2 className="text-2xl font-semibold mb-2">Pro</h2>
-          <div className="text-4xl font-bold mb-4">$29<span className="text-lg text-gray-600">/mo</span></div>
-          <p className="text-gray-600 mb-6">For serious job seekers</p>
-          <ul className="space-y-3 mb-8">
+          
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold mb-2">Pro</h2>
+            <div className="mb-4">
+              <span className="text-4xl font-bold">$19</span>
+              <span className="text-gray-600">/month</span>
+            </div>
+            <p className="text-gray-600">For serious job seekers</p>
+          </div>
+          
+          <ul className="mb-6 space-y-3 flex-grow">
             <li className="flex items-start">
               <span className="text-green-500 mr-2">✓</span>
               <span>Everything in Free</span>
@@ -68,41 +80,40 @@ export default function PricingPage() {
             </li>
             <li className="flex items-start">
               <span className="text-green-500 mr-2">✓</span>
-              <span>AI-powered fit scoring</span>
+              <span>AI match scores</span>
             </li>
             <li className="flex items-start">
               <span className="text-green-500 mr-2">✓</span>
-              <span>Resume suggestions</span>
+              <span>Advanced filters</span>
             </li>
             <li className="flex items-start">
               <span className="text-green-500 mr-2">✓</span>
-              <span>Cover letter generator</span>
-            </li>
-            <li className="flex items-start">
-              <span className="text-green-500 mr-2">✓</span>
-              <span>Email digests</span>
+              <span>Email job alerts</span>
             </li>
           </ul>
-          <a
-            href={`/api/stripe/checkout?priceId=${PRICE_PRO}`}
-            className="block w-full px-6 py-3 bg-blue-600 text-white text-center rounded-lg font-semibold hover:bg-blue-700 transition"
-          >
-            Upgrade to Pro
-          </a>
+          
+          <UpgradeButton priceId={PRICE_PRO}>Upgrade to Pro</UpgradeButton>
         </section>
 
-        <section className="border rounded-lg p-8 hover:shadow-lg transition">
-          <h2 className="text-2xl font-semibold mb-2">Investor</h2>
-          <div className="text-4xl font-bold mb-4">$99<span className="text-lg text-gray-600">/mo</span></div>
-          <p className="text-gray-600 mb-6">For teams and recruiters</p>
-          <ul className="space-y-3 mb-8">
+        {/* Investor Plan */}
+        <section className="border-2 border-gray-200 rounded-lg p-6 flex flex-col">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold mb-2">Investor</h2>
+            <div className="mb-4">
+              <span className="text-4xl font-bold">$99</span>
+              <span className="text-gray-600">/month</span>
+            </div>
+            <p className="text-gray-600">For teams and recruiters</p>
+          </div>
+          
+          <ul className="mb-6 space-y-3 flex-grow">
             <li className="flex items-start">
               <span className="text-green-500 mr-2">✓</span>
               <span>Everything in Pro</span>
             </li>
             <li className="flex items-start">
               <span className="text-green-500 mr-2">✓</span>
-              <span>Team accounts (up to 5)</span>
+              <span>Team accounts (up to 5 users)</span>
             </li>
             <li className="flex items-start">
               <span className="text-green-500 mr-2">✓</span>
@@ -116,22 +127,14 @@ export default function PricingPage() {
               <span className="text-green-500 mr-2">✓</span>
               <span>Custom integrations</span>
             </li>
-            <li className="flex items-start">
-              <span className="text-green-500 mr-2">✓</span>
-              <span>API access</span>
-            </li>
           </ul>
-          <a
-            href={`/api/stripe/checkout?priceId=${PRICE_INVESTOR}`}
-            className="block w-full px-6 py-3 bg-purple-600 text-white text-center rounded-lg font-semibold hover:bg-purple-700 transition"
-          >
-            Upgrade to Investor
-          </a>
+          
+          <UpgradeButton priceId={PRICE_INVESTOR}>Upgrade to Investor</UpgradeButton>
         </section>
       </div>
 
       <div className="mt-12 text-center text-gray-600">
-        <p>All plans include a 14-day money-back guarantee. Cancel anytime.</p>
+        <p>All plans include a 14-day money-back guarantee</p>
       </div>
     </main>
   );
