@@ -94,9 +94,11 @@ async def stripe_webhook(request: Request) -> JSONResponse:
                             content={"ok": True}
                         )
             except Exception as e:
+                # Log error internally but don't expose details to client
+                print(f"Webhook processing error: {str(e)}")
                 return JSONResponse(
                     status_code=200,
-                    content={"ok": False, "error": f"Failed to process checkout: {str(e)}"}
+                    content={"ok": False, "error": "Failed to process checkout"}
                 )
     
     # Handle invoice.paid (subscription renewal)
@@ -125,9 +127,10 @@ async def stripe_webhook(request: Request) -> JSONResponse:
                         content={"ok": True}
                     )
             except Exception as e:
+                print(f"Webhook processing error: {str(e)}")
                 return JSONResponse(
                     status_code=200,
-                    content={"ok": False, "error": f"Failed to process invoice: {str(e)}"}
+                    content={"ok": False, "error": "Failed to process invoice"}
                 )
     
     # Handle customer.subscription.deleted (cancellation)
@@ -149,9 +152,10 @@ async def stripe_webhook(request: Request) -> JSONResponse:
                     content={"ok": True}
                 )
         except Exception as e:
+            print(f"Webhook processing error: {str(e)}")
             return JSONResponse(
                 status_code=200,
-                content={"ok": False, "error": f"Failed to process cancellation: {str(e)}"}
+                content={"ok": False, "error": "Failed to process cancellation"}
             )
     
     # Default response for unhandled events
