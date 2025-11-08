@@ -7,16 +7,19 @@ dashboard to send webhooks to this URL.
 Returns deterministic JSON responses for plan mapping.
 """
 
-import os
+
 import stripe
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from typing import Dict, Any
+from lib.settings import settings
+from lib.supabase import supabase_admin
 
 router = APIRouter(prefix="/stripe")
 
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_xxx")
-webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET", "whsec_xxx")
+stripe.api_key = settings.STRIPE_SECRET_KEY
+webhook_secret = settings.STRIPE_WEBHOOK_SECRET
+
 
 # Deterministic plan mapping from Stripe price IDs to internal plan names
 PLAN_MAPPING: Dict[str, str] = {
@@ -68,16 +71,18 @@ def create_deterministic_response(
 
 @router.post("/webhook")
 async def stripe_webhook(request: Request) -> JSONResponse:
+    """Handle Stripe webhook events with deterministic responses."""
     payload = await request.body()
-    sig_header = request.headers.get('stripe-signature')
+    sig_header = request.headers.get("stripe-signature")
+
     try:
         event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
-    except ValueError as exc:
+    except ValueError:
         # Invalid payload
-        raise HTTPException(status_code=400, detail=str(exc))
-    except stripe.error.SignatureVerificationError as exc:
+        return JSONResponse({"ok": False, "error": "Invalid payload"}, status_code=400)
+    except stripe.error.SignatureVerificationError:
         # Invalid signature
-        raise HTTPException(status_code=400, detail=str(exc))
+        return JSONResponse({"ok": False, "error": "Invalid signature"}, status_code=400)
 
     event_type = event['type']
     

@@ -7,6 +7,18 @@ A simple health check endpoint is provided for monitoring deployments.
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from routes import (
+    digests,
+    jobs,
+    resumes,
+    saved,
+    scoring,
+    scrape,
+    stripe_portal,
+    stripe_routes,
+    stripe_webhook,
+    users,
+)
 
 from routes import stripe_routes, stripe_portal, stripe_webhook
 from routes import jobs, saved_jobs, users
@@ -22,15 +34,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include subrouters
+# Include all routers
 app.include_router(stripe_routes.router)
 app.include_router(stripe_portal.router)
 app.include_router(stripe_webhook.router)
 app.include_router(jobs.router)
 app.include_router(saved_jobs.router)
 app.include_router(users.router)
+app.include_router(users.router)
+app.include_router(saved.router)
+app.include_router(scoring.router)
+app.include_router(resumes.router)
+app.include_router(digests.router)
+app.include_router(scrape.router)
+
 
 @app.get("/health")
-async def health() -> dict[str, str]:
+async def health() -> dict[str, bool]:
     """Simple health check endpoint."""
-    return {"status": "ok"}
+    return {"ok": True}

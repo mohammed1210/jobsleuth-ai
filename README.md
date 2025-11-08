@@ -1,61 +1,329 @@
-# JobSleuth AI Starter
+# JobSleuth AI - Production-Ready MVP
 
-This repository contains a minimal starter for **JobSleuth AI**, a job‑sourcing platform inspired by PropNexus. It includes a **Next.js** frontend, a **FastAPI** backend, basic **Supabase** authentication, and **Stripe** billing hooks. Use this as a baseline to develop more advanced features.
+JobSleuth AI is a production-quality AI-powered job sourcing platform built with FastAPI (backend), Next.js 15 (frontend), Supabase (database + auth), and Stripe (payments). This MVP includes AI job-fit scoring, resume tools, email digests, and feature flags.
 
-## Project Structure
+## 🏗️ Architecture
 
+**Monorepo Structure:**
 ```
-jobsleuth_starter/
-├── frontend/            # Next.js app (app router)
-│   ├── app/
-│   │   ├── layout.tsx   # Root layout (metadata, theme colors)
-│   │   ├── page.tsx     # Home page
-│   │   ├── magic-login/page.tsx
-│   │   ├── auth/callback/page.tsx
-│   │   ├── pricing/page.tsx
-│   │   ├── account/page.tsx
-│   ├── components/
-│   │   ├── HeaderClient.tsx
-│   │   └── StripePortalButton.tsx
-│   ├── lib/
-│   │   └── supabaseClient.ts
-│   └── app/globals.css
-├── backend/             # FastAPI app
-│   ├── main.py
-│   └── routes/
-│       ├── stripe_routes.py
-│       ├── stripe_portal.py
-│       └── stripe_webhook.py
-├── .github/workflows/   # CI/CD definitions (stubbed)
-│   ├── frontend.yml
-│   └── backend.yml
-├── .env.example
-└── README.md
+jobsleuth-ai/
+├── backend/          # FastAPI (Python 3.11)
+├── frontend/         # Next.js 15 + App Router (TypeScript)
+├── supabase/         # Database migrations & seeds
+├── ops/              # Smoke tests & deployment scripts
+├── docs/             # Documentation & runbooks
+└── .github/          # CI/CD workflows
 ```
 
-## Getting Started
+**Tech Stack:**
+- **Backend**: FastAPI, Python 3.11, Supabase, OpenAI, Stripe
+- **Frontend**: Next.js 15, React 18, TypeScript, Tailwind CSS
+- **Database**: Supabase (PostgreSQL) with RLS
+- **Auth**: Supabase Auth (magic-link sign-in)
+- **Payments**: Stripe with webhook handling
+- **AI**: OpenAI GPT-3.5 for scoring & resume tools
+- **Email**: Resend or Mailgun for digests
+- **Scraping**: Provider APIs (SerpAPI/Zyte) + optional Playwright
 
-1. **Clone this repo** and create a new branch (e.g. `jobsleuth/bootstrap`).
-2. Copy `.env.example` to `.env.local` and fill in the required values:
-   - Supabase project URL and keys (create a project at [supabase.com](https://supabase.com)).
-   - Stripe public/secret keys and webhook secret.
-   - Price IDs for your subscription plans.
-   - Frontend and backend URLs for deployed environments.
-3. **Install dependencies**:
-   ```bash
-   cd frontend
-   npm install
-   cd ../backend
-   pip install -r requirements.txt  # create this file as needed
-   ```
-4. **Run locally**:
-   - Frontend: `npm run dev` in `frontend` directory (port 3000).
-   - Backend: `uvicorn backend.main:app --reload` (port 8000).
-5. **Configure CI/CD**: The `.github/workflows` files contain simple placeholders. Replace them with workflows for Vercel (frontend) and Railway (backend) or your chosen platforms.
-6. **Deploy**: Set up projects on Vercel and Railway (or your hosting of choice). Configure environment variables using `.env.local` values.
+## 🚀 Quick Start
 
-## Notes
+### Prerequisites
 
-- This starter is intentionally minimal. It demonstrates how to wire together authentication, billing and basic navigation. You should extend it with your own job listing pages, search filters, analytics and custom branding.
-- The backend routes for Stripe are stubs; handle subscription events according to your billing model.
-- The frontend uses Tailwind CSS; ensure Tailwind is configured in `tailwind.config.js` if you plan to extend styles.
+- Node.js 20+
+- Python 3.11+
+- pnpm 8+
+- Supabase account
+- Stripe account (test mode)
+
+### 1. Clone & Install
+
+```bash
+git clone <repository-url>
+cd jobsleuth-ai
+
+# Install frontend dependencies
+cd frontend
+pnpm install
+
+# Install backend dependencies
+cd ../backend
+pip install -r requirements.txt
+
+# Install Playwright browsers (optional, for internal scraping)
+playwright install chromium
+```
+
+### 2. Environment Setup
+
+Copy `.env.example` to `.env` (root) and `.env.local` (frontend):
+
+```bash
+cp .env.example .env
+cp .env.example frontend/.env.local
+```
+
+**Required Environment Variables:**
+
+**Backend (.env):**
+```bash
+# Supabase
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+
+# Stripe
+STRIPE_SECRET_KEY=sk_test_xxx
+STRIPE_WEBHOOK_SECRET=whsec_xxx
+PRICE_ID_PRO=price_xxx
+PRICE_ID_INVESTOR=price_xxx
+
+# Optional: OpenAI (for AI features)
+OPENAI_API_KEY=sk-xxx
+
+# Optional: Email
+RESEND_API_KEY=re_xxx
+
+# Backend/Frontend URLs
+BACKEND_URL=http://localhost:8000
+FRONTEND_URL=http://localhost:3000
+```
+
+**Frontend (.env.local):**
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_KEY=your_anon_key
+NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
+
+# Feature Flags (optional)
+NEXT_PUBLIC_FEATURE_AI_FIT=true
+NEXT_PUBLIC_FEATURE_RESUME_TOOLS=true
+NEXT_PUBLIC_FEATURE_DIGESTS=false
+NEXT_PUBLIC_FEATURE_SCRAPE_INTERNAL=false
+
+# Stripe
+NEXT_PUBLIC_STRIPE_PRICE_PRO=price_xxx
+NEXT_PUBLIC_STRIPE_PRICE_INVESTOR=price_xxx
+```
+
+### 3. Database Setup
+
+Run migrations in your Supabase project:
+
+```bash
+# In Supabase SQL Editor, run:
+supabase/migrations/20240101000000_initial_schema.sql
+
+# Then run seed data:
+supabase/seeds/seed_jobs.sql
+```
+
+Or use Supabase CLI:
+```bash
+supabase db push
+supabase db seed
+```
+
+### 4. Run Locally
+
+**Backend:**
+```bash
+cd backend
+uvicorn main:app --reload --port 8000
+```
+
+**Frontend:**
+```bash
+cd frontend
+pnpm dev
+```
+
+Visit:
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+
+## 🧪 Testing
+
+### Backend Tests
+
+```bash
+cd backend
+pytest -v
+```
+
+**Test Coverage:**
+- ✅ Health endpoint
+- ✅ Jobs listing & detail
+- ✅ Saved jobs (RLS owner-only)
+- ✅ User plan (Bearer token precedence)
+- ✅ Stripe webhook (deterministic responses)
+- ✅ Scoring service (zero preservation)
+
+### Smoke Tests
+
+```bash
+# Start backend, then run:
+./ops/smoke-test.sh
+```
+
+### Linting
+
+```bash
+# Backend
+cd backend
+ruff check .
+ruff format .
+
+# Frontend
+cd frontend
+pnpm lint
+pnpm type-check
+```
+
+## 📦 Features
+
+### Core Features ✅
+
+- **Job Listings**: Browse, search, filter jobs with pagination
+- **Job Details**: View full job details with salary, location, type
+- **Save Jobs**: Save favorite jobs (requires auth)
+- **User Accounts**: Magic-link authentication, plan management
+- **Stripe Integration**: Free/Pro/Investor plans with webhook handling
+- **RLS Security**: Row-level security for user data
+
+### AI Features (Gated by Flags) 🤖
+
+- **AI Fit Scoring**: Match jobs to user profile (0-100 score)
+- **Resume Tools**: Generate tailored resume suggestions
+- **Cover Letters**: Auto-generate cover letters for jobs
+- **Email Digests**: Scheduled job digests via email
+
+### Scraping Features 🕷️
+
+- **Provider-First**: Use SerpAPI/Zyte when available
+- **Playwright Fallback**: Internal scraping with rate limiting
+- **Normalization**: Convert raw data to schema
+
+## 🎛️ Feature Flags
+
+Control features via environment variables (see `docs/FEATURE_FLAGS.md`):
+
+- `NEXT_PUBLIC_FEATURE_AI_FIT` - AI job fit scoring
+- `NEXT_PUBLIC_FEATURE_RESUME_TOOLS` - Resume/cover letter tools
+- `NEXT_PUBLIC_FEATURE_DIGESTS` - Email digest subscriptions
+- `NEXT_PUBLIC_FEATURE_SCRAPE_INTERNAL` - Internal Playwright scraper
+
+All default to `false` when unset.
+
+## 🚢 Deployment
+
+### Frontend (Vercel)
+
+1. Connect repository to Vercel
+2. Set environment variables in Vercel dashboard
+3. Deploy (automatic on push to main)
+
+### Backend (Railway)
+
+1. Connect repository to Railway
+2. Set environment variables in Railway dashboard
+3. Deploy (automatic on push to main)
+
+### Database (Supabase)
+
+Already hosted - just configure connection strings.
+
+### Webhooks
+
+Configure Stripe webhook endpoint:
+```
+https://your-backend.railway.app/stripe/webhook
+```
+
+Events to listen for:
+- `checkout.session.completed`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
+
+## 📚 API Documentation
+
+**Key Endpoints:**
+
+```
+GET  /health                    # Health check
+GET  /jobs                      # List jobs (with filters)
+GET  /jobs/{id}                 # Get job detail
+POST /save-job                  # Save job (requires auth)
+GET  /saved-jobs                # Get saved jobs (requires auth)
+POST /score                     # Compute job fit score
+POST /resume/suggest            # Get resume suggestions
+POST /cover-letter              # Generate cover letter
+POST /digests/run               # Run digest (admin only)
+GET  /users/plan                # Get user plan
+POST /stripe/webhook            # Stripe webhook handler
+```
+
+See http://localhost:8000/docs for interactive API documentation.
+
+## 🔐 Security
+
+- **RLS**: All user data protected by Row Level Security
+- **Auth**: Supabase JWT tokens validated
+- **CORS**: Configured for production origins
+- **Secrets**: Never committed to source
+- **Rate Limiting**: Applied to scraping
+- **Input Validation**: Pydantic models
+- **CodeQL**: Automated security scanning
+
+## 📊 Database Schema
+
+**Tables:**
+- `users` - User profiles with plan info
+- `jobs` - Job listings with salary, location
+- `saved_jobs` - User's saved jobs (RLS)
+- `job_scores` - AI fit scores (RLS)
+- `applications` - Application tracking (RLS)
+- `digests` - Email digest preferences (RLS)
+- `companies` - Company information
+
+See `supabase/migrations/` for full schema.
+
+## 🤝 Contributing
+
+1. Create a feature branch
+2. Make changes with tests
+3. Run linters: `ruff check`, `pnpm lint`
+4. Run tests: `pytest`, `pnpm test`
+5. Submit PR
+
+## 📝 License
+
+MIT License - see LICENSE file for details.
+
+## 🆘 Support
+
+- Documentation: `/docs`
+- Issues: GitHub Issues
+- Email: support@jobsleuth.ai
+
+## 🎯 Roadmap
+
+**Phase 1: MVP** ✅
+- Core job listing & search
+- User authentication
+- Stripe billing
+- AI scoring (basic)
+
+**Phase 2: Enhancement** (Next)
+- [ ] Advanced search filters
+- [ ] Job alerts & notifications
+- [ ] Application tracking
+- [ ] Team accounts
+- [ ] Analytics dashboard
+
+**Phase 3: Scale** (Future)
+- [ ] Multi-language support
+- [ ] Mobile apps
+- [ ] API for partners
+- [ ] Custom integrations
+- [ ] White-label solution

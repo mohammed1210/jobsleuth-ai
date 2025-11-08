@@ -4,14 +4,16 @@ These routes handle creation of checkout sessions for subscription plans.
 Replace the placeholder pricing IDs with your actual Stripe Price IDs.
 """
 
+import os
+
+import stripe
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
-import stripe
-import os
 
 router = APIRouter(prefix="/stripe")
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_xxx")
+
 
 @router.post("/checkout")
 async def create_checkout_session(price_id: str) -> JSONResponse:
@@ -25,8 +27,10 @@ async def create_checkout_session(price_id: str) -> JSONResponse:
                 }
             ],
             mode="subscription",
-            success_url=os.getenv("FRONTEND_URL", "http://localhost:3000") + "/account?status=success",
-            cancel_url=os.getenv("FRONTEND_URL", "http://localhost:3000") + "/account?status=cancel",
+            success_url=os.getenv("FRONTEND_URL", "http://localhost:3000")
+            + "/account?status=success",
+            cancel_url=os.getenv("FRONTEND_URL", "http://localhost:3000")
+            + "/account?status=cancel",
             customer_creation="always",
         )
         return JSONResponse({"url": session.url})
