@@ -125,16 +125,16 @@ export default function JobCard({ job, onSave, saved = false, aiScore }: JobCard
       <div className="flex items-center gap-3 pt-4 border-t border-gray-100">
         <Link
           href={`/jobs/${job.id}`}
-          className="flex-1 text-center px-4 py-2 bg-brand-600 text-white rounded-lg font-semibold hover:bg-brand-700 transition-colors"
+          className="text-brand-600 hover:text-brand-700 text-sm font-medium transition-colors"
         >
-          View Details
+          View Details →
         </Link>
         {job.url && (
           <a
             href={job.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center px-4 py-2 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:border-gray-400 hover:bg-gray-50 transition-colors"
+            className="ml-auto flex items-center px-4 py-2 bg-brand-600 text-white rounded-lg font-semibold hover:bg-brand-700 transition-colors text-sm"
             onClick={(e) => e.stopPropagation()}
           >
             Apply
