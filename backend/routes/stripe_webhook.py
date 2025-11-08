@@ -106,6 +106,7 @@ async def stripe_webhook(request: Request) -> JSONResponse:
         # Return success for handled events
         return JSONResponse({"ok": True})
 
-    except Exception as e:
+    except Exception:
         # Return error but with 200 status (to avoid Stripe retries for invalid data)
-        return JSONResponse({"ok": False, "error": str(e)}, status_code=200)
+        # Don't expose internal error details for security
+        return JSONResponse({"ok": False, "error": "Processing failed"}, status_code=200)
