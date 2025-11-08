@@ -157,6 +157,14 @@ def compute_salary_score(
     if job_salary_avg is None:
         return 0.5
     
+    # Handle edge case: desired_salary is 0
+    if desired_salary == 0:
+        # If both are 0, perfect match
+        if job_salary_avg == 0:
+            return 1.0
+        # If job has salary but user wants 0 (unpaid), low score
+        return 0.1
+    
     # Score based on how close to desired
     if job_salary_avg >= desired_salary:
         # Meets or exceeds desired
