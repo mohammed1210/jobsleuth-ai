@@ -34,7 +34,9 @@ export default function HeaderClient() {
             JobSleuth
           </Link>
           <Link href="/jobs" className="hover:underline">Jobs</Link>
-          <Link href="/analytics" className="hover:underline">Analytics</Link>
+          {signedIn && (
+            <Link href="/saved" className="hover:underline">Saved</Link>
+          )}
           <Link href="/pricing" className="hover:underline">Pricing</Link>
         </div>
         <div className="space-x-4">
