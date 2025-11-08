@@ -6,3 +6,8 @@ python-dotenv
 beautifulsoup4
 requests
 playwright
+pytest
+pytest-asyncio
+httpx
+openai
+stripe
