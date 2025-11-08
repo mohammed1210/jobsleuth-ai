@@ -1,0 +1,18 @@
+# PR Labeler configuration
+frontend/**:
+  - frontend
+
+backend/**:
+  - backend
+
+supabase/**:
+  - database
+
+ops/**:
+  - ops
+
+docs/**:
+  - documentation
+
+.github/**:
+  - ci/cd
