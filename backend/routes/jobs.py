@@ -16,6 +16,10 @@ class JobResponse(BaseModel):
     salary: Optional[str] = None
     url: Optional[str] = None
     source: Optional[str] = None
+    role_type: Optional[str] = None
+    salary_min: Optional[int] = None
+    salary_max: Optional[int] = None
+    ai_score: Optional[float] = None
     date_posted: Optional[str] = None
     description: Optional[str] = None
 
@@ -32,6 +36,8 @@ class JobListResponse(BaseModel):
 async def list_jobs(
     q: Optional[str] = Query(None, description="Search query"),
     location: Optional[str] = Query(None, description="Location filter"),
+    role_type: Optional[str] = Query(None, description="Role type filter"),
+    salary_min: Optional[int] = Query(None, ge=0, description="Minimum salary filter"),
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(10, ge=1, le=100, description="Results per page"),
 ) -> JobListResponse:
@@ -54,6 +60,10 @@ async def list_jobs(
             company="TechCorp",
             location="San Francisco, CA",
             salary="$120k - $180k",
+            salary_min=120000,
+            salary_max=180000,
+            role_type="Full-time",
+            ai_score=0.87,
             source="Indeed",
             date_posted="2 days ago",
             url="https://example.com/job/1",
@@ -65,6 +75,10 @@ async def list_jobs(
             company="StartupXYZ",
             location="Remote",
             salary="$90k - $130k",
+            salary_min=90000,
+            salary_max=130000,
+            role_type="Remote",
+            ai_score=0.82,
             source="LinkedIn",
             date_posted="1 week ago",
             url="https://example.com/job/2",
@@ -76,6 +90,10 @@ async def list_jobs(
             company="BigTech Inc",
             location="New York, NY",
             salary="$100k - $150k",
+            salary_min=100000,
+            salary_max=150000,
+            role_type="Hybrid",
+            ai_score=0.78,
             source="Indeed",
             date_posted="3 days ago",
             url="https://example.com/job/3",
@@ -97,6 +115,19 @@ async def list_jobs(
         filtered_jobs = [
             job for job in filtered_jobs
             if location_lower in job.location.lower()
+        ]
+
+    if role_type:
+        role_type_lower = role_type.lower()
+        filtered_jobs = [
+            job for job in filtered_jobs
+            if job.role_type and role_type_lower in job.role_type.lower()
+        ]
+
+    if salary_min is not None:
+        filtered_jobs = [
+            job for job in filtered_jobs
+            if job.salary_max is None or job.salary_max >= salary_min
         ]
     
     # Pagination
@@ -134,6 +165,10 @@ async def get_job(job_id: int) -> JobResponse:
             company="TechCorp",
             location="San Francisco, CA",
             salary="$120k - $180k",
+            salary_min=120000,
+            salary_max=180000,
+            role_type="Full-time",
+            ai_score=0.87,
             source="Indeed",
             date_posted="2 days ago",
             url="https://example.com/job/1",
@@ -154,6 +189,10 @@ async def get_job(job_id: int) -> JobResponse:
             company="StartupXYZ",
             location="Remote",
             salary="$90k - $130k",
+            salary_min=90000,
+            salary_max=130000,
+            role_type="Remote",
+            ai_score=0.82,
             source="LinkedIn",
             date_posted="1 week ago",
             url="https://example.com/job/2",

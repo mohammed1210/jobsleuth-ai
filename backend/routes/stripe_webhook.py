@@ -8,23 +8,25 @@ Returns deterministic JSON responses for plan mapping.
 """
 
 
+from typing import Dict, Any
+
 import stripe
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from typing import Dict, Any
+
 from lib.settings import settings
-from lib.supabase import supabase_admin
 
 router = APIRouter(prefix="/stripe")
 
-stripe.api_key = settings.STRIPE_SECRET_KEY
+stripe.api_key = settings.STRIPE_SECRET_KEY or None
 webhook_secret = settings.STRIPE_WEBHOOK_SECRET
 
 
 # Deterministic plan mapping from Stripe price IDs to internal plan names
 PLAN_MAPPING: Dict[str, str] = {
-    os.getenv("NEXT_PUBLIC_STRIPE_PRICE_PRO", "price_pro_xxx"): "pro",
-    os.getenv("NEXT_PUBLIC_STRIPE_PRICE_INVESTOR", "price_investor_xxx"): "investor",
+    settings.NEXT_PUBLIC_STRIPE_PRICE_PRO: "pro",
+    settings.NEXT_PUBLIC_STRIPE_PRICE_CAREER_PLUS: "career_plus",
+    settings.NEXT_PUBLIC_STRIPE_PRICE_INVESTOR: "investor",
 }
 
 
@@ -75,6 +77,9 @@ async def stripe_webhook(request: Request) -> JSONResponse:
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature")
 
+    if not webhook_secret:
+        return JSONResponse({"ok": False, "error": "webhook_not_configured"}, status_code=200)
+
     try:
         event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
     except ValueError:
@@ -84,7 +89,7 @@ async def stripe_webhook(request: Request) -> JSONResponse:
         # Invalid signature
         return JSONResponse({"ok": False, "error": "Invalid signature"}, status_code=400)
 
-    event_type = event['type']
+    event_type = event["type"]
     
     # Handle the event with deterministic responses
     if event_type == 'checkout.session.completed':
