@@ -1,52 +1,41 @@
 """Settings and configuration for JobSleuth AI backend."""
 
-import os
-
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    # Database
-    SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
-    SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
-    SUPABASE_SERVICE_ROLE_KEY: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore")
 
-    # Stripe
-    STRIPE_SECRET_KEY: str = os.getenv("STRIPE_SECRET_KEY", "sk_test_xxx")
-    STRIPE_WEBHOOK_SECRET: str = os.getenv("STRIPE_WEBHOOK_SECRET", "whsec_xxx")
-    PRICE_ID_PRO: str = os.getenv("PRICE_ID_PRO", "")
-    PRICE_ID_INVESTOR: str = os.getenv("PRICE_ID_INVESTOR", "")
+    SUPABASE_URL: str = ""
+    SUPABASE_KEY: str = ""
+    SUPABASE_SERVICE_ROLE_KEY: str = ""
 
-    # OpenAI
-    OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    NEXT_PUBLIC_STRIPE_PRICE_PRO: str = "price_pro_xxx"
+    NEXT_PUBLIC_STRIPE_PRICE_CAREER_PLUS: str = "price_career_plus_xxx"
+    NEXT_PUBLIC_STRIPE_PRICE_INVESTOR: str = "price_investor_xxx"
 
-    # Email
-    RESEND_API_KEY: str | None = os.getenv("RESEND_API_KEY")
-    MAILGUN_API_KEY: str | None = os.getenv("MAILGUN_API_KEY")
-    MAILGUN_DOMAIN: str | None = os.getenv("MAILGUN_DOMAIN")
-    EMAIL_FROM: str = os.getenv("EMAIL_FROM", "noreply@jobsleuth.ai")
+    OPENAI_API_KEY: str | None = None
 
-    # Scraping
-    PROVIDER_API_KEY: str | None = os.getenv("PROVIDER_API_KEY")
-    SCRAPE_PROVIDER: str = os.getenv("SCRAPE_PROVIDER", "off")
-    FEATURE_SCRAPE_INTERNAL: bool = os.getenv("FEATURE_SCRAPE_INTERNAL", "false").lower() == "true"
-    HEADLESS: bool = os.getenv("HEADLESS", "true").lower() == "true"
-    PROXY_URL: str | None = os.getenv("PROXY_URL")
+    EMAIL_SERVER: str | None = None
+    EMAIL_USER: str | None = None
+    EMAIL_PASSWORD: str | None = None
+    EMAIL_FROM: str = "noreply@jobsleuth.ai"
 
-    # Auth
-    AUTH_SCRAPER_KEY: str = os.getenv("AUTH_SCRAPER_KEY", "change-me-in-production")
+    PROVIDER_API_KEY: str | None = None
+    SCRAPE_PROVIDER: str = "off"
+    FEATURE_SCRAPE_INTERNAL: bool = False
+    HEADLESS: bool = True
+    PROXY_URL: str | None = None
 
-    # API
-    BACKEND_URL: str = os.getenv("BACKEND_URL", "http://localhost:8000")
-    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
-
-    class Config:
-        """Pydantic config."""
-
-        env_file = ".env"
-        case_sensitive = True
+    AUTH_SCRAPER_KEY: str = "change-me-in-production"
+    BACKEND_URL: str = "http://localhost:8000"
+    FRONTEND_URL: str = "http://localhost:3000"
+    ALLOWED_ORIGINS: str = ""
+    ENABLE_DEBUG_ROUTES: bool = False
 
 
 settings = Settings()

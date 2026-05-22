@@ -1,24 +1,30 @@
-"""Stripe customer portal route for JobSleuth AI backend."""
-
-import os
-
 import stripe
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+
+from lib.settings import settings
 
 router = APIRouter(prefix="/stripe")
 
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_xxx")
+stripe.api_key = settings.STRIPE_SECRET_KEY or None
+
+
+class PortalRequest(BaseModel):
+    customer_id: str | None = None
 
 
 @router.post("/create-portal-session")
-async def create_portal_session(customer_id: str) -> JSONResponse:
-    """Create a Stripe billing portal session for an existing customer."""
+async def create_portal_session(request: PortalRequest) -> JSONResponse:
+    if not settings.STRIPE_SECRET_KEY:
+        return JSONResponse({"ok": False, "error": "stripe_not_configured"}, status_code=200)
+    if not request.customer_id:
+        return JSONResponse({"ok": False, "error": "customer_id_required"}, status_code=200)
     try:
         session = stripe.billing_portal.Session.create(
-            customer=customer_id,
-            return_url=os.getenv("FRONTEND_URL", "http://localhost:3000") + "/account",
+            customer=request.customer_id,
+            return_url=f"{settings.FRONTEND_URL}/account",
         )
-        return JSONResponse({"url": session.url})
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        return JSONResponse({"ok": True, "url": session.url})
+    except Exception:
+        return JSONResponse({"ok": False, "error": "portal_failed"}, status_code=200)
