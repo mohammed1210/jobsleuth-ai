@@ -1,15 +1,25 @@
-// Header component for JobSleuth AI
 'use client';
+
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { BriefcaseBusiness, ChartNoAxesCombined, Home, LogOut, Search, UserRound } from 'lucide-react';
+import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
+
+const navItems = [
+  { href: '/', label: 'Home', Icon: Home },
+  { href: '/jobs', label: 'Jobs', Icon: Search },
+  { href: '/saved', label: 'Saved', Icon: BriefcaseBusiness },
+  { href: '/analytics', label: 'Analytics', Icon: ChartNoAxesCombined },
+  { href: '/pricing', label: 'Pricing', Icon: ChartNoAxesCombined },
+  { href: '/account', label: 'Account', Icon: UserRound },
+];
 
 export default function HeaderClient() {
   const [signedIn, setSignedIn] = useState(false);
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_KEY as string;
+
   useEffect(() => {
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    if (!isSupabaseConfigured()) return;
+    const supabase = getSupabaseClient();
     supabase.auth.getSession().then(({ data }) => {
       setSignedIn(!!data.session);
     });
@@ -19,70 +29,56 @@ export default function HeaderClient() {
     return () => {
       listener?.subscription.unsubscribe();
     };
-  }, [supabaseUrl, supabaseKey]);
+  }, []);
 
   const handleSignOut = async () => {
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    if (!isSupabaseConfigured()) return;
+    const supabase = getSupabaseClient();
     await supabase.auth.signOut();
+    setSignedIn(false);
   };
 
   return (
-    <header className="sticky top-0 z-50 glass border-b border-white/20 shadow-sm">
-      <nav className="max-w-7xl mx-auto flex items-center justify-between px-6 py-4">
-        <div className="flex items-center space-x-8">
+    <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
+      <nav className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
+        <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center space-x-2 group">
-            <div className="w-8 h-8 rounded-lg bg-gradient-ai flex items-center justify-center shadow-glow transition-transform group-hover:scale-110">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-950 transition-transform group-hover:scale-105">
               <span className="text-white font-bold text-lg">JS</span>
             </div>
-            <span className="text-xl font-bold bg-gradient-ai bg-clip-text text-transparent">
+            <span className="text-xl font-bold text-slate-950">
               JobSleuth
             </span>
-            <span className="text-xs px-2 py-0.5 bg-gradient-ai text-white rounded-full font-medium shadow-sm">
+            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
               AI
             </span>
           </Link>
-          <div className="hidden md:flex items-center space-x-6">
-            <Link href="/jobs" className="text-gray-700 hover:text-brand-600 font-medium transition-colors">
-              Jobs
-            </Link>
-            {signedIn && (
-              <Link href="/saved" className="text-gray-700 hover:text-brand-600 font-medium transition-colors">
-                Saved
+          <div className="hidden items-center gap-1 lg:flex">
+            {navItems.map(({ href, label, Icon }) => (
+              <Link key={href} href={href} className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-950">
+                <Icon className="h-4 w-4" />
+                {label}
               </Link>
-            )}
-            <Link href="/pricing" className="text-gray-700 hover:text-brand-600 font-medium transition-colors">
-              Pricing
-            </Link>
+            ))}
           </div>
         </div>
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center gap-3">
           {signedIn ? (
             <>
-              <Link 
-                href="/account" 
-                className="text-gray-700 hover:text-brand-600 font-medium transition-colors"
-              >
+              <Link href="/account" className="hidden text-sm font-medium text-slate-700 hover:text-slate-950 sm:inline">
                 Account
               </Link>
-              <button 
-                onClick={handleSignOut} 
-                className="text-gray-600 hover:text-gray-900 font-medium transition-colors"
-              >
+              <button onClick={handleSignOut} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
+                <LogOut className="h-4 w-4" />
                 Sign out
               </button>
             </>
           ) : (
             <>
-              <Link 
-                href="/magic-login" 
-                className="text-gray-700 hover:text-brand-600 font-medium transition-colors"
-              >
+              <Link href="/magic-login" className="text-sm font-medium text-slate-700 hover:text-slate-950">
                 Sign in
               </Link>
-              <Link 
-                href="/pricing" 
-                className="hidden sm:inline-flex px-4 py-2 bg-gradient-ai text-white rounded-lg font-semibold shadow-sm hover:shadow-ai transition-all duration-200 hover:-translate-y-0.5"
-              >
+              <Link href="/pricing" className="hidden rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 sm:inline-flex">
                 Get Started
               </Link>
             </>

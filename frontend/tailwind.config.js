@@ -8,38 +8,37 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Modern AI-focused brand colors
         brand: {
-          50: '#f0f4ff',
-          100: '#e0e9ff',
-          200: '#c7d7fe',
-          300: '#a5bbfc',
-          400: '#8196f8',
-          500: '#6366f1',
-          600: '#4f46e5',
-          700: '#4338ca',
-          800: '#3730a3',
-          900: '#312e81',
-          950: '#1e1b4b',
+          50: '#ecfeff',
+          100: '#cffafe',
+          200: '#a5f3fc',
+          300: '#67e8f9',
+          400: '#22d3ee',
+          500: '#06b6d4',
+          600: '#0891b2',
+          700: '#0e7490',
+          800: '#155e75',
+          900: '#164e63',
+          950: '#083344',
         },
         ai: {
           gradient: {
-            from: '#6366f1',
-            via: '#8b5cf6',
-            to: '#d946ef',
+            from: '#0f172a',
+            via: '#0891b2',
+            to: '#059669',
           },
         },
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'gradient-ai': 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%)',
-        'gradient-ai-soft': 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 50%, rgba(217, 70, 239, 0.1) 100%)',
+        'gradient-ai': 'linear-gradient(135deg, #0f172a 0%, #0891b2 55%, #059669 100%)',
+        'gradient-ai-soft': 'linear-gradient(135deg, rgba(15, 23, 42, 0.06) 0%, rgba(8, 145, 178, 0.08) 55%, rgba(5, 150, 105, 0.08) 100%)',
       },
       boxShadow: {
-        'glow': '0 0 20px rgba(99, 102, 241, 0.3)',
-        'glow-lg': '0 0 40px rgba(99, 102, 241, 0.4)',
-        'ai': '0 4px 20px rgba(99, 102, 241, 0.15)',
-        'ai-hover': '0 8px 30px rgba(99, 102, 241, 0.25)',
+        'glow': '0 0 20px rgba(8, 145, 178, 0.22)',
+        'glow-lg': '0 0 40px rgba(8, 145, 178, 0.28)',
+        'ai': '0 4px 20px rgba(15, 23, 42, 0.1)',
+        'ai-hover': '0 8px 30px rgba(15, 23, 42, 0.15)',
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',

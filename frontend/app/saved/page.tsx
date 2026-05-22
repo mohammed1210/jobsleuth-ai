@@ -2,174 +2,100 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { createClient } from '@supabase/supabase-js';
-
-// If you already have a shared helper at `@/lib/supabaseClient` you can import it instead.
-// Here we inline to keep this file self-contained and avoid import-path issues in fresh repos.
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL as string,
-  process.env.NEXT_PUBLIC_SUPABASE_KEY as string
-);
-
-type SavedJob = {
-  id: number;
-  title: string;
-  company: string;
-  location: string;
-  salary?: string;
-  source?: string;
-  date_posted?: string;
-  url?: string;
-  saved_at?: string;
-};
+import type { Session } from '@supabase/supabase-js';
+import HeaderClient from '@/components/HeaderClient';
+import JobCard from '@/components/JobCard';
+import { deleteSavedJob, fallbackJobs, fetchSavedJobs, type Job, type SavedJob } from '@/lib/api';
+import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { Loader2 } from 'lucide-react';
 
 export default function SavedJobsPage() {
-  const [savedJobs, setSavedJobs] = useState<SavedJob[]>([]);
+  const [savedJobs, setSavedJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<Session | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const run = async () => {
-      // 1) check auth
-      const { data } = await supabase.auth.getUser();
-      const user = data.user ?? null;
-      setUserEmail(user?.email ?? null);
-
-      if (!user) {
+      if (!isSupabaseConfigured()) {
+        setError('Supabase is not configured yet.');
         setLoading(false);
         return;
       }
 
-      // 2) fetch saved jobs (mock for now)
-      await fetchSavedJobs(user.id);
+      const supabase = getSupabaseClient();
+      const { data } = await supabase.auth.getSession();
+      const activeSession = data.session;
+      setSession(activeSession);
+      setUserEmail(activeSession?.user.email ?? null);
+
+      if (!activeSession) {
+        setLoading(false);
+        return;
+      }
+
+      await loadSavedJobs(activeSession);
     };
 
     run();
   }, []);
 
-  const fetchSavedJobs = async (userId: string) => {
+  const mapSavedRows = (rows: SavedJob[]) => rows.map((row) => row.job ?? fallbackJobs.find((job) => job.id === row.job_id)).filter(Boolean) as Job[];
+
+  const loadSavedJobs = async (activeSession: Session) => {
     setLoading(true);
+    setError(null);
     try {
-      // TODO: replace with real call once backend route or Supabase table exists
-      // e.g., const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/saved-jobs`, { headers: { Authorization: `Bearer ${token}` }})
-      // const rows: SavedJob[] = await res.json();
-
-      const mockRows: SavedJob[] = [
-        {
-          id: 1,
-          title: 'Senior Software Engineer',
-          company: 'TechCorp',
-          location: 'San Francisco, CA',
-          salary: '$120k - $180k',
-          source: 'Indeed',
-          date_posted: '2 days ago',
-          url: 'https://example.com/job/1',
-          saved_at: '2025-11-01',
-        },
-        {
-          id: 2,
-          title: 'Frontend Developer',
-          company: 'StartupXYZ',
-          location: 'Remote',
-          salary: '$90k - $130k',
-          source: 'LinkedIn',
-          date_posted: '1 week ago',
-          url: 'https://example.com/job/2',
-          saved_at: '2025-10-29',
-        },
-      ];
-
-      setSavedJobs(mockRows);
+      const rows = await fetchSavedJobs(activeSession);
+      setSavedJobs(mapSavedRows(rows));
     } catch (err) {
       console.error('Failed to fetch saved jobs:', err);
+      setError('Saved jobs API unavailable, showing a local sample.');
+      setSavedJobs(fallbackJobs.slice(0, 1));
     } finally {
       setLoading(false);
     }
   };
 
   const handleUnsave = async (jobId: number) => {
-    // TODO: call backend or Supabase to remove saved job for the user
-    setSavedJobs((rows) => rows.filter((j) => j.id !== jobId));
+    if (session) await deleteSavedJob(jobId, session);
+    setSavedJobs((rows) => rows.filter((job) => job.id !== jobId));
   };
 
-  // Not signed in
   if (!userEmail && !loading) {
     return (
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        <div className="text-center py-12">
-          <h1 className="text-2xl font-bold mb-3">Sign in required</h1>
-          <p className="opacity-80 mb-6">Please sign in to view your saved jobs.</p>
-          <Link
-            href="/magic-login"
-            className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded font-medium"
-          >
-            Sign in
-          </Link>
-        </div>
-      </main>
+      <div className="min-h-screen"><HeaderClient /><main className="mx-auto max-w-4xl px-4 py-10"><div className="card p-10 text-center"><h1 className="text-2xl font-bold text-slate-950">Sign in required</h1><p className="mt-3 text-slate-600">Use your magic link to view saved opportunities.</p><Link href="/magic-login" className="btn-primary mt-6 inline-flex">Sign in</Link></div></main></div>
     );
   }
 
   return (
-    <main className="max-w-6xl mx-auto px-4 py-8">
+    <div className="min-h-screen"><HeaderClient /><main className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-2">Saved Jobs</h1>
-        <p className="opacity-80">
+        <h1 className="text-3xl font-bold text-slate-950">Saved jobs</h1>
+        <p className="mt-2 text-slate-600">
           {savedJobs.length} {savedJobs.length === 1 ? 'job' : 'jobs'} saved
         </p>
       </div>
+      {error && <div className="mb-6 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{error}</div>}
 
       {loading ? (
         <div className="text-center py-12">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-200 border-t-indigo-600" />
-          <p className="mt-2 opacity-80">Loading saved jobs…</p>
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-cyan-700" />
+          <p className="mt-2 text-slate-600">Loading saved jobs...</p>
         </div>
       ) : savedJobs.length === 0 ? (
-        <div className="text-center py-12 bg-gray-50 rounded-lg">
-          <p className="opacity-80 mb-4">You haven’t saved any jobs yet.</p>
-          <Link
-            href="/jobs"
-            className="inline-block text-indigo-600 hover:text-indigo-700 font-medium"
-          >
-            Browse Jobs →
-          </Link>
+        <div className="card p-10 text-center">
+          <p className="mb-4 text-slate-600">You have not saved any jobs yet.</p>
+          <Link href="/jobs" className="btn-secondary inline-flex">Browse jobs</Link>
         </div>
       ) : (
         <div className="space-y-4">
           {savedJobs.map((job) => (
-            // `key` is a special React prop (not part of JobCardProps), so it’s fine here.
-            <div key={job.id} className="border rounded-md p-4">
-              {/* If you already have a JobCard component, you can swap this block with <JobCard job={job} onSave={() => handleUnsave(job.id)} saved /> */}
-              <div className="flex items-start justify-between">
-                <div>
-                  <h2 className="text-xl font-semibold">{job.title}</h2>
-                  <p className="opacity-80">{job.company} • {job.location}</p>
-                  {job.salary && <p className="opacity-80">{job.salary}</p>}
-                  {job.source && <p className="opacity-60 text-sm">Source: {job.source}</p>}
-                </div>
-                <div className="flex gap-3">
-                  {job.url && (
-                    <a
-                      href={job.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-indigo-600 hover:text-indigo-700 font-medium"
-                    >
-                      View
-                    </a>
-                  )}
-                  <button
-                    onClick={() => handleUnsave(job.id)}
-                    className="text-red-600 hover:text-red-700 font-medium"
-                  >
-                    Unsave
-                  </button>
-                </div>
-              </div>
-            </div>
+            <JobCard key={job.id} job={job} saved onSave={handleUnsave} />
           ))}
         </div>
       )}
-    </main>
+    </main></div>
   );
 }
