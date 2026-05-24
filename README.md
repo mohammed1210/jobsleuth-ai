@@ -39,6 +39,7 @@ Missing OpenAI or email configuration is safe: AI routes return deterministic fa
 - Build command: `npm run build`
 - Install command: `npm ci`
 - Required vars: `NEXT_PUBLIC_BACKEND_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_KEY`, `NEXT_PUBLIC_SITE_URL`, Stripe public vars
+- Env manifest: `ops/vercel.env.example`
 
 ## Railway Backend Setup
 
@@ -46,6 +47,7 @@ Missing OpenAI or email configuration is safe: AI routes return deterministic fa
 - Build command: `pip install -r requirements.txt`
 - Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
 - Health check: `/health`
+- Env manifest: `ops/railway.env.example`
 
 Do not use `uvicorn app.main:app`; the backend entrypoint is `backend/main.py` and Railway root should be `backend`.
 
