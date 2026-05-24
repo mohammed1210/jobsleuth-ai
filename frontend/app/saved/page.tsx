@@ -7,7 +7,6 @@ import HeaderClient from '@/components/HeaderClient';
 import JobCard from '@/components/JobCard';
 import { deleteSavedJob, fallbackJobs, fetchSavedJobs, type Job, type SavedJob } from '@/lib/api';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
-import { Loader2 } from 'lucide-react';
 
 export default function SavedJobsPage() {
   const [savedJobs, setSavedJobs] = useState<Job[]>([]);
@@ -65,29 +64,43 @@ export default function SavedJobsPage() {
 
   if (!userEmail && !loading) {
     return (
-      <div className="min-h-screen"><HeaderClient /><main className="mx-auto max-w-4xl px-4 py-10"><div className="card p-10 text-center"><h1 className="text-2xl font-bold text-slate-950">Sign in required</h1><p className="mt-3 text-slate-600">Use your magic link to view saved opportunities.</p><Link href="/magic-login" className="btn-primary mt-6 inline-flex">Sign in</Link></div></main></div>
+      <div className="min-h-screen">
+        <HeaderClient />
+        <main className="max-w-4xl mx-auto px-6 py-12">
+          <div className="card p-10 text-center">
+            <h1 className="text-3xl font-bold mb-3 text-gray-900">Sign in required</h1>
+            <p className="text-gray-600 mb-6">Please sign in to view your saved jobs.</p>
+            <Link href="/magic-login" className="btn-primary inline-flex">Sign in</Link>
+          </div>
+        </main>
+      </div>
     );
   }
 
   return (
-    <div className="min-h-screen"><HeaderClient /><main className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-slate-950">Saved jobs</h1>
-        <p className="mt-2 text-slate-600">
-          {savedJobs.length} {savedJobs.length === 1 ? 'job' : 'jobs'} saved
-        </p>
-      </div>
-      {error && <div className="mb-6 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{error}</div>}
+    <div className="min-h-screen">
+      <HeaderClient />
+      <main className="max-w-6xl mx-auto px-6 py-12">
+        <div className="mb-8">
+          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-3">
+            Saved <span className="text-gradient">Jobs</span>
+          </h1>
+          <p className="text-xl text-gray-600">
+            {savedJobs.length} {savedJobs.length === 1 ? 'job' : 'jobs'} saved
+          </p>
+        </div>
+
+      {error && <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">{error}</div>}
 
       {loading ? (
         <div className="text-center py-12">
-          <Loader2 className="mx-auto h-8 w-8 animate-spin text-cyan-700" />
-          <p className="mt-2 text-slate-600">Loading saved jobs...</p>
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-brand-200 border-t-brand-600" />
+          <p className="mt-2 text-gray-600">Loading saved jobs...</p>
         </div>
       ) : savedJobs.length === 0 ? (
         <div className="card p-10 text-center">
-          <p className="mb-4 text-slate-600">You have not saved any jobs yet.</p>
-          <Link href="/jobs" className="btn-secondary inline-flex">Browse jobs</Link>
+          <p className="text-gray-600 mb-4">You have not saved any jobs yet.</p>
+          <Link href="/jobs" className="btn-secondary inline-flex">Browse Jobs</Link>
         </div>
       ) : (
         <div className="space-y-4">
@@ -96,6 +109,7 @@ export default function SavedJobsPage() {
           ))}
         </div>
       )}
-    </main></div>
+      </main>
+    </div>
   );
 }
