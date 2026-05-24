@@ -1,18 +1,24 @@
-# PR Labeler configuration
-frontend/**:
-  - frontend
+# PR Labeler configuration for actions/labeler@v5.
+frontend:
+  - changed-files:
+      - any-glob-to-any-file: frontend/**
 
-backend/**:
-  - backend
+backend:
+  - changed-files:
+      - any-glob-to-any-file: backend/**
 
-supabase/**:
-  - database
+database:
+  - changed-files:
+      - any-glob-to-any-file: supabase/**
 
-ops/**:
-  - ops
+ops:
+  - changed-files:
+      - any-glob-to-any-file: ops/**
 
-docs/**:
-  - documentation
+documentation:
+  - changed-files:
+      - any-glob-to-any-file: docs/**
 
-.github/**:
-  - ci/cd
+ci/cd:
+  - changed-files:
+      - any-glob-to-any-file: .github/**
