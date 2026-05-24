@@ -11,7 +11,7 @@
   }
 
   body {
-    @apply bg-slate-50;
+    @apply bg-gradient-to-br from-slate-50 via-white to-indigo-50/30;
     font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     color: #0f172a;
     min-height: 100vh;
@@ -19,36 +19,50 @@
 }
 
 @layer components {
+  /* Modern button styles */
   .btn-primary {
-    @apply rounded-md bg-slate-950 px-5 py-3 font-semibold text-white transition-colors hover:bg-slate-800;
+    @apply px-6 py-3 bg-gradient-to-r from-brand-600 to-brand-500 text-white rounded-xl font-semibold shadow-ai hover:shadow-ai-hover transform hover:-translate-y-0.5 transition-all duration-200 ease-out;
   }
 
   .btn-secondary {
-    @apply rounded-md border border-slate-300 bg-white px-5 py-3 font-semibold text-slate-800 transition-colors hover:bg-slate-100;
+    @apply px-6 py-3 bg-white text-brand-600 border-2 border-brand-600 rounded-xl font-semibold hover:bg-brand-50 transform hover:-translate-y-0.5 transition-all duration-200 ease-out;
   }
 
   .btn-ghost {
-    @apply rounded-md px-4 py-2 font-medium text-slate-700 transition-colors hover:bg-slate-100;
+    @apply px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium transition-colors duration-150;
   }
 
+  /* Modern card styles */
   .card {
-    @apply overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm;
+    @apply bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden transition-all duration-200;
   }
 
   .card-hover {
-    @apply transition-shadow hover:shadow-md;
+    @apply hover:shadow-ai hover:-translate-y-1;
   }
 
+  /* AI-themed elements */
   .ai-badge {
-    @apply inline-flex items-center rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700 ring-1 ring-cyan-200;
+    @apply inline-flex items-center px-3 py-1 bg-gradient-ai text-white text-xs font-semibold rounded-full shadow-glow;
   }
 
+  .ai-indicator {
+    @apply relative inline-flex items-center justify-center;
+  }
+
+  .ai-indicator::before {
+    content: '';
+    @apply absolute inset-0 bg-gradient-ai rounded-full opacity-20 animate-pulse-slow;
+  }
+
+  /* Input styles */
   .input-modern {
-    @apply w-full rounded-md border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-cyan-600 focus:ring-2 focus:ring-cyan-600/15;
+    @apply w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 outline-none;
   }
 
+  /* Gradient text effect */
   .text-gradient {
-    @apply text-cyan-700;
+    @apply bg-gradient-ai bg-clip-text text-transparent;
   }
 }
 
@@ -75,7 +89,8 @@
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
+  /* Glass morphism effect */
   .glass {
-    @apply border border-slate-200 bg-white/90 backdrop-blur;
+    @apply bg-white/80 backdrop-blur-lg border border-white/20;
   }
 }

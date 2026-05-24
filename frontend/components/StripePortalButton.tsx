@@ -1,3 +1,4 @@
+// Stripe portal button component for JobSleuth AI
 'use client';
 import { useState } from 'react';
 
@@ -12,11 +13,7 @@ export default function StripePortalButton({ children }: Props) {
   const handleClick = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/stripe/create-portal-session`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
+      const res = await fetch('/api/stripe/create-portal-session', { method: 'POST' });
       const data = await res.json();
       if (data.url) {
         window.location.href = data.url;

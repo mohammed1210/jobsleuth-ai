@@ -1,72 +1,296 @@
+// Account page for JobSleuth AI
 'use client';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { createClient } from '@supabase/supabase-js';
+import { featureFlags } from '@/lib/flags';
 import HeaderClient from '@/components/HeaderClient';
-import StripePortalButton from '@/components/StripePortalButton';
-import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
-import { BriefcaseBusiness, Loader2, UserRound } from 'lucide-react';
 
 export default function AccountPage() {
-  const [email, setEmail] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userPlan, setUserPlan] = useState<string>('free');
   const [loading, setLoading] = useState(true);
-  const [configured, setConfigured] = useState(true);
 
   useEffect(() => {
-    async function load() {
-      if (!isSupabaseConfigured()) {
-        setConfigured(false);
-        setLoading(false);
-        return;
-      }
-      const supabase = getSupabaseClient();
-      const { data } = await supabase.auth.getSession();
-      setEmail(data.session?.user.email ?? null);
-      setLoading(false);
-    }
-    load();
+    loadUserData();
   }, []);
 
-  async function signOut() {
-    if (!isSupabaseConfigured()) return;
-    await getSupabaseClient().auth.signOut();
-    setEmail(null);
+  const loadUserData = async () => {
+    try {
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL as string,
+        process.env.NEXT_PUBLIC_SUPABASE_KEY as string
+      );
+
+      const { data } = await supabase.auth.getUser();
+      setUserEmail(data.user?.email ?? null);
+
+      if (data.user?.email) {
+        // Fetch user plan from backend
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+        const response = await fetch(`${backendUrl}/users/plan?email=${data.user.email}`);
+        const planData = await response.json();
+        setUserPlan(planData.plan || 'free');
+      }
+    } catch (error) {
+      console.error('Failed to load user data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignIn = async () => {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL as string,
+      process.env.NEXT_PUBLIC_SUPABASE_KEY as string
+    );
+
+    const email = prompt('Enter your email for magic link sign-in:');
+    if (!email) return;
+
+    try {
+      await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      alert('Check your email for the magic link!');
+    } catch (error) {
+      console.error('Sign in failed:', error);
+      alert('Failed to send magic link. Please try again.');
+    }
+  };
+
+  const handleSignOut = async () => {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL as string,
+      process.env.NEXT_PUBLIC_SUPABASE_KEY as string
+    );
+
+    await supabase.auth.signOut();
+    setUserEmail(null);
+    setUserPlan('free');
+    localStorage.removeItem('supabase_token');
+  };
+
+  const getPlanBadgeClass = (plan: string) => {
+    switch (plan) {
+      case 'pro':
+        return 'bg-gradient-ai text-white shadow-glow';
+      case 'investor':
+        return 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg';
+      default:
+        return 'bg-gray-200 text-gray-700';
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen">
+        <HeaderClient />
+        <main className="max-w-4xl mx-auto px-6 py-12">
+          <div className="text-center py-12">
+            <div className="inline-flex items-center justify-center">
+              <div className="w-12 h-12 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin"></div>
+            </div>
+            <p className="mt-4 text-lg text-gray-600 font-medium">Loading account...</p>
+          </div>
+        </main>
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen">
       <HeaderClient />
-      <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-950">Account</h1>
-          <p className="mt-2 text-slate-600">Manage sign-in, subscription status, and billing.</p>
+      
+      <main className="max-w-4xl mx-auto px-6 py-12 space-y-8">
+        <div>
+          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-3">
+            Your <span className="text-gradient">Account</span>
+          </h1>
+          <p className="text-xl text-gray-600">Manage your profile and subscription</p>
         </div>
-        {loading ? (
-          <div className="card p-10 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin text-cyan-700" /><p className="mt-3 text-slate-600">Loading account...</p></div>
-        ) : !configured ? (
-          <div className="card p-8"><h2 className="text-xl font-bold text-slate-950">Supabase not configured</h2><p className="mt-2 text-slate-600">Add frontend Supabase env vars to enable magic-link auth.</p></div>
-        ) : email ? (
-          <div className="space-y-6">
-            <section className="card p-6">
-              <div className="flex items-start justify-between gap-4">
-                <div><div className="text-sm font-medium text-slate-500">Signed in as</div><div className="mt-1 text-lg font-bold text-slate-950">{email}</div><div className="mt-3 inline-flex rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">Free plan placeholder</div></div>
-                <UserRound className="h-8 w-8 text-cyan-700" />
+
+        {userEmail ? (
+          <>
+            {/* Profile Card */}
+            <div className="card p-8">
+              <div className="flex items-start justify-between mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Profile Information</h2>
+                  <p className="text-gray-600">Your account details and current plan</p>
+                </div>
+                <div className="w-16 h-16 bg-gradient-ai rounded-2xl flex items-center justify-center shadow-glow">
+                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
               </div>
-            </section>
-            <section className="card p-6">
-              <h2 className="text-xl font-bold text-slate-950">Billing</h2>
-              <p className="mt-2 text-sm text-slate-600">Stripe portal integration is wired and returns a safe response when Stripe is not configured.</p>
-              <div className="mt-5"><StripePortalButton>Manage billing</StripePortalButton></div>
-            </section>
-            <section className="grid gap-4 sm:grid-cols-2">
-              <Link href="/saved" className="card flex items-center gap-3 p-5 font-semibold text-slate-800 hover:bg-slate-50"><BriefcaseBusiness className="h-5 w-5 text-cyan-700" />Saved jobs</Link>
-              <button onClick={signOut} className="card p-5 text-left font-semibold text-red-700 hover:bg-red-50">Sign out</button>
-            </section>
-          </div>
+              
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 mb-1">Email Address</p>
+                    <p className="text-lg font-semibold text-gray-900">{userEmail}</p>
+                  </div>
+                  <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 mb-1">Current Plan</p>
+                    <span className={`inline-flex px-4 py-2 rounded-lg text-base font-bold ${getPlanBadgeClass(userPlan)}`}>
+                      {userPlan.charAt(0).toUpperCase() + userPlan.slice(1)}
+                    </span>
+                  </div>
+                  {userPlan === 'free' && (
+                    <Link
+                      href="/pricing"
+                      className="btn-primary text-sm"
+                    >
+                      Upgrade
+                    </Link>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Actions Card */}
+            <div className="card p-8">
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">Quick Actions</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Link
+                  href="/saved"
+                  className="flex items-center p-4 bg-gradient-to-br from-brand-50 to-purple-50 hover:from-brand-100 hover:to-purple-100 rounded-xl transition-all duration-200 border-2 border-transparent hover:border-brand-300 group"
+                >
+                  <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center mr-4 shadow-sm group-hover:shadow-md transition-shadow">
+                    <svg className="w-6 h-6 text-brand-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-gray-900 mb-1">Saved Jobs</h3>
+                    <p className="text-sm text-gray-600">View your saved opportunities</p>
+                  </div>
+                  <svg className="w-5 h-5 text-gray-400 group-hover:text-brand-600 transition-colors" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </Link>
+
+                {userPlan === 'free' && (
+                  <Link
+                    href="/pricing"
+                    className="flex items-center p-4 bg-gradient-ai hover:opacity-90 rounded-xl transition-all duration-200 shadow-ai hover:shadow-ai-hover group"
+                  >
+                    <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center mr-4">
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-white mb-1">Upgrade Plan</h3>
+                      <p className="text-sm text-white/90">Unlock AI features</p>
+                    </div>
+                    <svg className="w-5 h-5 text-white/80 group-hover:text-white transition-colors" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Link>
+                )}
+              </div>
+            </div>
+
+            {/* Email Digests Card */}
+            {featureFlags.digests && (
+              <div className="card p-8">
+                <div className="flex items-start justify-between mb-6">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Email Digests</h2>
+                    <p className="text-gray-600">
+                      Get personalized job recommendations delivered to your inbox
+                    </p>
+                  </div>
+                  <svg className="w-8 h-8 text-brand-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <button className="btn-secondary w-full md:w-auto">
+                  Manage Digest Settings
+                </button>
+              </div>
+            )}
+
+            {/* Billing Card */}
+            <div className="card p-8">
+              <div className="flex items-start justify-between mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Billing & Subscription</h2>
+                  <p className="text-gray-600">Manage your subscription and billing information</p>
+                </div>
+                <svg className="w-8 h-8 text-brand-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                </svg>
+              </div>
+              <a
+                href="/api/stripe/portal"
+                className="btn-primary w-full md:w-auto inline-flex items-center justify-center"
+              >
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Manage Billing
+              </a>
+            </div>
+
+            {/* Sign Out Section */}
+            <div className="card p-8 border-2 border-red-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Sign Out</h3>
+                  <p className="text-sm text-gray-600">You'll need to sign in again to access your account</p>
+                </div>
+                <button
+                  onClick={handleSignOut}
+                  className="px-6 py-3 text-red-600 border-2 border-red-600 rounded-xl font-semibold hover:bg-red-50 transition-all"
+                >
+                  Sign Out
+                </button>
+              </div>
+            </div>
+          </>
         ) : (
-          <div className="card p-10 text-center"><h2 className="text-2xl font-bold text-slate-950">Sign in to manage your account</h2><p className="mt-3 text-slate-600">Magic-link auth keeps this simple and passwordless.</p><Link href="/magic-login" className="btn-primary mt-6 inline-flex">Send magic link</Link></div>
+          <div className="card p-12 text-center">
+            <div className="w-20 h-20 mx-auto mb-6 bg-gradient-ai rounded-2xl flex items-center justify-center shadow-glow">
+              <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </div>
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">Sign In to Your Account</h2>
+            <p className="text-lg text-gray-600 mb-8 max-w-md mx-auto">
+              Use magic link authentication - no password required! We'll send a secure link to your email.
+            </p>
+            <button
+              onClick={handleSignIn}
+              className="btn-primary inline-flex items-center text-lg"
+            >
+              <svg className="w-6 h-6 mr-2" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              Sign In with Magic Link
+            </button>
+            <p className="mt-6 text-sm text-gray-500">
+              Don't have an account? It will be created automatically when you sign in.
+            </p>
+          </div>
         )}
       </main>
     </div>
   );
 }
+
+
