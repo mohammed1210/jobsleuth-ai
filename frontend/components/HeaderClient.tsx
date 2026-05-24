@@ -4,6 +4,15 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 
+const navItems = [
+  { href: '/', label: 'Home' },
+  { href: '/jobs', label: 'Jobs' },
+  { href: '/saved', label: 'Saved' },
+  { href: '/analytics', label: 'Analytics' },
+  { href: '/pricing', label: 'Pricing' },
+  { href: '/account', label: 'Account' },
+];
+
 export default function HeaderClient() {
   const [signedIn, setSignedIn] = useState(false);
 
@@ -43,29 +52,17 @@ export default function HeaderClient() {
               AI
             </span>
           </Link>
-          <div className="hidden md:flex items-center space-x-6">
-            <Link href="/jobs" className="text-gray-700 hover:text-brand-600 font-medium transition-colors">
-              Jobs
-            </Link>
-            {signedIn && (
-              <Link href="/saved" className="text-gray-700 hover:text-brand-600 font-medium transition-colors">
-                Saved
+          <div className="hidden lg:flex items-center space-x-5">
+            {navItems.map((item) => (
+              <Link key={item.href} href={item.href} className="text-gray-700 hover:text-brand-600 font-medium transition-colors">
+                {item.label}
               </Link>
-            )}
-            <Link href="/pricing" className="text-gray-700 hover:text-brand-600 font-medium transition-colors">
-              Pricing
-            </Link>
+            ))}
           </div>
         </div>
         <div className="flex items-center space-x-4">
           {signedIn ? (
             <>
-              <Link 
-                href="/account" 
-                className="text-gray-700 hover:text-brand-600 font-medium transition-colors"
-              >
-                Account
-              </Link>
               <button 
                 onClick={handleSignOut} 
                 className="text-gray-600 hover:text-gray-900 font-medium transition-colors"
