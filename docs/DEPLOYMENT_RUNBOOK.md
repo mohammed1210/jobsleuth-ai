@@ -6,6 +6,7 @@
 - Install command: `npm ci`
 - Build command: `npm run build`
 - Required vars: `NEXT_PUBLIC_BACKEND_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_KEY`, `NEXT_PUBLIC_SITE_URL`, Stripe public vars
+- Env manifest: `ops/vercel.env.example`
 
 ## Railway Backend
 
@@ -13,6 +14,9 @@
 - Build command: `pip install -r requirements.txt`
 - Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
 - Health check path: `/health`
+- Env manifest: `ops/railway.env.example`
+
+Railway and Vercel env vars must be set in their dashboards or via their CLIs. Do not commit real service-role keys, Stripe secrets, webhook secrets, or SMTP passwords.
 
 ## Common Errors
 
