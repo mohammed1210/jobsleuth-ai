@@ -3,7 +3,17 @@
 from fastapi import APIRouter, Header, HTTPException, Query
 
 from lib.settings import settings
-from services.emailer import send_digest_email
+
+try:
+    from services.emailer import send_digest_email
+except ImportError:
+    from services.emailer import get_emailer
+
+    async def send_digest_email(to_email: str, jobs: list[dict] | None = None) -> bool:
+        result = get_emailer().send_job_digest(to_email, "JobSleuth user", jobs or [])
+        if hasattr(result, "__await__"):
+            return await result
+        return bool(result)
 
 router = APIRouter(prefix="/digests", tags=["digests"])
 
