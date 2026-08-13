@@ -66,7 +66,7 @@ export default function ApplyPage() {
         </div>
         {(error || bank.recordError) && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">{error || bank.recordError}</div>}
         <div className="grid gap-8 lg:grid-cols-[420px_1fr]">
-          <RecordForm key={bank.editing?.id ?? 'new'} initial={bank.editing} busy={bank.savingRecord} onSave={bank.saveRecord} onCancel={() => bank.setEditing(null)} />
+          <RecordForm key={bank.editing?.id ?? `new-${bank.records.length}`} initial={bank.editing} busy={bank.savingRecord} onSave={bank.saveRecord} onCancel={() => bank.setEditing(null)} />
           <div className="space-y-4">
             {bank.loadingRecords && <div className="card p-8 text-center text-gray-600">Loading…</div>}
             {!bank.loadingRecords && bank.records.length === 0 && <div className="card p-8 text-center text-gray-600">No saved examples yet.</div>}
