@@ -6,7 +6,7 @@ import EvidenceCompleteness from './EvidenceCompleteness';
 type Props = {
   card: EvidenceCard;
   onEdit: (card: EvidenceCard) => void;
-  onRemove: (card: EvidenceCard) => void;
+  onRemove?: (card: EvidenceCard) => void;
 };
 
 export default function EvidenceCardView({ card, onEdit, onRemove }: Props) {
@@ -21,9 +21,11 @@ export default function EvidenceCardView({ card, onEdit, onRemove }: Props) {
           <button type="button" className="btn-secondary px-3 py-2 text-sm" onClick={() => onEdit(card)}>
             Edit
           </button>
-          <button type="button" className="px-3 py-2 text-sm font-semibold text-red-700" onClick={() => onRemove(card)}>
-            Delete
-          </button>
+          {onRemove && (
+            <button type="button" className="px-3 py-2 text-sm font-semibold text-red-700" onClick={() => onRemove(card)}>
+              Delete
+            </button>
+          )}
         </div>
       </div>
 
