@@ -18,7 +18,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from lib.settings import settings  # noqa: E402
-from routes import ai_scoring, digests, jobs, resume_tools, saved_jobs, stripe_portal, stripe_routes, stripe_webhook, users  # noqa: E402
+from routes import ai_scoring, digests, evidence_bank, jobs, resume_tools, saved_jobs, stripe_portal, stripe_routes, stripe_webhook, users  # noqa: E402
 
 app = FastAPI(title="JobSleuth AI API")
 
@@ -42,6 +42,7 @@ app.add_middleware(
 app.include_router(jobs.router)
 app.include_router(saved_jobs.router)
 app.include_router(saved_jobs.legacy_router)
+app.include_router(evidence_bank.router)
 app.include_router(ai_scoring.router)
 app.include_router(resume_tools.router)
 app.include_router(digests.router)
