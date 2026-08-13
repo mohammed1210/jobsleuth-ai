@@ -6,9 +6,9 @@ import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 
 const navItems = [
   { href: '/', label: 'Home' },
+  { href: '/apply', label: 'Apply' },
   { href: '/jobs', label: 'Jobs' },
   { href: '/saved', label: 'Saved' },
-  { href: '/analytics', label: 'Analytics' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/account', label: 'Account' },
 ];
@@ -62,24 +62,22 @@ export default function HeaderClient() {
         </div>
         <div className="flex items-center space-x-4">
           {signedIn ? (
-            <>
-              <button 
-                onClick={handleSignOut} 
-                className="text-gray-600 hover:text-gray-900 font-medium transition-colors"
-              >
-                Sign out
-              </button>
-            </>
+            <button
+              onClick={handleSignOut}
+              className="text-gray-600 hover:text-gray-900 font-medium transition-colors"
+            >
+              Sign out
+            </button>
           ) : (
             <>
-              <Link 
-                href="/magic-login" 
+              <Link
+                href="/magic-login"
                 className="text-gray-700 hover:text-brand-600 font-medium transition-colors"
               >
                 Sign in
               </Link>
-              <Link 
-                href="/pricing" 
+              <Link
+                href="/pricing"
                 className="hidden sm:inline-flex px-4 py-2 bg-gradient-ai text-white rounded-lg font-semibold shadow-sm hover:shadow-ai transition-all duration-200 hover:-translate-y-0.5"
               >
                 Get Started
