@@ -6,7 +6,7 @@ import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 
 const navItems = [
   { href: '/', label: 'Home' },
-  { href: '/apply', label: 'Apply' },
+  { href: '/apply/vacancy', label: 'Apply' },
   { href: '/jobs', label: 'Jobs' },
   { href: '/saved', label: 'Saved' },
   { href: '/pricing', label: 'Pricing' },
