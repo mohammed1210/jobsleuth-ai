@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException
@@ -72,15 +72,10 @@ def _require_persistence(result: Any, *, action: str) -> list[dict[str, Any]]:
 @router.get("", response_model=list[EvidenceResponse])
 async def list_evidence(authorization: str | None = Header(None)) -> list[EvidenceResponse]:
     user = await verify_supabase_user(authorization)
-    result = (
-        _db()
-        .table("evidence_cards")
-        .select("*")
-        .eq("user_id", user["id"])
-        .order("updated_at", desc=True)
-        .execute()
-    )
-    return [EvidenceResponse(**row) for row in (getattr(result, "data", None) or [])]
+    result = _db().table("evidence_cards").select("*").eq("user_id", user["id"]).execute()
+    rows = getattr(result, "data", None) or []
+    rows = sorted(rows, key=lambda row: str(row.get("updated_at") or ""), reverse=True)
+    return [EvidenceResponse(**row) for row in rows]
 
 
 @router.post("", response_model=EvidenceResponse, status_code=201)
@@ -106,6 +101,7 @@ async def update_evidence(
     payload = request.model_dump(exclude_unset=True)
     if not payload:
         raise HTTPException(status_code=400, detail="No evidence fields supplied")
+    payload["updated_at"] = datetime.now(timezone.utc).isoformat()
     result = (
         _db()
         .table("evidence_cards")
