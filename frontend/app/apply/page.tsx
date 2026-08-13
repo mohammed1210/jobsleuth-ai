@@ -7,6 +7,7 @@ import HeaderClient from '@/components/HeaderClient';
 import RecordForm from '@/components/RecordForm';
 import EvidenceCardView from '@/components/evidence/EvidenceCardView';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { removeRecord } from '@/lib/removeRecord';
 import { useRecords } from '@/lib/useRecords';
 
 export default function ApplyPage() {
@@ -29,6 +30,16 @@ export default function ApplyPage() {
     };
     run();
   }, []);
+
+  const remove = async (id: string) => {
+    if (!session || !window.confirm('Delete this saved example?')) return;
+    try {
+      await removeRecord(session, id);
+      window.location.reload();
+    } catch {
+      setError('Could not remove this record.');
+    }
+  };
 
   if (!loading && !session) {
     return (
@@ -59,7 +70,7 @@ export default function ApplyPage() {
           <div className="space-y-4">
             {bank.loadingRecords && <div className="card p-8 text-center text-gray-600">Loading…</div>}
             {!bank.loadingRecords && bank.records.length === 0 && <div className="card p-8 text-center text-gray-600">No saved examples yet.</div>}
-            {bank.records.map((card) => <EvidenceCardView key={card.id} card={card} onEdit={bank.setEditing} />)}
+            {bank.records.map((card) => <EvidenceCardView key={card.id} card={card} onEdit={bank.setEditing} onRemove={() => remove(card.id)} />)}
           </div>
         </div>
       </main>
