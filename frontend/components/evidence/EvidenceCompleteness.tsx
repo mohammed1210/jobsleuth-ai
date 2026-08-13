@@ -9,7 +9,7 @@ export function getEvidenceCompleteness(card: Partial<EvidenceCard>) {
     Boolean(card.actions?.length),
     Boolean(card.outcome?.trim()),
     Boolean(card.authority_context?.trim()),
-    Boolean(card.skills?.length || card.behaviours?.length),
+    Boolean(card.tags?.length),
     Boolean(card.reflection?.trim()),
   ];
 
