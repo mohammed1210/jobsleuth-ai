@@ -8,8 +8,10 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from lib.settings import settings
+from routes import vacancy_analysis
 
 router = APIRouter(tags=["ai_scoring"])
+router.include_router(vacancy_analysis.router)
 
 
 class AIScoreRequest(BaseModel):
