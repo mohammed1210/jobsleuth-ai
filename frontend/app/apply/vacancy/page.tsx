@@ -5,8 +5,10 @@ import Link from 'next/link';
 import type { Session } from '@supabase/supabase-js';
 
 import HeaderClient from '@/components/HeaderClient';
+import ExtractionAudit from '@/components/vacancy/ExtractionAudit';
 import { analyseVacancy, fetchEvidence, type EvidenceCard, type Requirement, type VacancyAnalysis } from '@/lib/applyApi';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { extractVacancyIntelligence, type IntelligenceItem } from '@/lib/vacancyIntelligenceApi';
 import { parseVacancyText } from '@/lib/vacancyParser';
 
 const lines = (value: string) => value.split('\n').map((item) => item.trim()).filter(Boolean);
@@ -15,10 +17,14 @@ export default function VacancyApplyPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [evidence, setEvidence] = useState<EvidenceCard[]>([]);
   const [vacancyText, setVacancyText] = useState('');
+  const [eligibility, setEligibility] = useState('');
   const [essential, setEssential] = useState('');
   const [desirable, setDesirable] = useState('');
   const [trainable, setTrainable] = useState('');
   const [practical, setPractical] = useState('');
+  const [extractedItems, setExtractedItems] = useState<IntelligenceItem[]>([]);
+  const [extractionProvider, setExtractionProvider] = useState<string | null>(null);
+  const [extracting, setExtracting] = useState(false);
   const [analysis, setAnalysis] = useState<VacancyAnalysis | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,18 +51,66 @@ export default function VacancyApplyPage() {
     run();
   }, []);
 
-  const extract = () => {
-    const parsed = parseVacancyText(vacancyText);
-    const list = (category: Requirement['category']) => parsed.requirements
+  const applyRequirements = (items: IntelligenceItem[]) => {
+    const list = (category: Requirement['category']) => items
       .filter((item) => item.category === category)
       .map((item) => item.text)
       .join('\n');
+    setEligibility(items.filter((item) => item.category === 'eligibility').map((item) => item.text).join('\n'));
     setEssential(list('essential'));
     setDesirable(list('desirable'));
     setTrainable(list('trainable'));
-    setPractical(parsed.practicalIssues.join('\n'));
+    setPractical(items.filter((item) => item.category === 'practical').map((item) => item.text).join('\n'));
+  };
+
+  const localFallback = () => {
+    const parsed = parseVacancyText(vacancyText);
+    const items: IntelligenceItem[] = [
+      ...parsed.requirements.map((item) => ({
+        text: item.text,
+        category: item.category,
+        source_text: item.text,
+        confidence: 0.55,
+        explicit_blocker: false,
+      })),
+      ...parsed.practicalIssues.map((text) => ({
+        text,
+        category: 'practical' as const,
+        source_text: text,
+        confidence: 0.55,
+        explicit_blocker: false,
+      })),
+    ];
+    applyRequirements(items);
+    setExtractedItems(items);
+    setExtractionProvider('local-parser-fallback');
+    return items.length;
+  };
+
+  const extract = async () => {
+    if (!session) return;
+    if (vacancyText.trim().length < 40) {
+      setMessage('Paste more of the vacancy advert before extracting.');
+      return;
+    }
+
+    setExtracting(true);
     setAnalysis(null);
-    setMessage(parsed.requirements.length ? `Extracted ${parsed.requirements.length} criteria. Review them before analysing.` : 'No clear criteria found. Edit the fields manually below.');
+    setMessage(null);
+    try {
+      const result = await extractVacancyIntelligence(session, vacancyText);
+      const items = [...result.eligibility, ...result.requirements, ...result.practical];
+      applyRequirements(items);
+      setExtractedItems(items);
+      setExtractionProvider(result.provider);
+      const lowConfidence = result.summary.low_confidence ? ` ${result.summary.low_confidence} item(s) need extra review.` : '';
+      setMessage(`Extracted ${result.summary.items} grounded item(s). Review and edit before analysing.${lowConfidence}`);
+    } catch {
+      const count = localFallback();
+      setMessage(count ? `The intelligence service was unavailable, so JobSleuth used the local fallback and found ${count} item(s). Review carefully.` : 'No clear criteria found. Edit the fields manually below.');
+    } finally {
+      setExtracting(false);
+    }
   };
 
   const analyse = async () => {
@@ -96,7 +150,7 @@ export default function VacancyApplyPage() {
           <div>
             <p className="text-sm font-semibold text-brand-700 mb-2">JobSleuth Apply</p>
             <h1 className="text-4xl font-bold text-gray-900">Paste a vacancy. Test the fit.</h1>
-            <p className="text-gray-600 mt-2">Criteria stay editable. JobSleuth only recommends after you review what was extracted.</p>
+            <p className="text-gray-600 mt-2">JobSleuth grounds extracted requirements in the advert. You stay in control and can edit everything before analysis.</p>
           </div>
           <Link href="/apply" className="btn-secondary">Manage Evidence Bank</Link>
         </div>
@@ -105,7 +159,15 @@ export default function VacancyApplyPage() {
 
         <section className="card p-6 space-y-4">
           <textarea className="w-full min-h-56 rounded-xl border px-4 py-3" value={vacancyText} onChange={(e) => setVacancyText(e.target.value)} placeholder="Paste the full vacancy advert here" />
-          <button type="button" onClick={extract} className="btn-primary">Extract criteria</button>
+          <button type="button" onClick={extract} disabled={extracting} className="btn-primary disabled:opacity-60">{extracting ? 'Extracting…' : 'Extract vacancy intelligence'}</button>
+        </section>
+
+        <section className="card p-5 space-y-3">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">Eligibility checks</h2>
+            <p className="mt-1 text-sm text-gray-500">Check these yourself. JobSleuth does not treat eligibility as experience evidence.</p>
+          </div>
+          <textarea className="w-full min-h-24 rounded-xl border px-4 py-3" value={eligibility} onChange={(e) => setEligibility(e.target.value)} placeholder="Right to work, clearance, mandatory licences or other eligibility requirements" />
         </section>
 
         <section className="grid md:grid-cols-2 gap-5">
@@ -122,6 +184,8 @@ export default function VacancyApplyPage() {
             <button type="button" onClick={analyse} className="btn-primary">Analyse vacancy</button>
           </div>
         </section>
+
+        <ExtractionAudit items={extractedItems} provider={extractionProvider} />
 
         {analysis && (
           <section className="card p-6 space-y-5">
