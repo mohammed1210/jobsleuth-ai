@@ -8,16 +8,16 @@ from typing import Any
 from lib.settings import settings
 
 _ALLOWED_CATEGORIES = {"eligibility", "essential", "desirable", "trainable", "practical"}
-_BLOCKER_CUES = (
-    "must ",
-    "required",
-    "requires ",
-    "mandatory",
-    "minimum of",
-    "only open to",
+_HARD_BLOCKER_CUES = (
     "cannot apply",
-    "need to hold",
-    "need to have",
+    "only open to",
+    "must hold",
+    "must have the right to work",
+    "required qualification",
+    "mandatory qualification",
+    "security clearance",
+    "security check",
+    "vetting",
 )
 
 
@@ -40,7 +40,11 @@ def _validate_item(raw: Any, vacancy_text: str) -> dict[str, Any] | None:
     except (TypeError, ValueError):
         confidence = 0.7
     source_lower = source.lower()
-    explicit_blocker = bool(raw.get("explicit_blocker")) and any(cue in source_lower for cue in _BLOCKER_CUES)
+    explicit_blocker = (
+        category in {"eligibility", "practical"}
+        and bool(raw.get("explicit_blocker"))
+        and any(cue in source_lower for cue in _HARD_BLOCKER_CUES)
+    )
     return {
         "text": text[:500],
         "category": category,
@@ -74,8 +78,9 @@ def semantic_extract(vacancy_text: str) -> list[dict[str, Any]] | None:
                         "eligibility, essential, desirable, trainable, practical. source_text must "
                         "be copied from the supplied vacancy and must directly support the item. "
                         "Do not infer candidate facts, do not invent requirements, and prefer omission "
-                        "when uncertain. Set explicit_blocker true only where the advert explicitly "
-                        "makes the requirement mandatory."
+                        "when uncertain. Set explicit_blocker true only for genuine eligibility or "
+                        "practical constraints that can prevent a person from taking or being considered "
+                        "for the role. Normal essential experience or competency criteria are not hard blockers."
                     ),
                 },
                 {"role": "user", "content": vacancy_text[:24000]},

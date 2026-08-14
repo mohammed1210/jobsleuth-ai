@@ -80,6 +80,9 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "training provided",
         "will receive training",
         "will be trained",
+        "will be taught",
+        "taught during training",
+        "taught as part of training",
     )
     criterion_cues = (
         "experience",
@@ -94,15 +97,16 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "desirable",
         "demonstrate",
     )
-    blocker_cues = (
-        "must ",
-        "required to",
-        "requirement",
-        "requires ",
-        "mandatory",
-        "minimum of",
+    hard_blocker_cues = (
         "cannot apply",
         "only open to",
+        "must hold",
+        "must have the right to work",
+        "required qualification",
+        "mandatory qualification",
+        "security clearance",
+        "security check",
+        "vetting",
     )
 
     for raw in vacancy_text.splitlines():
@@ -118,7 +122,7 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
                 section = heading_match
                 continue
 
-        explicit_blocker = any(token in lowered for token in blocker_cues)
+        explicit_blocker = any(token in lowered for token in hard_blocker_cues)
 
         if any(cue in lowered for cue in trainable_cues):
             items.append(_item(line, "trainable", 0.96))
@@ -141,7 +145,11 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
             category = "essential"
         if "desirable" in lowered or "ideally" in lowered or "preferred" in lowered:
             category = "desirable"
-        items.append(_item(line, category, 0.82 if is_bullet else 0.72, explicit_blocker=explicit_blocker and category == "essential"))
+
+        # Experience/competency criteria are evidence gaps, not eligibility blockers.
+        # Reserve hard blockers for eligibility/practical constraints that make the
+        # candidate unable to take or be considered for the role.
+        items.append(_item(line, category, 0.82 if is_bullet else 0.72, explicit_blocker=False))
 
     unique: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
