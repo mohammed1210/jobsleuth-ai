@@ -47,6 +47,37 @@ def test_exact_labels_without_actions_or_outcome_are_not_strong():
     assert "Personal actions" in " ".join(match["gaps"])
 
 
+def test_authority_context_can_support_accountability_requirement():
+    card = strong_card()
+    match = deterministic_match(
+        "Demonstrate personal accountability while working within appropriate levels of authority and escalation",
+        card,
+    )
+    assert match["strength"] in {"partial", "strong"}
+    assert match["score"] >= 48
+    assert "authority" in match["signals"]["concepts"]
+    assert "authority and escalation context" in match["why"]
+
+
+def test_public_service_operational_context_is_not_treated_as_wording_only():
+    card = Evidence(
+        id="ev-public",
+        title="Operational compliance activity",
+        situation="I worked in a Border Force operational environment on a high-risk compliance activity.",
+        task="I supported an operational examination with colleagues and external partners.",
+        actions=["I coordinated with operational teams and law-enforcement partners."],
+        outcome="The operation was completed safely and the examination progressed.",
+        tags=["law enforcement", "public sector", "operations"],
+    )
+    match = deterministic_match(
+        "Experience working within a government, regulatory or operational environment",
+        card,
+    )
+    assert match["strength"] in {"partial", "strong"}
+    assert match["score"] >= 48
+    assert "public_service" in match["signals"]["concepts"]
+
+
 def test_semantic_match_requires_grounded_supporting_facts():
     card = strong_card()
     cards = {card.id: card}

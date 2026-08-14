@@ -24,6 +24,8 @@ _CONCEPTS: dict[str, set[str]] = {
     "customer": {"customer", "service", "user", "client", "quality", "complaint"},
     "planning": {"plan", "planning", "organise", "organize", "coordinate", "resource", "logistics"},
     "risk": {"risk", "safety", "security", "control", "mitigate", "contingency", "threat"},
+    "authority": {"authority", "accountability", "accountable", "escalate", "escalation", "approval", "approve", "authorise", "authorize", "recommend"},
+    "public_service": {"government", "regulatory", "regulator", "public", "operational", "enforcement", "border", "civil", "department"},
 }
 
 
@@ -101,6 +103,9 @@ def _support_signals(requirement: str, card: Any) -> dict[str, Any]:
     action_text = " ".join(str(value) for value in (getattr(card, "actions", []) or []))
     action_overlap = sorted(wanted & _tokens(action_text))
     outcome_overlap = sorted(wanted & _tokens(str(getattr(card, "outcome", "") or "")))
+    authority_text = str(getattr(card, "authority_context", "") or "")
+    authority_overlap = sorted(wanted & _tokens(authority_text))
+    authority_concept_support = "authority" in wanted_concepts and "authority" in _concepts(authority_text)
 
     lexical_ratio = len(overlap) / max(1, min(len(wanted), 8))
     concept_ratio = len(concept_overlap) / max(1, len(wanted_concepts)) if wanted_concepts else 0.0
@@ -112,10 +117,11 @@ def _support_signals(requirement: str, card: Any) -> dict[str, Any]:
         + min(1.0, len(tag_overlap) / 2) * 10
         + min(1.0, len(action_overlap) / 2) * 10
         + min(1.0, len(outcome_overlap)) * 3
+        + (15 if authority_concept_support else 0)
         + quality * 6
     )
 
-    sparse_only = bool(overlap) and not (concept_overlap or tag_overlap or action_overlap or outcome_overlap)
+    sparse_only = bool(overlap) and not (concept_overlap or tag_overlap or action_overlap or outcome_overlap or authority_overlap)
     if sparse_only:
         score = min(score, 39)
 
@@ -126,6 +132,8 @@ def _support_signals(requirement: str, card: Any) -> dict[str, Any]:
         "tag_overlap": tag_overlap,
         "action_overlap": action_overlap,
         "outcome_overlap": outcome_overlap,
+        "authority_overlap": authority_overlap,
+        "authority_concept_support": authority_concept_support,
         "quality": round(quality, 2),
     }
 
@@ -155,6 +163,8 @@ def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
         support_parts.append("related capability: " + ", ".join(signals["concepts"][:3]))
     if signals["action_overlap"]:
         support_parts.append("personal actions align with: " + ", ".join(signals["action_overlap"][:4]))
+    if signals["authority_concept_support"]:
+        support_parts.append("recorded authority and escalation context supports the requirement")
     if signals["outcome_overlap"]:
         support_parts.append("the recorded outcome supports the requirement")
     if signals["tag_overlap"]:
