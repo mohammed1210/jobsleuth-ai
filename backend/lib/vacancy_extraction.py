@@ -94,20 +94,31 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "desirable",
         "demonstrate",
     )
+    blocker_cues = (
+        "must ",
+        "required to",
+        "requirement",
+        "requires ",
+        "mandatory",
+        "minimum of",
+        "cannot apply",
+        "only open to",
+    )
 
     for raw in vacancy_text.splitlines():
         line = _clean_line(raw)
         if not line:
             continue
         lowered = line.lower().rstrip(":")
+        is_bullet = bool(re.match(r"^\s*(?:[-*•]|\d+[.)])", raw))
 
-        if len(line) <= 100:
+        if not is_bullet and len(line) <= 100:
             heading_match = next((category for category, cues in headings if any(cue in lowered for cue in cues)), None)
             if heading_match and (raw.strip().endswith(":") or len(line.split()) <= 8):
                 section = heading_match
                 continue
 
-        explicit_blocker = any(token in lowered for token in ("must ", "required to", "requirement", "cannot apply", "only open to"))
+        explicit_blocker = any(token in lowered for token in blocker_cues)
 
         if any(cue in lowered for cue in trainable_cues):
             items.append(_item(line, "trainable", 0.96))
@@ -119,7 +130,6 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
             items.append(_item(line, "practical", 0.86, explicit_blocker=explicit_blocker))
             continue
 
-        is_bullet = bool(re.match(r"^\s*(?:[-*•]|\d+[.)])", raw))
         looks_like_criterion = any(cue in lowered for cue in criterion_cues)
         if not is_bullet and not looks_like_criterion:
             continue
