@@ -29,3 +29,6 @@ jobs:
 
       - name: Backend import check
         run: python -c "from main import app; print('backend import ok')"
+
+      - name: Backend tests
+        run: pytest -q
