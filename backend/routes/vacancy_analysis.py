@@ -8,7 +8,7 @@ from fastapi import APIRouter, Header
 from pydantic import BaseModel, Field
 
 from lib.evidence_matching import rank_evidence
-from lib.evidence_semantic import semantic_assess
+from lib.evidence_semantic_batch import semantic_assess_batch
 from routes.saved_jobs import verify_supabase_user
 
 router = APIRouter(prefix="/vacancy-analysis", tags=["vacancy_analysis"])
@@ -71,10 +71,23 @@ def _evidence_payload(card: Evidence, assessment: dict[str, Any]) -> dict[str, A
 @router.post("")
 async def vacancy_analysis(request: AnalysisRequest, authorization: str | None = Header(None)) -> dict[str, Any]:
     await verify_supabase_user(authorization)
-    analysed: list[dict[str, Any]] = []
-    semantic_used = False
 
-    for requirement in request.requirements:
+    ranked_by_index: dict[int, list[tuple[Evidence, dict[str, Any]]]] = {}
+    ambiguous_entries: list[tuple[int, str, list[Evidence]]] = []
+    for index, requirement in enumerate(request.requirements):
+        if requirement.category == "trainable":
+            continue
+        ranked = rank_evidence(requirement.text, request.evidence_cards)
+        ranked_by_index[index] = ranked
+        top_strength = ranked[0][1]["strength"] if ranked else "missing"
+        if top_strength != "strong" and ranked:
+            ambiguous_entries.append((index, requirement.text, [card for card, _assessment in ranked[:3]]))
+
+    semantic_by_index = semantic_assess_batch(ambiguous_entries) or {}
+    semantic_used = bool(semantic_by_index)
+    analysed: list[dict[str, Any]] = []
+
+    for index, requirement in enumerate(request.requirements):
         if requirement.category == "trainable":
             analysed.append(
                 {
@@ -91,15 +104,11 @@ async def vacancy_analysis(request: AnalysisRequest, authorization: str | None =
             )
             continue
 
-        ranked = rank_evidence(requirement.text, request.evidence_cards)
-        shortlisted = [card for card, _assessment in ranked[:5]]
-        semantic = semantic_assess(requirement.text, shortlisted)
-        if semantic:
-            semantic_used = True
-
+        ranked = ranked_by_index.get(index, [])
+        semantic = semantic_by_index.get(index, {})
         merged: list[tuple[Evidence, dict[str, Any]]] = []
         for card, deterministic in ranked:
-            assessment = semantic.get(str(card.id), deterministic) if semantic else deterministic
+            assessment = semantic.get(str(card.id), deterministic)
             merged.append((card, assessment))
         merged.sort(key=lambda item: item[1]["score"], reverse=True)
 
