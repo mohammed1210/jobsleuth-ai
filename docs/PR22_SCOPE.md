@@ -1,0 +1,1 @@
+Evidence Matching v2 scope: explainable structured matching, optional grounded semantic reassessment, decision-gate integration, UI explanation, and automated tests.
