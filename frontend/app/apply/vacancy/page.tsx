@@ -27,6 +27,7 @@ export default function VacancyApplyPage() {
   const [extractedItems, setExtractedItems] = useState<IntelligenceItem[]>([]);
   const [extractionProvider, setExtractionProvider] = useState<string | null>(null);
   const [extracting, setExtracting] = useState(false);
+  const [analysing, setAnalysing] = useState(false);
   const [analysis, setAnalysis] = useState<VacancyAnalysis | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,8 +45,8 @@ export default function VacancyApplyPage() {
       if (data.session) {
         try {
           setEvidence(await fetchEvidence(data.session));
-        } catch {
-          setMessage('Could not load your Evidence Bank.');
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : 'Could not load your Evidence Bank.');
         }
       }
       setLoading(false);
@@ -116,17 +117,31 @@ export default function VacancyApplyPage() {
   };
 
   const analyse = async () => {
-    if (!session) return;
+    if (!session) {
+      setMessage('Your session is no longer available. Sign in again before analysing.');
+      return;
+    }
     const requirements: Requirement[] = [
       ...lines(essential).map((text) => ({ text, category: 'essential' as const })),
       ...lines(desirable).map((text) => ({ text, category: 'desirable' as const })),
       ...lines(trainable).map((text) => ({ text, category: 'trainable' as const })),
     ];
+    if (!requirements.length) {
+      setMessage('No vacancy criteria are available to analyse. Extract or enter criteria first.');
+      return;
+    }
+
+    setAnalysing(true);
+    setAnalysis(null);
+    setMessage('Analysing your evidence against the vacancy…');
     try {
-      setAnalysis(await analyseVacancy(session, requirements, evidence, lines(practical)));
+      const result = await analyseVacancy(session, requirements, evidence, lines(practical));
+      setAnalysis(result);
       setMessage(null);
-    } catch {
-      setMessage('Vacancy analysis failed.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Vacancy analysis failed.');
+    } finally {
+      setAnalysing(false);
     }
   };
 
@@ -183,7 +198,7 @@ export default function VacancyApplyPage() {
             <h2 className="text-xl font-bold text-gray-900">Practical fit</h2>
             <textarea className="w-full min-h-40 rounded-xl border px-4 py-3" value={practical} onChange={(e) => setPractical(e.target.value)} placeholder="Working pattern, travel, location, training or other practical constraints" />
             <p className="text-sm text-gray-500">{evidence.length} Evidence Bank {evidence.length === 1 ? 'card' : 'cards'} available for matching.</p>
-            <button type="button" onClick={analyse} className="btn-primary">Analyse vacancy</button>
+            <button type="button" onClick={analyse} disabled={analysing} className="btn-primary disabled:cursor-wait disabled:opacity-60">{analysing ? 'Analysing…' : 'Analyse vacancy'}</button>
           </div>
         </section>
 
