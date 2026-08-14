@@ -1,8 +1,8 @@
 from fastapi.testclient import TestClient
 
-from backend.lib.vacancy_ai import _validate_item
-from backend.lib.vacancy_extraction import deterministic_extract
 from backend.main import app
+from lib.vacancy_ai import _validate_item
+from lib.vacancy_extraction import deterministic_extract
 
 client = TestClient(app)
 HEADERS = {"Authorization": "Bearer valid_token"}
