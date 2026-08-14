@@ -1,6 +1,6 @@
 import type { Session } from '@supabase/supabase-js';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+import { apiError, getBackendUrl } from '@/lib/backendConfig';
 
 export type EvidenceCard = {
   id: string;
@@ -65,11 +65,11 @@ function authHeaders(session: Session) {
 }
 
 export async function fetchEvidence(session: Session): Promise<EvidenceCard[]> {
-  const response = await fetch(`${BACKEND_URL}/evidence`, {
+  const response = await fetch(`${getBackendUrl()}/evidence`, {
     headers: authHeaders(session),
     cache: 'no-store',
   });
-  if (!response.ok) throw new Error('Failed to load evidence');
+  if (!response.ok) throw await apiError(response, 'Failed to load evidence');
   return response.json();
 }
 
@@ -77,12 +77,12 @@ export async function createEvidence(
   session: Session,
   input: Pick<EvidenceCard, 'title'> & Partial<EvidenceCard>,
 ): Promise<EvidenceCard> {
-  const response = await fetch(`${BACKEND_URL}/evidence`, {
+  const response = await fetch(`${getBackendUrl()}/evidence`, {
     method: 'POST',
     headers: authHeaders(session),
     body: JSON.stringify(input),
   });
-  if (!response.ok) throw new Error('Failed to save evidence');
+  if (!response.ok) throw await apiError(response, 'Failed to save evidence');
   return response.json();
 }
 
@@ -92,7 +92,7 @@ export async function analyseVacancy(
   evidenceCards: EvidenceCard[],
   practicalIssues: string[],
 ): Promise<VacancyAnalysis> {
-  const response = await fetch(`${BACKEND_URL}/vacancy-analysis`, {
+  const response = await fetch(`${getBackendUrl()}/vacancy-analysis`, {
     method: 'POST',
     headers: authHeaders(session),
     body: JSON.stringify({
@@ -102,6 +102,6 @@ export async function analyseVacancy(
       practical_issues: practicalIssues,
     }),
   });
-  if (!response.ok) throw new Error('Vacancy analysis failed');
+  if (!response.ok) throw await apiError(response, 'Vacancy analysis failed');
   return response.json();
 }
