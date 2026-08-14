@@ -81,7 +81,7 @@ def test_semantic_match_rejects_invented_supporting_fact():
 
 
 def test_route_returns_explainable_match_contract(monkeypatch):
-    monkeypatch.setattr("routes.vacancy_analysis.semantic_assess", lambda _requirement, _cards: None)
+    monkeypatch.setattr("routes.vacancy_analysis.semantic_assess_batch", lambda _entries: None)
     payload = {
         "job": {"title": "Operations Officer"},
         "requirements": [{"text": "confident decision making", "category": "essential"}],
@@ -99,7 +99,7 @@ def test_route_returns_explainable_match_contract(monkeypatch):
 
 
 def test_partial_essential_match_returns_consider(monkeypatch):
-    monkeypatch.setattr("routes.vacancy_analysis.semantic_assess", lambda _requirement, _cards: None)
+    monkeypatch.setattr("routes.vacancy_analysis.semantic_assess_batch", lambda _entries: None)
     thin_card = Evidence(id="ev-label", title="Decision example", skills=["confident decision making"])
     payload = {
         "job": {"title": "Operations Officer"},
@@ -110,3 +110,26 @@ def test_partial_essential_match_returns_consider(monkeypatch):
     assert data["requirements"][0]["match_strength"] == "partial"
     assert data["requirements"][0]["status"] == "partial"
     assert data["decision"] == "CONSIDER"
+
+
+def test_route_batches_ambiguous_semantic_work_once(monkeypatch):
+    calls = []
+
+    def fake_batch(entries):
+        calls.append(entries)
+        return None
+
+    monkeypatch.setattr("routes.vacancy_analysis.semantic_assess_batch", fake_batch)
+    card = Evidence(id="ev-thin", title="General example", tags=["communication"])
+    payload = {
+        "job": {"title": "Officer"},
+        "requirements": [
+            {"text": "stakeholder engagement", "category": "essential"},
+            {"text": "written communication", "category": "essential"},
+            {"text": "planning and prioritisation", "category": "desirable"},
+        ],
+        "evidence_cards": [card.model_dump()],
+    }
+    client.post("/vacancy-analysis", headers=HEADERS, json=payload)
+    assert len(calls) == 1
+    assert len(calls[0]) >= 1
