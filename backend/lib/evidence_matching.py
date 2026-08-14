@@ -142,7 +142,13 @@ def _strength(score: float) -> str:
 
 def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
     signals = _support_signals(requirement, card)
-    strength = _strength(signals["score"])
+    score = signals["score"]
+    strength = _strength(score)
+    has_actions = bool(getattr(card, "actions", []) and any(str(value).strip() for value in getattr(card, "actions", []) or []))
+    has_outcome = bool(str(getattr(card, "outcome", "") or "").strip())
+    if strength == "strong" and not (has_actions and has_outcome):
+        strength = "partial"
+        score = min(score, 69.0)
 
     support_parts: list[str] = []
     if signals["concepts"]:
@@ -157,9 +163,9 @@ def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
         support_parts.append("limited wording overlap only")
 
     gaps: list[str] = []
-    if not getattr(card, "actions", []) or not any(str(value).strip() for value in getattr(card, "actions", []) or []):
+    if not has_actions:
         gaps.append("Personal actions are not recorded clearly enough.")
-    if not str(getattr(card, "outcome", "") or "").strip():
+    if not has_outcome:
         gaps.append("Outcome or impact is not recorded.")
     if signals["concepts"] == [] and strength != "missing":
         gaps.append("The evidence does not clearly demonstrate the underlying capability, only related wording.")
@@ -167,11 +173,11 @@ def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
         gaps.append("No sufficiently relevant evidence is recorded for this requirement.")
 
     why = "; ".join(support_parts) if support_parts else "No meaningful support found in this Evidence Card."
-    confidence = round(min(0.96, 0.48 + (signals["quality"] * 0.2) + (abs(signals["score"] - 50) / 100)), 2)
+    confidence = round(min(0.96, 0.48 + (signals["quality"] * 0.2) + (abs(score - 50) / 100)), 2)
 
     return {
         "strength": strength,
-        "score": signals["score"],
+        "score": round(score, 1),
         "confidence": confidence,
         "why": why,
         "gaps": gaps[:3],
