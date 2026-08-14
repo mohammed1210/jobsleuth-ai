@@ -6,11 +6,7 @@ import Link from 'next/link';
 import HeaderClient from '@/components/HeaderClient';
 
 function getMagicLinkRedirect() {
-  const configured = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_VERCEL_URL;
-  const base = configured
-    ? (configured.startsWith('http') ? configured : `https://${configured}`)
-    : window.location.origin;
-  return new URL('/apply/vacancy', base).toString();
+  return new URL('/apply/vacancy', window.location.origin).toString();
 }
 
 export default function MagicLoginPage() {
