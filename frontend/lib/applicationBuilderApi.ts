@@ -1,8 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 
 import type { EvidenceCard, RequirementAnalysis } from '@/lib/applyApi';
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+import { apiError, getBackendUrl } from '@/lib/backendConfig';
 
 export type ApplicationType = 'statement_of_suitability' | 'criteria_response';
 
@@ -69,7 +68,7 @@ export async function buildApplication(
   const usedIds = new Set(requirements.flatMap((requirement) => requirement.evidence_ids));
   const evidenceCards = input.evidenceCards.filter((card) => usedIds.has(card.id));
 
-  const response = await fetch(`${BACKEND_URL}/application-builder`, {
+  const response = await fetch(`${getBackendUrl()}/application-builder`, {
     method: 'POST',
     headers: authHeaders(session),
     body: JSON.stringify({
@@ -84,6 +83,6 @@ export async function buildApplication(
     }),
   });
 
-  if (!response.ok) throw new Error('Application draft failed');
+  if (!response.ok) throw await apiError(response, 'Application draft failed');
   return response.json();
 }

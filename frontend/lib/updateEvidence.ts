@@ -1,10 +1,9 @@
 import type { Session } from '@supabase/supabase-js';
 import type { EvidenceCard } from '@/lib/applyApi';
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+import { apiError, getBackendUrl } from '@/lib/backendConfig';
 
 export async function updateEvidence(session: Session, id: string, input: Partial<EvidenceCard>) {
-  const response = await fetch(`${BACKEND_URL}/evidence/${id}`, {
+  const response = await fetch(`${getBackendUrl()}/evidence/${id}`, {
     method: 'PATCH',
     headers: {
       Authorization: `Bearer ${session.access_token}`,
@@ -12,6 +11,6 @@ export async function updateEvidence(session: Session, id: string, input: Partia
     },
     body: JSON.stringify(input),
   });
-  if (!response.ok) throw new Error('Failed to update evidence');
+  if (!response.ok) throw await apiError(response, 'Failed to update evidence');
   return response.json() as Promise<EvidenceCard>;
 }

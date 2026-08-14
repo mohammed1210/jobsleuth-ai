@@ -5,6 +5,10 @@ import type { Session } from '@supabase/supabase-js';
 import { createEvidence, fetchEvidence, type EvidenceCard } from '@/lib/applyApi';
 import { updateEvidence } from '@/lib/updateEvidence';
 
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
 export function useRecords(session: Session | null) {
   const [records, setRecords] = useState<EvidenceCard[]>([]);
   const [editing, setEditing] = useState<EvidenceCard | null>(null);
@@ -17,7 +21,7 @@ export function useRecords(session: Session | null) {
     setLoadingRecords(true);
     fetchEvidence(session)
       .then(setRecords)
-      .catch(() => setRecordError('Could not load saved records.'))
+      .catch((error) => setRecordError(errorMessage(error, 'Could not load saved records.')))
       .finally(() => setLoadingRecords(false));
   }, [session]);
 
@@ -34,8 +38,8 @@ export function useRecords(session: Session | null) {
         const saved = await createEvidence(session, input);
         setRecords((current) => [saved, ...current]);
       }
-    } catch {
-      setRecordError('Could not save this record.');
+    } catch (error) {
+      setRecordError(errorMessage(error, 'Could not save this record.'));
     } finally {
       setSavingRecord(false);
     }
