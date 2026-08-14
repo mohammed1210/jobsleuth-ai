@@ -107,12 +107,12 @@ def _support_signals(requirement: str, card: Any) -> dict[str, Any]:
     quality = _quality(card)
 
     score = (
-        min(1.0, lexical_ratio) * 36
-        + min(1.0, concept_ratio) * 28
-        + min(1.0, len(tag_overlap) / 2) * 12
-        + min(1.0, len(action_overlap) / 2) * 12
-        + min(1.0, len(outcome_overlap)) * 5
-        + quality * 7
+        min(1.0, lexical_ratio) * 26
+        + min(1.0, concept_ratio) * 45
+        + min(1.0, len(tag_overlap) / 2) * 10
+        + min(1.0, len(action_overlap) / 2) * 10
+        + min(1.0, len(outcome_overlap)) * 3
+        + quality * 6
     )
 
     sparse_only = bool(overlap) and not (concept_overlap or tag_overlap or action_overlap or outcome_overlap)
