@@ -18,6 +18,8 @@ def payload():
                 "id": "ev-1",
                 "title": "Operational decision",
                 "skills": ["confident decision making"],
+                "actions": ["I reviewed the available information and made a confident decision."],
+                "outcome": "The decision resolved the operational issue safely.",
             }
         ],
     }
@@ -33,4 +35,5 @@ def test_apply_with_supported_essential_requirement():
     data = response.json()
     assert data["decision"] == "APPLY"
     assert data["requirements"][0]["status"] == "met"
+    assert data["requirements"][0]["match_strength"] == "strong"
     assert data["requirements"][1]["status"] == "trainable"
