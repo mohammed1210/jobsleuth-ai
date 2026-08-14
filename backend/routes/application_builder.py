@@ -8,7 +8,7 @@ from fastapi import APIRouter, Header
 from pydantic import BaseModel, Field
 
 from lib.application_ai import semantic_application_draft
-from lib.application_draft import coverage, deterministic_draft, word_count
+from lib.application_draft import coverage, deterministic_draft
 from routes.saved_jobs import verify_supabase_user
 
 router = APIRouter(prefix="/application-builder", tags=["application_builder"])
@@ -44,14 +44,25 @@ class ApplicationBuilderRequest(BaseModel):
     evidence_cards: list[ApplicationEvidence] = Field(default_factory=list)
 
 
+def _opening(role_title: str, organisation: str) -> str:
+    destination = f" with {organisation}" if organisation else ""
+    return f"I am applying for {role_title}{destination} and have focused this statement on the experience most relevant to the role."
+
+
+def _closing() -> str:
+    return "I would welcome the opportunity to discuss this evidence and its relevance to the role further."
+
+
 def _compose_draft(paragraphs: list[dict[str, Any]], role_title: str, organisation: str) -> str:
     if not paragraphs:
         return ""
-    destination = f" with {organisation}" if organisation else ""
-    opening = f"I am applying for {role_title}{destination} and have focused this statement on the experience most relevant to the role."
     body = "\n\n".join(paragraph["text"] for paragraph in paragraphs)
-    closing = "I would welcome the opportunity to discuss this evidence and its relevance to the role further."
-    return f"{opening}\n\n{body}\n\n{closing}"
+    return f"{_opening(role_title, organisation)}\n\n{body}\n\n{_closing()}"
+
+
+def _body_budget(word_limit: int, role_title: str, organisation: str) -> int:
+    framing_words = len((_opening(role_title, organisation) + " " + _closing()).split())
+    return max(30, word_limit - framing_words)
 
 
 @router.post("")
@@ -64,6 +75,7 @@ async def build_application(
     role_title = str(request.job.get("title", "the role") or "the role").strip()[:300]
     organisation = str(request.job.get("organisation", request.job.get("company", "")) or "").strip()[:300]
     cards_by_id = {card.id: card for card in request.evidence_cards if card.id}
+    body_budget = _body_budget(request.word_limit, role_title, organisation)
 
     paragraphs = semantic_application_draft(
         request.requirements,
@@ -73,9 +85,20 @@ async def build_application(
         request.application_type,
         request.word_limit,
     )
-    provider = "openai-grounded-v1" if paragraphs else "deterministic-grounded-v1"
-    if not paragraphs:
-        paragraphs = deterministic_draft(request.requirements, cards_by_id, role_title)
+    provider = "openai-grounded-v1" if paragraphs else "deterministic-grounded-v2"
+
+    # Treat the requested word limit as a hard composition constraint. If a semantic
+    # draft exceeds it, prefer a compact deterministic grounded draft rather than
+    # returning prose the candidate cannot submit.
+    semantic_draft = _compose_draft(paragraphs or [], role_title, organisation)
+    if not paragraphs or len(semantic_draft.split()) > request.word_limit:
+        paragraphs = deterministic_draft(
+            request.requirements,
+            cards_by_id,
+            role_title,
+            word_limit=body_budget,
+        )
+        provider = "deterministic-grounded-v2"
 
     requirement_coverage = coverage(request.requirements, paragraphs)
     draft = _compose_draft(paragraphs, role_title, organisation)
