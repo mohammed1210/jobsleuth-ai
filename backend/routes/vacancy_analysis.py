@@ -7,6 +7,8 @@ from typing import Any, Literal
 from fastapi import APIRouter, Header
 from pydantic import BaseModel, Field
 
+from lib.evidence_matching import rank_evidence
+from lib.evidence_semantic import semantic_assess
 from routes.saved_jobs import verify_supabase_user
 
 router = APIRouter(prefix="/vacancy-analysis", tags=["vacancy_analysis"])
@@ -21,11 +23,16 @@ class Requirement(BaseModel):
 class Evidence(BaseModel):
     id: str | None = None
     title: str = ""
+    situation: str = ""
+    task: str = ""
     tags: list[str] = Field(default_factory=list)
     behaviours: list[str] = Field(default_factory=list)
     skills: list[str] = Field(default_factory=list)
     actions: list[str] = Field(default_factory=list)
     outcome: str = ""
+    reflection: str = ""
+    authority_context: str | None = None
+    confidence: int = Field(default=70, ge=0, le=100)
 
 
 class AnalysisRequest(BaseModel):
@@ -35,47 +42,127 @@ class AnalysisRequest(BaseModel):
     practical_issues: list[str] = Field(default_factory=list)
 
 
-def _words(value: str) -> set[str]:
-    return {word.strip(".,:;()[]").lower() for word in value.split() if len(word) > 3}
+def _status_for_strength(strength: str, category: str) -> str:
+    if category == "trainable":
+        return "trainable"
+    if strength == "strong":
+        return "met"
+    if strength == "partial":
+        return "partial"
+    return "gap"
 
 
-def _evidence_words(card: Evidence) -> set[str]:
-    return _words(" ".join([card.title, *card.tags, *card.behaviours, *card.skills, *card.actions, card.outcome]))
+def _evidence_payload(card: Evidence, assessment: dict[str, Any]) -> dict[str, Any]:
+    signals = assessment.get("signals", {})
+    return {
+        "id": card.id,
+        "title": card.title,
+        "strength": assessment["strength"],
+        "score": assessment["score"],
+        "confidence": assessment["confidence"],
+        "why": assessment["why"],
+        "gaps": assessment.get("gaps", []),
+        "supporting_facts": assessment.get("supporting_facts", []),
+        "signals": signals,
+        "matched_terms": signals.get("matched_terms", []),
+    }
 
 
 @router.post("")
 async def vacancy_analysis(request: AnalysisRequest, authorization: str | None = Header(None)) -> dict[str, Any]:
     await verify_supabase_user(authorization)
-    analysed = []
-    for requirement in request.requirements:
-        wanted = _words(requirement.text)
-        matches = []
-        for card in request.evidence_cards:
-            overlap = sorted(wanted & _evidence_words(card))
-            if overlap:
-                matches.append({"id": card.id, "title": card.title, "matched_terms": overlap})
-        status = "trainable" if requirement.category == "trainable" else ("met" if matches else "gap")
-        analysed.append({
-            "requirement": requirement.text,
-            "category": requirement.category,
-            "blocker": requirement.blocker,
-            "status": status,
-            "evidence": matches[:3],
-        })
+    analysed: list[dict[str, Any]] = []
+    semantic_used = False
 
-    hard_gap = any(item["status"] == "gap" and item["blocker"] for item in analysed)
-    essential_gap = any(item["status"] == "gap" and item["category"] == "essential" for item in analysed)
+    for requirement in request.requirements:
+        if requirement.category == "trainable":
+            analysed.append(
+                {
+                    "requirement": requirement.text,
+                    "category": requirement.category,
+                    "blocker": requirement.blocker,
+                    "status": "trainable",
+                    "match_strength": "trainable",
+                    "confidence": 1.0,
+                    "why": "The vacancy identifies this as trainable rather than requiring existing evidence.",
+                    "gaps": [],
+                    "evidence": [],
+                }
+            )
+            continue
+
+        ranked = rank_evidence(requirement.text, request.evidence_cards)
+        shortlisted = [card for card, _assessment in ranked[:5]]
+        semantic = semantic_assess(requirement.text, shortlisted)
+        if semantic:
+            semantic_used = True
+
+        merged: list[tuple[Evidence, dict[str, Any]]] = []
+        for card, deterministic in ranked:
+            assessment = semantic.get(str(card.id), deterministic) if semantic else deterministic
+            merged.append((card, assessment))
+        merged.sort(key=lambda item: item[1]["score"], reverse=True)
+
+        useful = [(card, assessment) for card, assessment in merged if assessment["strength"] != "missing"]
+        evidence = [_evidence_payload(card, assessment) for card, assessment in useful[:3]]
+        top_assessment = merged[0][1] if merged else {
+            "strength": "missing",
+            "score": 0.0,
+            "confidence": 0.9,
+            "why": "No Evidence Cards are available for this requirement.",
+            "gaps": ["No relevant evidence is recorded for this requirement."],
+        }
+
+        strength = top_assessment["strength"]
+        analysed.append(
+            {
+                "requirement": requirement.text,
+                "category": requirement.category,
+                "blocker": requirement.blocker,
+                "status": _status_for_strength(strength, requirement.category),
+                "match_strength": strength,
+                "confidence": top_assessment["confidence"],
+                "why": top_assessment["why"],
+                "gaps": top_assessment.get("gaps", []),
+                "evidence": evidence,
+            }
+        )
+
+    hard_gap = any(
+        item["blocker"] and item["match_strength"] in {"weak", "missing"}
+        for item in analysed
+        if item["category"] != "trainable"
+    )
+    essential_uncertainty = any(
+        item["category"] == "essential" and item["match_strength"] in {"partial", "weak", "missing"}
+        for item in analysed
+    )
+
     if hard_gap:
         decision = "SKIP"
-    elif essential_gap or request.practical_issues:
+    elif essential_uncertainty or request.practical_issues:
         decision = "CONSIDER"
     else:
         decision = "APPLY"
 
+    decision_reasons: list[str] = []
+    if hard_gap:
+        decision_reasons.append("At least one explicit blocker lacks sufficient supporting evidence.")
+    if essential_uncertainty:
+        decision_reasons.append("At least one essential requirement is only partially supported or has an evidence gap.")
+    if request.practical_issues:
+        decision_reasons.append("Practical fit still needs checking.")
+    if decision == "APPLY":
+        decision_reasons.append("Essential requirements are strongly supported by the recorded Evidence Bank.")
+
     return {
         "ok": True,
-        "analysis_provider": "evidence-v1",
+        "analysis_provider": "hybrid-semantic-v2" if semantic_used else "structured-evidence-v2",
         "decision": decision,
+        "decision_reasons": decision_reasons,
         "requirements": analysed,
-        "practical_fit": {"status": "concern" if request.practical_issues else "fit", "issues": request.practical_issues},
+        "practical_fit": {
+            "status": "concern" if request.practical_issues else "fit",
+            "issues": request.practical_issues,
+        },
     }
