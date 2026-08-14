@@ -13,7 +13,13 @@ def base_payload():
             {"text": "confident decision making", "category": "essential"},
         ],
         "evidence_cards": [
-            {"id": "ev-1", "title": "Decision example", "skills": ["confident decision making"]}
+            {
+                "id": "ev-1",
+                "title": "Decision example",
+                "skills": ["confident decision making"],
+                "actions": ["I reviewed the evidence and made a confident decision."],
+                "outcome": "The decision resolved the issue safely.",
+            }
         ],
     }
 
@@ -34,3 +40,4 @@ def test_missing_hard_requirement_returns_skip():
     data = client.post("/vacancy-analysis", headers=HEADERS, json=payload).json()
     assert data["decision"] == "SKIP"
     assert data["requirements"][-1]["status"] == "gap"
+    assert data["requirements"][-1]["match_strength"] in {"weak", "missing"}
