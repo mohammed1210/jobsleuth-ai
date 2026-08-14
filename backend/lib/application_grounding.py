@@ -24,7 +24,7 @@ _AUTHORITY_PHRASES = {
     "i approved": ("approve", "approved"),
     "i authorised": ("authorise", "authorised", "authorize", "authorized"),
     "i authorized": ("authorise", "authorised", "authorize", "authorized"),
-    "i decided": ("decide", "decided", "decision"),
+    "i decided": ("decide", "decided"),
     "i supervised": ("supervise", "supervised"),
     "i directed": ("direct", "directed"),
     "i owned": ("own", "owned", "ownership"),
