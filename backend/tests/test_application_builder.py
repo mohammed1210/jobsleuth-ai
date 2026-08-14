@@ -88,11 +88,74 @@ def test_deterministic_builder_uses_supported_evidence_and_reports_gap(monkeypat
     assert response.status_code == 200
     data = response.json()
     assert data["can_generate"] is True
-    assert data["provider"] == "deterministic-grounded-v1"
+    assert data["provider"] == "deterministic-grounded-v2"
     assert card.actions[0] in data["draft"]
     assert data["coverage"][0]["status"] == "covered"
     assert data["coverage"][1]["status"] == "evidence-gap"
     assert any("specialist qualification" in warning for warning in data["warnings"])
+
+
+def test_same_evidence_is_composed_once_for_multiple_requirements(monkeypatch):
+    monkeypatch.setattr("routes.application_builder.semantic_application_draft", lambda *args, **kwargs: None)
+    card = evidence_card()
+    requirements = [
+        {
+            "text": text,
+            "category": "essential",
+            "match_strength": "strong",
+            "evidence_ids": [card.id],
+        }
+        for text in [
+            "Analyse complex information",
+            "Assess operational risk",
+            "Work with stakeholders",
+            "Adapt to changing circumstances",
+            "Explain recommendations clearly",
+            "Work within appropriate authority",
+        ]
+    ]
+    payload = {
+        "job": {"title": "Operations Officer"},
+        "application_type": "statement_of_suitability",
+        "word_limit": 500,
+        "requirements": requirements,
+        "evidence_cards": [card.model_dump()],
+    }
+    data = client.post("/application-builder", headers=HEADERS, json=payload).json()
+    assert data["provider"] == "deterministic-grounded-v2"
+    assert len(data["paragraphs"]) == 1
+    assert data["paragraphs"][0]["requirement_indices"] == list(range(6))
+    assert data["word_count"] <= 500
+    assert all(item["status"] == "covered" for item in data["coverage"])
+
+
+def test_oversized_semantic_draft_falls_back_to_budgeted_grounded_version(monkeypatch):
+    card = evidence_card()
+    oversized = {
+        "text": " ".join(["grounded"] * 700),
+        "requirement_indices": [0],
+        "evidence_ids": [card.id],
+        "supporting_facts": [],
+        "grounding_status": "grounded",
+    }
+    monkeypatch.setattr("routes.application_builder.semantic_application_draft", lambda *args, **kwargs: [oversized])
+    payload = {
+        "job": {"title": "Operations Officer"},
+        "word_limit": 500,
+        "requirements": [
+            {
+                "text": "Make evidence-based recommendations",
+                "category": "essential",
+                "match_strength": "strong",
+                "evidence_ids": [card.id],
+            }
+        ],
+        "evidence_cards": [card.model_dump()],
+    }
+    data = client.post("/application-builder", headers=HEADERS, json=payload).json()
+    assert data["provider"] == "deterministic-grounded-v2"
+    assert data["word_count"] <= 500
+    assert not any("above the requested" in warning for warning in data["warnings"])
 
 
 def test_builder_does_not_generate_when_no_supported_evidence(monkeypatch):
