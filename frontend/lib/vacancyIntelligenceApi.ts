@@ -1,6 +1,6 @@
 import type { Session } from '@supabase/supabase-js';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+import { apiError, getBackendUrl } from '@/lib/backendConfig';
 
 export type IntelligenceCategory = 'eligibility' | 'essential' | 'desirable' | 'trainable' | 'practical';
 
@@ -28,7 +28,7 @@ export type VacancyIntelligence = {
 };
 
 export async function extractVacancyIntelligence(session: Session, vacancyText: string): Promise<VacancyIntelligence> {
-  const response = await fetch(`${BACKEND_URL}/vacancy-intelligence`, {
+  const response = await fetch(`${getBackendUrl()}/vacancy-intelligence`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${session.access_token}`,
@@ -36,6 +36,6 @@ export async function extractVacancyIntelligence(session: Session, vacancyText: 
     },
     body: JSON.stringify({ vacancy_text: vacancyText }),
   });
-  if (!response.ok) throw new Error('Vacancy intelligence unavailable');
+  if (!response.ok) throw await apiError(response, 'Vacancy intelligence unavailable');
   return response.json();
 }
