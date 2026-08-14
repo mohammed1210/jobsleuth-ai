@@ -23,17 +23,37 @@ export type Requirement = {
   blocker?: boolean;
 };
 
+export type EvidenceMatch = {
+  id?: string;
+  title: string;
+  strength: 'strong' | 'partial' | 'weak' | 'missing';
+  score: number;
+  confidence: number;
+  why: string;
+  gaps: string[];
+  supporting_facts: Array<{ field: string; text: string }>;
+  signals: { concepts?: string[]; matched_terms?: string[]; evidence_quality?: number; semantic?: boolean };
+  matched_terms: string[];
+};
+
+export type RequirementAnalysis = {
+  requirement: string;
+  category: string;
+  blocker: boolean;
+  status: string;
+  match_strength: 'strong' | 'partial' | 'weak' | 'missing' | 'trainable';
+  confidence: number;
+  why: string;
+  gaps: string[];
+  evidence: EvidenceMatch[];
+};
+
 export type VacancyAnalysis = {
   ok: boolean;
   analysis_provider: string;
   decision: 'APPLY' | 'CONSIDER' | 'SKIP';
-  requirements: Array<{
-    requirement: string;
-    category: string;
-    blocker: boolean;
-    status: string;
-    evidence: Array<{ id?: string; title: string; matched_terms: string[] }>;
-  }>;
+  decision_reasons?: string[];
+  requirements: RequirementAnalysis[];
   practical_fit: { status: string; issues: string[] };
 };
 
