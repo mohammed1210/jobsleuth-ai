@@ -36,46 +36,32 @@ _OUTPUT_SCHEMA = {
 
 
 def _fact_catalog(cards_by_id: dict[str, Any], evidence_ids: set[str]) -> tuple[list[dict[str, Any]], dict[str, dict[str, str]]]:
-    """Create model-facing fact IDs and a server-side lookup to exact stored evidence."""
     cards: list[dict[str, Any]] = []
     lookup: dict[str, dict[str, str]] = {}
-
     for evidence_id in sorted(evidence_ids):
         card = cards_by_id[evidence_id]
         facts: list[dict[str, str]] = []
         for field, values in sorted(card_facts(card).items()):
             for position, text in enumerate(values):
                 fact_id = f"{evidence_id}:{field}:{position}"
-                fact = {
-                    "fact_id": fact_id,
-                    "evidence_id": evidence_id,
-                    "field": field,
-                    "text": text,
-                }
+                fact = {"fact_id": fact_id, "evidence_id": evidence_id, "field": field, "text": text}
                 lookup[fact_id] = fact
                 facts.append(fact)
         cards.append({"id": evidence_id, "facts": facts})
-
     return cards, lookup
 
 
 def _hydrate_supporting_facts(raw: Any, fact_lookup: dict[str, dict[str, str]]) -> dict[str, Any] | None:
-    """Resolve model-cited fact IDs back to exact Evidence Bank text before validation."""
     if not isinstance(raw, dict):
         return None
     fact_ids = [str(value).strip() for value in raw.get("supporting_fact_ids", []) if str(value).strip()]
     facts = [fact_lookup[fact_id] for fact_id in fact_ids if fact_id in fact_lookup]
     if not facts:
         return None
-
     hydrated = dict(raw)
     hydrated.pop("supporting_fact_ids", None)
     hydrated["supporting_facts"] = [
-        {
-            "evidence_id": fact["evidence_id"],
-            "field": fact["field"],
-            "text": fact["text"],
-        }
+        {"evidence_id": fact["evidence_id"], "field": fact["field"], "text": fact["text"]}
         for fact in facts
     ]
     return hydrated
@@ -88,11 +74,11 @@ def semantic_application_draft(
     organisation: str,
     application_type: str,
     word_limit: int,
-) -> list[dict[str, Any]] | None:
-    """Return grounded AI paragraphs or None when unavailable/invalid."""
+) -> tuple[list[dict[str, Any]] | None, str]:
+    """Return grounded AI paragraphs plus a safe semantic status code."""
     if not settings.OPENAI_API_KEY:
         logger.info("Semantic application drafting unavailable: no API key configured")
-        return None
+        return None, "no_api_key"
 
     supported_indices: set[int] = set()
     allowed_by_requirement: dict[int, set[str]] = {}
@@ -116,7 +102,7 @@ def semantic_application_draft(
         })
 
     if not supported_indices:
-        return None
+        return None, "no_supported_requirements"
 
     cards, fact_lookup = _fact_catalog(cards_by_id, used_card_ids)
     style_instruction = (
@@ -138,7 +124,7 @@ def semantic_application_draft(
                 "Preserve authority distinctions exactly: a recommendation must not become a decision or approval. "
                 "Do not claim unsupported, weak or missing requirements are met. Omit them. "
                 "Avoid repeating the same incident separately for overlapping criteria. "
-                "For every paragraph, cite only supporting_fact_ids supplied in the Evidence Card data; do not reproduce or invent fact text in the citation fields. "
+                "For every paragraph, cite only supporting_fact_ids supplied in the Evidence Card data. "
                 "Use enough cited facts to support any numbers and authority wording used in the paragraph. "
                 "Use natural UK English and professional prose. Avoid generic filler and do not mention AI or JobSleuth."
             ),
@@ -162,10 +148,17 @@ def semantic_application_draft(
             },
             max_output_tokens=2200,
         )
-        payload = json.loads(response.output_text or "{}")
-        raw_paragraphs = payload.get("paragraphs", []) if isinstance(payload, dict) else []
-        validated: list[dict[str, Any]] = []
+        try:
+            payload = json.loads(response.output_text or "{}")
+        except (TypeError, json.JSONDecodeError):
+            logger.warning("Semantic application drafting structured output parse failed")
+            return None, "structured_output_parse"
 
+        raw_paragraphs = payload.get("paragraphs", []) if isinstance(payload, dict) else []
+        if not raw_paragraphs:
+            return None, "empty_model_output"
+
+        validated: list[dict[str, Any]] = []
         for raw in raw_paragraphs[:8]:
             hydrated = _hydrate_supporting_facts(raw, fact_lookup)
             if hydrated is None:
@@ -185,7 +178,9 @@ def semantic_application_draft(
 
         if not validated:
             logger.warning("Semantic application drafting returned no grounded paragraphs")
-        return validated or None
+            return None, "no_validated_paragraphs"
+        return validated, "ok"
     except Exception as exc:
-        logger.warning("Semantic application drafting failed: %s", type(exc).__name__)
-        return None
+        error_name = type(exc).__name__
+        logger.warning("Semantic application drafting failed: %s", error_name)
+        return None, f"openai_{error_name}"
