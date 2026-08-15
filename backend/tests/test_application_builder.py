@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from backend.lib.application_ai import _fact_catalog, _hydrate_supporting_facts
 from backend.lib.application_draft import deterministic_draft
 from backend.lib.application_grounding import validate_ai_paragraph
 from backend.main import app
@@ -26,6 +27,33 @@ def evidence_card() -> ApplicationEvidence:
 def test_application_builder_requires_authentication():
     response = client.post("/application-builder", json={"job": {"title": "Officer"}})
     assert response.status_code == 401
+
+
+def test_fact_ids_resolve_to_exact_stored_evidence_before_validation():
+    card = evidence_card()
+    _, lookup = _fact_catalog({card.id: card}, {card.id})
+    action_id = next(fact_id for fact_id, fact in lookup.items() if fact["field"] == "actions")
+    authority_id = next(fact_id for fact_id, fact in lookup.items() if fact["field"] == "authority_context")
+    raw = {
+        "text": "I assessed the available information and made a recommendation while final approval remained with the senior manager.",
+        "requirement_indices": [0],
+        "evidence_ids": [card.id],
+        "supporting_fact_ids": [action_id, authority_id],
+    }
+    hydrated = _hydrate_supporting_facts(raw, lookup)
+    assert hydrated is not None
+    assert hydrated["supporting_facts"][0]["text"] == lookup[action_id]["text"]
+    assert validate_ai_paragraph(hydrated, {card.id: card}, 1) is not None
+
+
+def test_unknown_fact_ids_are_not_accepted_as_grounding():
+    raw = {
+        "text": "Unsupported claim.",
+        "requirement_indices": [0],
+        "evidence_ids": ["ev-1"],
+        "supporting_fact_ids": ["made-up-fact"],
+    }
+    assert _hydrate_supporting_facts(raw, {}) is None
 
 
 def test_grounding_rejects_invented_numeric_claim():
