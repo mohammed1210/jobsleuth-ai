@@ -23,21 +23,9 @@ _OUTPUT_SCHEMA = {
                     "text": {"type": "string"},
                     "requirement_indices": {"type": "array", "items": {"type": "integer"}},
                     "evidence_ids": {"type": "array", "items": {"type": "string"}},
-                    "supporting_facts": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "evidence_id": {"type": "string"},
-                                "field": {"type": "string"},
-                                "text": {"type": "string"},
-                            },
-                            "required": ["evidence_id", "field", "text"],
-                            "additionalProperties": False,
-                        },
-                    },
+                    "supporting_fact_ids": {"type": "array", "items": {"type": "string"}},
                 },
-                "required": ["text", "requirement_indices", "evidence_ids", "supporting_facts"],
+                "required": ["text", "requirement_indices", "evidence_ids", "supporting_fact_ids"],
                 "additionalProperties": False,
             },
         }
@@ -47,8 +35,50 @@ _OUTPUT_SCHEMA = {
 }
 
 
-def _compact_card(card: Any) -> dict[str, Any]:
-    return {"id": str(getattr(card, "id", "") or ""), "facts": card_facts(card)}
+def _fact_catalog(cards_by_id: dict[str, Any], evidence_ids: set[str]) -> tuple[list[dict[str, Any]], dict[str, dict[str, str]]]:
+    """Create model-facing fact IDs and a server-side lookup to exact stored evidence."""
+    cards: list[dict[str, Any]] = []
+    lookup: dict[str, dict[str, str]] = {}
+
+    for evidence_id in sorted(evidence_ids):
+        card = cards_by_id[evidence_id]
+        facts: list[dict[str, str]] = []
+        for field, values in sorted(card_facts(card).items()):
+            for position, text in enumerate(values):
+                fact_id = f"{evidence_id}:{field}:{position}"
+                fact = {
+                    "fact_id": fact_id,
+                    "evidence_id": evidence_id,
+                    "field": field,
+                    "text": text,
+                }
+                lookup[fact_id] = fact
+                facts.append(fact)
+        cards.append({"id": evidence_id, "facts": facts})
+
+    return cards, lookup
+
+
+def _hydrate_supporting_facts(raw: Any, fact_lookup: dict[str, dict[str, str]]) -> dict[str, Any] | None:
+    """Resolve model-cited fact IDs back to exact Evidence Bank text before validation."""
+    if not isinstance(raw, dict):
+        return None
+    fact_ids = [str(value).strip() for value in raw.get("supporting_fact_ids", []) if str(value).strip()]
+    facts = [fact_lookup[fact_id] for fact_id in fact_ids if fact_id in fact_lookup]
+    if not facts:
+        return None
+
+    hydrated = dict(raw)
+    hydrated.pop("supporting_fact_ids", None)
+    hydrated["supporting_facts"] = [
+        {
+            "evidence_id": fact["evidence_id"],
+            "field": fact["field"],
+            "text": fact["text"],
+        }
+        for fact in facts
+    ]
+    return hydrated
 
 
 def semantic_application_draft(
@@ -88,7 +118,7 @@ def semantic_application_draft(
     if not supported_indices:
         return None
 
-    cards = [_compact_card(cards_by_id[eid]) for eid in sorted(used_card_ids)]
+    cards, fact_lookup = _fact_catalog(cards_by_id, used_card_ids)
     style_instruction = (
         "Write a concise UK public-sector statement of suitability in first person. Combine overlapping criteria supported by the same evidence into coherent paragraphs."
         if application_type == "statement_of_suitability"
@@ -108,7 +138,8 @@ def semantic_application_draft(
                 "Preserve authority distinctions exactly: a recommendation must not become a decision or approval. "
                 "Do not claim unsupported, weak or missing requirements are met. Omit them. "
                 "Avoid repeating the same incident separately for overlapping criteria. "
-                "Every paragraph must cite exact supporting facts copied from supplied Evidence Card fields. "
+                "For every paragraph, cite only supporting_fact_ids supplied in the Evidence Card data; do not reproduce or invent fact text in the citation fields. "
+                "Use enough cited facts to support any numbers and authority wording used in the paragraph. "
                 "Use natural UK English and professional prose. Avoid generic filler and do not mention AI or JobSleuth."
             ),
             input=json.dumps({
@@ -136,7 +167,10 @@ def semantic_application_draft(
         validated: list[dict[str, Any]] = []
 
         for raw in raw_paragraphs[:8]:
-            paragraph = validate_ai_paragraph(raw, cards_by_id, len(requirements))
+            hydrated = _hydrate_supporting_facts(raw, fact_lookup)
+            if hydrated is None:
+                continue
+            paragraph = validate_ai_paragraph(hydrated, cards_by_id, len(requirements))
             if paragraph is None:
                 continue
             indices = paragraph["requirement_indices"]
