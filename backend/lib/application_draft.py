@@ -24,6 +24,13 @@ def _supporting_facts(card: Any, evidence_id: str) -> list[dict[str, str]]:
     return facts
 
 
+def _clean_sentence(value: str) -> str:
+    text = " ".join(value.split()).strip()
+    if text and text[-1] not in ".!?":
+        text += "."
+    return text
+
+
 def _sentence_candidates(card: Any) -> list[str]:
     candidates: list[str] = []
     task = field_values(card, "task")
@@ -39,20 +46,23 @@ def _sentence_candidates(card: Any) -> list[str]:
     reflection = field_values(card, "reflection")
     if reflection:
         candidates.append(reflection[0])
-    return [value.strip() for value in candidates if value.strip()]
+    return [_clean_sentence(value) for value in candidates if value.strip()]
 
 
 def _fit_sentences(candidates: list[str], word_budget: int) -> str:
     selected: list[str] = []
+    seen: set[str] = set()
     used = 0
     for sentence in candidates:
+        key = sentence.lower().strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
         words = len(sentence.split())
         if selected and used + words > word_budget:
             continue
         if not selected and words > word_budget:
-            # A useful grounded sentence is better than returning no draft; keep the
-            # first sentence only when the configured budget is exceptionally small.
-            selected.append(" ".join(sentence.split()[:word_budget]))
+            selected.append(" ".join(sentence.split()[:word_budget]).rstrip(".,;:") + ".")
             break
         selected.append(sentence)
         used += words
@@ -67,12 +77,7 @@ def deterministic_draft(
     role_title: str,
     word_limit: int = 500,
 ) -> list[dict[str, Any]]:
-    """Compose one grounded paragraph per Evidence Card, not per criterion.
-
-    A single real example often supports several vacancy requirements. Grouping by
-    evidence source prevents repetitive STAR retelling and lets the coverage audit
-    show every criterion supported by the same paragraph.
-    """
+    """Compose one grounded paragraph per Evidence Card, not per criterion."""
     grouped: dict[str, list[int]] = {}
     for index, requirement in enumerate(requirements):
         if not supported_requirement(requirement):
@@ -85,8 +90,6 @@ def deterministic_draft(
     if not grouped:
         return []
 
-    # Evidence supporting more essential criteria is drafted first. This matters
-    # when multiple cards compete for a tight word budget.
     def priority(item: tuple[str, list[int]]) -> tuple[int, int]:
         _, indices = item
         essential = sum(
@@ -110,15 +113,13 @@ def deterministic_draft(
         if text_words > remaining and paragraphs:
             continue
 
-        paragraphs.append(
-            {
-                "text": text,
-                "requirement_indices": indices,
-                "evidence_ids": [evidence_id],
-                "supporting_facts": _supporting_facts(card, evidence_id),
-                "grounding_status": "grounded",
-            }
-        )
+        paragraphs.append({
+            "text": text,
+            "requirement_indices": indices,
+            "evidence_ids": [evidence_id],
+            "supporting_facts": _supporting_facts(card, evidence_id),
+            "grounding_status": "grounded",
+        })
         remaining -= min(remaining, text_words)
         if remaining <= 0:
             break
@@ -141,15 +142,13 @@ def coverage(requirements: list[Any], paragraphs: list[dict[str, Any]]) -> list[
             status = "evidence-gap"
         else:
             status = "not-used"
-        result.append(
-            {
-                "requirement": str(getattr(requirement, "text", "")),
-                "category": str(getattr(requirement, "category", "essential")),
-                "match_strength": strength,
-                "status": status,
-                "evidence_ids": [str(value) for value in (getattr(requirement, "evidence_ids", []) or [])],
-            }
-        )
+        result.append({
+            "requirement": str(getattr(requirement, "text", "")),
+            "category": str(getattr(requirement, "category", "essential")),
+            "match_strength": strength,
+            "status": status,
+            "evidence_ids": [str(value) for value in (getattr(requirement, "evidence_ids", []) or [])],
+        })
     return result
 
 
