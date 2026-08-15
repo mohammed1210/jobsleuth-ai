@@ -25,6 +25,7 @@ export type ApplicationDraftResult = {
   ok: boolean;
   can_generate: boolean;
   provider: string;
+  fallback_reason: string | null;
   application_type: ApplicationType;
   word_limit: number;
   word_count: number;

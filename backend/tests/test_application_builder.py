@@ -79,7 +79,7 @@ def test_grounding_rejects_authority_upgrade():
 
 
 def test_deterministic_builder_uses_supported_evidence_and_reports_gap(monkeypatch):
-    monkeypatch.setattr("routes.application_builder.semantic_application_draft", lambda *args, **kwargs: None)
+    monkeypatch.setattr("routes.application_builder.semantic_application_draft", lambda *args, **kwargs: (None, "openai_RateLimitError"))
     card = evidence_card()
     payload = {
         "job": {"title": "Operations Officer", "organisation": "Public Service Team"},
@@ -96,6 +96,7 @@ def test_deterministic_builder_uses_supported_evidence_and_reports_gap(monkeypat
     data = response.json()
     assert data["can_generate"] is True
     assert data["provider"] == "deterministic-grounded-v2"
+    assert data["fallback_reason"] == "openai_RateLimitError"
     assert card.actions[0] in data["draft"]
     assert data["coverage"][0]["status"] == "covered"
     assert data["coverage"][1]["status"] == "evidence-gap"
@@ -111,7 +112,7 @@ def test_fallback_adds_sentence_boundaries_to_evidence_fragments():
 
 
 def test_same_evidence_is_composed_once_for_multiple_requirements(monkeypatch):
-    monkeypatch.setattr("routes.application_builder.semantic_application_draft", lambda *args, **kwargs: None)
+    monkeypatch.setattr("routes.application_builder.semantic_application_draft", lambda *args, **kwargs: (None, "no_api_key"))
     card = evidence_card()
     requirements = [
         {"text": text, "category": "essential", "match_strength": "strong", "evidence_ids": [card.id]}
@@ -127,16 +128,17 @@ def test_same_evidence_is_composed_once_for_multiple_requirements(monkeypatch):
     payload = {"job": {"title": "Operations Officer"}, "application_type": "statement_of_suitability", "word_limit": 500, "requirements": requirements, "evidence_cards": [card.model_dump()]}
     data = client.post("/application-builder", headers=HEADERS, json=payload).json()
     assert data["provider"] == "deterministic-grounded-v2"
+    assert data["fallback_reason"] == "no_api_key"
     assert len(data["paragraphs"]) == 1
     assert data["paragraphs"][0]["requirement_indices"] == list(range(6))
     assert data["word_count"] <= 500
     assert all(item["status"] == "covered" for item in data["coverage"])
 
 
-def test_oversized_semantic_draft_falls_back_to_budgeted_grounded_version(monkeypatch):
+def test_oversized_semantic_draft_falls_back_with_reason(monkeypatch):
     card = evidence_card()
     oversized = {"text": " ".join(["grounded"] * 700), "requirement_indices": [0], "evidence_ids": [card.id], "supporting_facts": [], "grounding_status": "grounded"}
-    monkeypatch.setattr("routes.application_builder.semantic_application_draft", lambda *args, **kwargs: [oversized])
+    monkeypatch.setattr("routes.application_builder.semantic_application_draft", lambda *args, **kwargs: ([oversized], "ok"))
     payload = {
         "job": {"title": "Operations Officer"},
         "word_limit": 500,
@@ -145,12 +147,34 @@ def test_oversized_semantic_draft_falls_back_to_budgeted_grounded_version(monkey
     }
     data = client.post("/application-builder", headers=HEADERS, json=payload).json()
     assert data["provider"] == "deterministic-grounded-v2"
+    assert data["fallback_reason"] == "semantic_over_word_limit"
     assert data["word_count"] <= 500
     assert not any("above the requested" in warning for warning in data["warnings"])
 
 
+def test_successful_semantic_draft_has_no_fallback_reason(monkeypatch):
+    card = evidence_card()
+    paragraph = {
+        "text": "I assessed the available options and made a recommendation.",
+        "requirement_indices": [0],
+        "evidence_ids": [card.id],
+        "supporting_facts": [{"evidence_id": card.id, "field": "task", "text": card.task}],
+        "grounding_status": "grounded",
+    }
+    monkeypatch.setattr("routes.application_builder.semantic_application_draft", lambda *args, **kwargs: ([paragraph], "ok"))
+    payload = {
+        "job": {"title": "Operations Officer"},
+        "word_limit": 500,
+        "requirements": [{"text": "Make evidence-based recommendations", "category": "essential", "match_strength": "strong", "evidence_ids": [card.id]}],
+        "evidence_cards": [card.model_dump()],
+    }
+    data = client.post("/application-builder", headers=HEADERS, json=payload).json()
+    assert data["provider"] == "openai-grounded-v1"
+    assert data["fallback_reason"] is None
+
+
 def test_builder_does_not_generate_when_no_supported_evidence(monkeypatch):
-    monkeypatch.setattr("routes.application_builder.semantic_application_draft", lambda *args, **kwargs: None)
+    monkeypatch.setattr("routes.application_builder.semantic_application_draft", lambda *args, **kwargs: (None, "no_supported_requirements"))
     payload = {
         "job": {"title": "Operations Officer"},
         "requirements": [{"text": "Advanced stakeholder negotiation", "category": "essential", "match_strength": "missing", "evidence_ids": []}],

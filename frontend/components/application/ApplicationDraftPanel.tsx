@@ -139,7 +139,10 @@ export default function ApplicationDraftPanel({ session, analysis, evidence }: P
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h3 className="font-semibold text-gray-900">Editable draft</h3>
-                <p className="text-xs text-gray-500">Provider: {result.provider}</p>
+                <p className="text-xs text-gray-500">
+                  Provider: {result.provider}
+                  {result.fallback_reason ? ` · fallback: ${result.fallback_reason}` : ''}
+                </p>
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-sm text-gray-600">{liveWordCount} / {wordLimit} words</span>
