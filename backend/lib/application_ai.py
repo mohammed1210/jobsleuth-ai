@@ -67,6 +67,47 @@ def _hydrate_supporting_facts(raw: Any, fact_lookup: dict[str, dict[str, str]]) 
     return hydrated
 
 
+def _response_payload(response: Any) -> tuple[dict[str, Any] | None, str]:
+    """Extract JSON from a Responses API result without assuming output_text is complete."""
+    status = str(getattr(response, "status", "") or "")
+    if status == "incomplete":
+        details = getattr(response, "incomplete_details", None)
+        reason = str(getattr(details, "reason", "unknown") or "unknown")
+        return None, f"openai_incomplete_{reason}"
+
+    candidates: list[str] = []
+    output_text = getattr(response, "output_text", None)
+    if isinstance(output_text, str) and output_text.strip():
+        candidates.append(output_text.strip())
+
+    for item in getattr(response, "output", []) or []:
+        for part in getattr(item, "content", []) or []:
+            parsed = getattr(part, "parsed", None)
+            if isinstance(parsed, dict):
+                return parsed, "ok"
+            text = getattr(part, "text", None)
+            if isinstance(text, str) and text.strip() and text.strip() not in candidates:
+                candidates.append(text.strip())
+            refusal = getattr(part, "refusal", None)
+            if refusal:
+                return None, "openai_refusal"
+
+    for candidate in candidates:
+        cleaned = candidate.strip()
+        if cleaned.startswith("```json") and cleaned.endswith("```"):
+            cleaned = cleaned[7:-3].strip()
+        elif cleaned.startswith("```") and cleaned.endswith("```"):
+            cleaned = cleaned[3:-3].strip()
+        try:
+            payload = json.loads(cleaned)
+        except (TypeError, json.JSONDecodeError):
+            continue
+        if isinstance(payload, dict):
+            return payload, "ok"
+
+    return None, "structured_output_parse"
+
+
 def semantic_application_draft(
     requirements: list[Any],
     cards_by_id: dict[str, Any],
@@ -146,13 +187,14 @@ def semantic_application_draft(
                 },
                 "verbosity": "low",
             },
-            max_output_tokens=2200,
+            reasoning={"effort": "low"},
+            max_output_tokens=4000,
+            store=False,
         )
-        try:
-            payload = json.loads(response.output_text or "{}")
-        except (TypeError, json.JSONDecodeError):
-            logger.warning("Semantic application drafting structured output parse failed")
-            return None, "structured_output_parse"
+        payload, payload_status = _response_payload(response)
+        if payload is None:
+            logger.warning("Semantic application drafting response parse failed: %s", payload_status)
+            return None, payload_status
 
         raw_paragraphs = payload.get("paragraphs", []) if isinstance(payload, dict) else []
         if not raw_paragraphs:
