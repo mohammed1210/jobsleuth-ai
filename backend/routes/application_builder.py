@@ -77,7 +77,7 @@ async def build_application(
     cards_by_id = {card.id: card for card in request.evidence_cards if card.id}
     body_budget = _body_budget(request.word_limit, role_title, organisation)
 
-    paragraphs = semantic_application_draft(
+    paragraphs, semantic_status = semantic_application_draft(
         request.requirements,
         cards_by_id,
         role_title,
@@ -86,12 +86,14 @@ async def build_application(
         request.word_limit,
     )
     provider = "openai-grounded-v1" if paragraphs else "deterministic-grounded-v2"
+    fallback_reason: str | None = None if paragraphs else semantic_status
 
-    # Treat the requested word limit as a hard composition constraint. If a semantic
-    # draft exceeds it, prefer a compact deterministic grounded draft rather than
-    # returning prose the candidate cannot submit.
     semantic_draft = _compose_draft(paragraphs or [], role_title, organisation)
-    if not paragraphs or len(semantic_draft.split()) > request.word_limit:
+    if paragraphs and len(semantic_draft.split()) > request.word_limit:
+        fallback_reason = "semantic_over_word_limit"
+        paragraphs = None
+
+    if not paragraphs:
         paragraphs = deterministic_draft(
             request.requirements,
             cards_by_id,
@@ -119,6 +121,7 @@ async def build_application(
         "ok": True,
         "can_generate": bool(paragraphs),
         "provider": provider,
+        "fallback_reason": fallback_reason,
         "application_type": request.application_type,
         "word_limit": request.word_limit,
         "word_count": total_words,
