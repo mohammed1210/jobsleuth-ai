@@ -1,5 +1,6 @@
 import type { Session } from '@supabase/supabase-js';
-import { apiFetch } from '@/lib/applyApi';
+
+import { apiError, getBackendUrl } from '@/lib/backendConfig';
 
 export type PaymentSignal = 'yes' | 'maybe' | 'no';
 
@@ -17,8 +18,14 @@ export type PilotFeedbackPayload = {
 };
 
 export async function savePilotFeedback(session: Session, payload: PilotFeedbackPayload) {
-  return apiFetch('/pilot-feedback', session, {
+  const response = await fetch(`${getBackendUrl()}/pilot-feedback`, {
     method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify(payload),
   });
+  if (!response.ok) throw await apiError(response, 'Could not save pilot feedback');
+  return response.json();
 }
