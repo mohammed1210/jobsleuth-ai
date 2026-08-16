@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from collections import Counter
 import json
 import logging
 from typing import Any
 
 from lib.application_draft import supported_requirement
-from lib.application_grounding import card_facts, validate_ai_paragraph
+from lib.application_grounding import card_facts, validate_ai_paragraph_detailed
 from lib.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -166,7 +167,10 @@ def semantic_application_draft(
                 "Do not claim unsupported, weak or missing requirements are met. Omit them. "
                 "Avoid repeating the same incident separately for overlapping criteria. "
                 "For every paragraph, cite only supporting_fact_ids supplied in the Evidence Card data. "
-                "Use enough cited facts to support any numbers and authority wording used in the paragraph. "
+                "EVERY paragraph must cite at least one supporting fact whose field is actions, task, or authority_context; context/title/outcome alone is not sufficient. "
+                "If a paragraph contains any number, date, percentage, duration, quantity or other numeric claim, cite the exact fact containing that number. "
+                "If a paragraph describes ownership, approval, leadership, management, supervision or decision authority, cite the exact authority_context or action fact that supports that wording. "
+                "Use enough cited facts to support the actual claims in the paragraph, not merely the general topic. "
                 "Use natural UK English and professional prose. Avoid generic filler and do not mention AI or JobSleuth."
             ),
             input=json.dumps({
@@ -201,26 +205,36 @@ def semantic_application_draft(
             return None, "empty_model_output"
 
         validated: list[dict[str, Any]] = []
+        rejection_reasons: Counter[str] = Counter()
         for raw in raw_paragraphs[:8]:
             hydrated = _hydrate_supporting_facts(raw, fact_lookup)
             if hydrated is None:
+                rejection_reasons["invalid_fact_ids"] += 1
                 continue
-            paragraph = validate_ai_paragraph(hydrated, cards_by_id, len(requirements))
+            paragraph, reason = validate_ai_paragraph_detailed(hydrated, cards_by_id, len(requirements))
             if paragraph is None:
+                rejection_reasons[reason] += 1
                 continue
             indices = paragraph["requirement_indices"]
             if any(index not in supported_indices for index in indices):
+                rejection_reasons["unsupported_requirement"] += 1
                 continue
             allowed_ids: set[str] = set()
             for index in indices:
                 allowed_ids.update(allowed_by_requirement.get(index, set()))
             if any(evidence_id not in allowed_ids for evidence_id in paragraph["evidence_ids"]):
+                rejection_reasons["evidence_requirement_mismatch"] += 1
                 continue
             validated.append(paragraph)
 
         if not validated:
-            logger.warning("Semantic application drafting returned no grounded paragraphs")
-            return None, "no_validated_paragraphs"
+            dominant_reason = rejection_reasons.most_common(1)[0][0] if rejection_reasons else "unknown"
+            logger.warning(
+                "Semantic application drafting returned no grounded paragraphs; dominant rejection=%s counts=%s",
+                dominant_reason,
+                dict(rejection_reasons),
+            )
+            return None, f"no_validated_paragraphs_{dominant_reason}"
         return validated, "ok"
     except Exception as exc:
         error_name = type(exc).__name__
