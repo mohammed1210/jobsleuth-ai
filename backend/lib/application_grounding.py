@@ -74,19 +74,18 @@ def _authority_claims_supported(paragraph: str, facts: list[dict[str, str]]) -> 
     return True
 
 
-def validate_ai_paragraph(raw: Any, cards_by_id: dict[str, Any], requirement_count: int) -> dict[str, Any] | None:
-    """Validate one generated paragraph against exact Evidence Card facts.
-
-    A paragraph is rejected if its evidence references are invalid, if it has no
-    grounded action/responsibility fact, if it invents numeric claims, or if it
-    upgrades authority beyond the supporting facts.
-    """
+def validate_ai_paragraph_detailed(
+    raw: Any,
+    cards_by_id: dict[str, Any],
+    requirement_count: int,
+) -> tuple[dict[str, Any] | None, str]:
+    """Validate one generated paragraph and return a non-sensitive rejection reason."""
 
     if not isinstance(raw, dict):
-        return None
+        return None, "invalid_shape"
     text = str(raw.get("text", "")).strip()
     if not text:
-        return None
+        return None, "empty_text"
 
     requirement_indices: list[int] = []
     for value in raw.get("requirement_indices", []):
@@ -97,12 +96,12 @@ def validate_ai_paragraph(raw: Any, cards_by_id: dict[str, Any], requirement_cou
         if 0 <= index < requirement_count and index not in requirement_indices:
             requirement_indices.append(index)
     if not requirement_indices:
-        return None
+        return None, "invalid_requirement_indices"
 
     evidence_ids = [str(value).strip() for value in raw.get("evidence_ids", []) if str(value).strip()]
     evidence_ids = list(dict.fromkeys(evidence_ids))
     if not evidence_ids or any(evidence_id not in cards_by_id for evidence_id in evidence_ids):
-        return None
+        return None, "invalid_evidence_ids"
 
     facts: list[dict[str, str]] = []
     action_fact_found = False
@@ -121,14 +120,16 @@ def validate_ai_paragraph(raw: Any, cards_by_id: dict[str, Any], requirement_cou
         if fact["field"] in _ACTION_FIELDS:
             action_fact_found = True
 
-    if not facts or not action_fact_found:
-        return None
+    if not facts:
+        return None, "no_grounded_facts"
+    if not action_fact_found:
+        return None, "missing_action_fact"
 
     source_text = " ".join(fact["text"] for fact in facts)
     if _numbers(text) - _numbers(source_text):
-        return None
+        return None, "unsupported_number"
     if not _authority_claims_supported(text, facts):
-        return None
+        return None, "authority_upgrade"
 
     return {
         "text": text[:5000],
@@ -136,4 +137,10 @@ def validate_ai_paragraph(raw: Any, cards_by_id: dict[str, Any], requirement_cou
         "evidence_ids": evidence_ids[:5],
         "supporting_facts": facts[:8],
         "grounding_status": "grounded",
-    }
+    }, "ok"
+
+
+def validate_ai_paragraph(raw: Any, cards_by_id: dict[str, Any], requirement_count: int) -> dict[str, Any] | None:
+    """Validate one generated paragraph against exact Evidence Card facts."""
+    paragraph, _ = validate_ai_paragraph_detailed(raw, cards_by_id, requirement_count)
+    return paragraph
