@@ -9,7 +9,7 @@ import HeaderClient from '@/components/HeaderClient';
 import ExtractionAudit from '@/components/vacancy/ExtractionAudit';
 import RequirementMatchCard from '@/components/vacancy/RequirementMatchCard';
 import { analyseVacancy, fetchEvidence, type EvidenceCard, type Requirement, type VacancyAnalysis } from '@/lib/applyApi';
-import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { getFreshSession, getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { extractVacancyIntelligence, type IntelligenceItem } from '@/lib/vacancyIntelligenceApi';
 import { parseVacancyText } from '@/lib/vacancyParser';
 
@@ -33,26 +33,49 @@ export default function VacancyApplyPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const run = async () => {
-      if (!isSupabaseConfigured()) {
-        setMessage('Supabase is not configured yet.');
-        setLoading(false);
-        return;
-      }
-      const supabase = getSupabaseClient();
-      const { data } = await supabase.auth.getSession();
-      setSession(data.session);
-      if (data.session) {
+    if (!isSupabaseConfigured()) {
+      setMessage('Supabase is not configured yet.');
+      setLoading(false);
+      return;
+    }
+
+    const supabase = getSupabaseClient();
+    let active = true;
+
+    const load = async () => {
+      const current = await getFreshSession();
+      if (!active) return;
+      setSession(current);
+      if (current) {
         try {
-          setEvidence(await fetchEvidence(data.session));
+          setEvidence(await fetchEvidence(current));
         } catch (error) {
           setMessage(error instanceof Error ? error.message : 'Could not load your Evidence Bank.');
         }
       }
       setLoading(false);
     };
-    run();
+
+    void load();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!active) return;
+      setSession(nextSession);
+      if (!nextSession) setAnalysis(null);
+    });
+
+    return () => {
+      active = false;
+      authListener.subscription.unsubscribe();
+    };
   }, []);
+
+  const currentSession = async () => {
+    const fresh = await getFreshSession();
+    setSession(fresh);
+    if (!fresh) setMessage('Your session has expired. Sign in again to continue.');
+    return fresh;
+  };
 
   const applyRequirements = (items: IntelligenceItem[]) => {
     const list = (category: Requirement['category']) => items
@@ -91,7 +114,8 @@ export default function VacancyApplyPage() {
   };
 
   const extract = async () => {
-    if (!session) return;
+    const activeSession = await currentSession();
+    if (!activeSession) return;
     if (vacancyText.trim().length < 40) {
       setMessage('Paste more of the vacancy advert before extracting.');
       return;
@@ -101,7 +125,7 @@ export default function VacancyApplyPage() {
     setAnalysis(null);
     setMessage(null);
     try {
-      const result = await extractVacancyIntelligence(session, vacancyText);
+      const result = await extractVacancyIntelligence(activeSession, vacancyText);
       const items = [...result.eligibility, ...result.requirements, ...result.practical];
       applyRequirements(items);
       setExtractedItems(items);
@@ -117,10 +141,9 @@ export default function VacancyApplyPage() {
   };
 
   const analyse = async () => {
-    if (!session) {
-      setMessage('Your session is no longer available. Sign in again before analysing.');
-      return;
-    }
+    const activeSession = await currentSession();
+    if (!activeSession) return;
+
     const requirements: Requirement[] = [
       ...lines(essential).map((text) => ({ text, category: 'essential' as const })),
       ...lines(desirable).map((text) => ({ text, category: 'desirable' as const })),
@@ -135,7 +158,7 @@ export default function VacancyApplyPage() {
     setAnalysis(null);
     setMessage('Analysing your evidence against the vacancy…');
     try {
-      const result = await analyseVacancy(session, requirements, evidence, lines(practical));
+      const result = await analyseVacancy(activeSession, requirements, evidence, lines(practical));
       setAnalysis(result);
       setMessage(null);
     } catch (error) {
