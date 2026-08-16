@@ -44,25 +44,9 @@ class ApplicationBuilderRequest(BaseModel):
     evidence_cards: list[ApplicationEvidence] = Field(default_factory=list)
 
 
-def _opening(role_title: str, organisation: str) -> str:
-    destination = f" with {organisation}" if organisation else ""
-    return f"I am applying for {role_title}{destination} and have focused this statement on the experience most relevant to the role."
-
-
-def _closing() -> str:
-    return "I would welcome the opportunity to discuss this evidence and its relevance to the role further."
-
-
-def _compose_draft(paragraphs: list[dict[str, Any]], role_title: str, organisation: str) -> str:
-    if not paragraphs:
-        return ""
-    body = "\n\n".join(paragraph["text"] for paragraph in paragraphs)
-    return f"{_opening(role_title, organisation)}\n\n{body}\n\n{_closing()}"
-
-
-def _body_budget(word_limit: int, role_title: str, organisation: str) -> int:
-    framing_words = len((_opening(role_title, organisation) + " " + _closing()).split())
-    return max(30, word_limit - framing_words)
+def _compose_draft(paragraphs: list[dict[str, Any]]) -> str:
+    """Compose only evidence-bearing prose; avoid generic opening/closing filler."""
+    return "\n\n".join(paragraph["text"].strip() for paragraph in paragraphs if paragraph.get("text", "").strip())
 
 
 @router.post("")
@@ -75,7 +59,6 @@ async def build_application(
     role_title = str(request.job.get("title", "the role") or "the role").strip()[:300]
     organisation = str(request.job.get("organisation", request.job.get("company", "")) or "").strip()[:300]
     cards_by_id = {card.id: card for card in request.evidence_cards if card.id}
-    body_budget = _body_budget(request.word_limit, role_title, organisation)
 
     paragraphs, semantic_status = semantic_application_draft(
         request.requirements,
@@ -88,7 +71,7 @@ async def build_application(
     provider = "openai-grounded-v1" if paragraphs else "deterministic-grounded-v2"
     fallback_reason: str | None = None if paragraphs else semantic_status
 
-    semantic_draft = _compose_draft(paragraphs or [], role_title, organisation)
+    semantic_draft = _compose_draft(paragraphs or [])
     if paragraphs and len(semantic_draft.split()) > request.word_limit:
         fallback_reason = "semantic_over_word_limit"
         paragraphs = None
@@ -98,12 +81,12 @@ async def build_application(
             request.requirements,
             cards_by_id,
             role_title,
-            word_limit=body_budget,
+            word_limit=request.word_limit,
         )
         provider = "deterministic-grounded-v2"
 
     requirement_coverage = coverage(request.requirements, paragraphs)
-    draft = _compose_draft(paragraphs, role_title, organisation)
+    draft = _compose_draft(paragraphs)
     total_words = len(draft.split()) if draft else 0
 
     warnings: list[str] = []
