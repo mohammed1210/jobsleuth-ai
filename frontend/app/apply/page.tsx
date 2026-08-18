@@ -48,7 +48,7 @@ export default function ApplyPage() {
         <main className="max-w-3xl mx-auto px-6 py-12">
           <div className="card p-10 text-center">
             <h1 className="text-3xl font-bold text-gray-900 mb-3">Sign in required</h1>
-            <Link href="/magic-login" className="btn-primary inline-flex">Sign in</Link>
+            <Link href="/login" className="btn-primary inline-flex">Sign in</Link>
           </div>
         </main>
       </div>
