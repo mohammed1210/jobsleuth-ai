@@ -46,43 +46,22 @@ export default function HeaderClient() {
             <div className="w-8 h-8 rounded-lg bg-gradient-ai flex items-center justify-center shadow-glow transition-transform group-hover:scale-110">
               <span className="text-white font-bold text-lg">JS</span>
             </div>
-            <span className="text-xl font-bold bg-gradient-ai bg-clip-text text-transparent">
-              JobSleuth
-            </span>
-            <span className="text-xs px-2 py-0.5 bg-gradient-ai text-white rounded-full font-medium shadow-sm">
-              AI
-            </span>
+            <span className="text-xl font-bold bg-gradient-ai bg-clip-text text-transparent">JobSleuth</span>
+            <span className="text-xs px-2 py-0.5 bg-gradient-ai text-white rounded-full font-medium shadow-sm">AI</span>
           </Link>
           <div className="hidden lg:flex items-center space-x-5">
             {navItems.map((item) => (
-              <Link key={item.href} href={item.href} className="text-gray-700 hover:text-brand-600 font-medium transition-colors">
-                {item.label}
-              </Link>
+              <Link key={item.href} href={item.href} className="text-gray-700 hover:text-brand-600 font-medium transition-colors">{item.label}</Link>
             ))}
           </div>
         </div>
         <div className="flex items-center space-x-4">
           {signedIn ? (
-            <button
-              onClick={handleSignOut}
-              className="text-gray-600 hover:text-gray-900 font-medium transition-colors"
-            >
-              Sign out
-            </button>
+            <button onClick={handleSignOut} className="text-gray-600 hover:text-gray-900 font-medium transition-colors">Sign out</button>
           ) : (
             <>
-              <Link
-                href="/magic-login"
-                className="text-gray-700 hover:text-brand-600 font-medium transition-colors"
-              >
-                Sign in
-              </Link>
-              <Link
-                href="/pricing"
-                className="hidden sm:inline-flex px-4 py-2 bg-gradient-ai text-white rounded-lg font-semibold shadow-sm hover:shadow-ai transition-all duration-200 hover:-translate-y-0.5"
-              >
-                Get Started
-              </Link>
+              <Link href="/login" className="text-gray-700 hover:text-brand-600 font-medium transition-colors">Sign in</Link>
+              <Link href="/pricing" className="hidden sm:inline-flex px-4 py-2 bg-gradient-ai text-white rounded-lg font-semibold shadow-sm hover:shadow-ai transition-all duration-200 hover:-translate-y-0.5">Get Started</Link>
             </>
           )}
         </div>
