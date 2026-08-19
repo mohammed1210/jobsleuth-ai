@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Literal
 
 from fastapi import APIRouter, Header
@@ -30,6 +31,46 @@ def _group(items: list[dict[str, Any]], category: str) -> list[dict[str, Any]]:
     return [item for item in items if item.get("category") == category]
 
 
+def _normalise(value: str) -> str:
+    return re.sub(r"\W+", " ", value.lower()).strip()
+
+
+def _same_requirement(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    if left.get("category") != right.get("category"):
+        return False
+    left_text = _normalise(str(left.get("text", "")))
+    right_text = _normalise(str(right.get("text", "")))
+    if not left_text or not right_text:
+        return False
+    return left_text == right_text or left_text in right_text or right_text in left_text
+
+
+def _reconcile_items(
+    semantic_items: list[dict[str, Any]] | None,
+    deterministic_items: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], str]:
+    """Prefer semantic extraction, then supplement clearly grounded omissions.
+
+    Semantic extraction is useful for interpreting prose-heavy adverts, while the
+    deterministic extractor is intentionally conservative and strong at explicit
+    sectioned criteria. Using both prevents a model from silently dropping most of
+    an Essential/Desirable/Training section while retaining source grounding.
+    """
+
+    if not semantic_items:
+        return deterministic_items, "deterministic-v2"
+
+    merged = list(semantic_items)
+    supplemented = False
+    for candidate in deterministic_items:
+        if any(_same_requirement(candidate, existing) for existing in merged):
+            continue
+        merged.append(candidate)
+        supplemented = True
+
+    return merged[:40], "hybrid-grounded-v3" if supplemented else "openai-grounded-v3"
+
+
 @router.post("")
 async def vacancy_intelligence(
     request: VacancyIntelligenceRequest,
@@ -37,11 +78,9 @@ async def vacancy_intelligence(
 ) -> dict[str, Any]:
     await verify_supabase_user(authorization)
 
-    items = semantic_extract(request.vacancy_text)
-    provider = "openai-grounded-v2"
-    if not items:
-        items = deterministic_extract(request.vacancy_text)
-        provider = "deterministic-v2"
+    semantic_items = semantic_extract(request.vacancy_text)
+    deterministic_items = deterministic_extract(request.vacancy_text)
+    items, provider = _reconcile_items(semantic_items, deterministic_items)
 
     typed_items = [ExtractedItem(**item).model_dump() for item in items]
     requirements = [item for item in typed_items if item["category"] in {"essential", "desirable", "trainable"}]
