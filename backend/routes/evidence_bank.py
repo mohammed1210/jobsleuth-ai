@@ -55,6 +55,77 @@ class EvidenceResponse(EvidenceBase):
     updated_at: datetime | str | None = None
 
 
+_VACANCY_MARKERS = (
+    "role summary",
+    "job summary",
+    "essential criteria",
+    "essential requirements",
+    "desirable criteria",
+    "trainable requirements",
+    "practical requirements",
+    "eligibility",
+    "successful candidate",
+    "successful applicant",
+    "applicants must",
+    "we are looking for",
+    "application closing date",
+    "salary minimum",
+    "salary maximum",
+)
+
+
+def _combined_evidence_text(payload: dict[str, Any]) -> str:
+    values: list[str] = []
+    for key in ("title", "situation", "task", "outcome", "reflection", "authority_context"):
+        value = payload.get(key)
+        if value:
+            values.append(str(value))
+    values.extend(str(item) for item in (payload.get("actions") or []) if item)
+    return "\n".join(values).lower()
+
+
+def _looks_like_vacancy_text(payload: dict[str, Any]) -> bool:
+    """Detect obvious job adverts accidentally pasted into the Evidence Bank.
+
+    This is intentionally conservative: one phrase such as "successful candidate"
+    is not enough. Multiple advert-section/candidate markers must be present before
+    the save is rejected.
+    """
+
+    text = _combined_evidence_text(payload)
+    matches = {marker for marker in _VACANCY_MARKERS if marker in text}
+    section_markers = {
+        "role summary",
+        "job summary",
+        "essential criteria",
+        "essential requirements",
+        "desirable criteria",
+        "trainable requirements",
+        "practical requirements",
+        "eligibility",
+    }
+    candidate_markers = {
+        "successful candidate",
+        "successful applicant",
+        "applicants must",
+        "we are looking for",
+    }
+    return len(matches) >= 3 or (
+        len(matches & section_markers) >= 2 and bool(matches & candidate_markers)
+    )
+
+
+def _reject_vacancy_contamination(payload: dict[str, Any]) -> None:
+    if _looks_like_vacancy_text(payload):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "This looks like a vacancy advert, not personal evidence. Paste job adverts into "
+                "JobSleuth Apply and keep the Evidence Bank for examples from your own experience."
+            ),
+        )
+
+
 def _db() -> Any:
     return get_supabase_client()
 
@@ -85,6 +156,7 @@ async def create_evidence(
 ) -> EvidenceResponse:
     user = await verify_supabase_user(authorization)
     payload = request.model_dump()
+    _reject_vacancy_contamination(payload)
     payload["user_id"] = user["id"]
     result = _db().table("evidence_cards").insert(payload).execute()
     row = _require_persistence(result, action="create")[0]
@@ -101,6 +173,21 @@ async def update_evidence(
     payload = request.model_dump(exclude_unset=True)
     if not payload:
         raise HTTPException(status_code=400, detail="No evidence fields supplied")
+
+    current_result = (
+        _db()
+        .table("evidence_cards")
+        .select("*")
+        .eq("id", evidence_id)
+        .eq("user_id", user["id"])
+        .execute()
+    )
+    current_rows = getattr(current_result, "data", None) or []
+    if not current_rows:
+        raise HTTPException(status_code=404, detail="Evidence card not found")
+    combined = {**current_rows[0], **payload}
+    _reject_vacancy_contamination(combined)
+
     payload["updated_at"] = datetime.now(timezone.utc).isoformat()
     result = (
         _db()
