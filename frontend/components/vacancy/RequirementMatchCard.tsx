@@ -16,9 +16,16 @@ const strengthClass: Record<RequirementAnalysis['match_strength'], string> = {
   trainable: 'bg-blue-50 text-blue-800 border-blue-200',
 };
 
+function normaliseGaps(value: RequirementAnalysis['gaps'] | string | null | undefined): string[] {
+  if (Array.isArray(value)) return value.filter((gap): gap is string => typeof gap === 'string' && gap.trim().length > 0);
+  if (typeof value === 'string' && value.trim()) return [value.trim()];
+  return [];
+}
+
 export default function RequirementMatchCard({ item }: { item: RequirementAnalysis }) {
   const top = item.evidence[0];
   const confidence = Math.round((item.confidence ?? 0) * 100);
+  const gaps = normaliseGaps(item.gaps);
 
   return (
     <article className="rounded-xl border p-5 space-y-4">
@@ -66,11 +73,11 @@ export default function RequirementMatchCard({ item }: { item: RequirementAnalys
         </div>
       )}
 
-      {item.gaps.length > 0 && (
+      {gaps.length > 0 && (
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">What is still missing</p>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-700">
-            {item.gaps.map((gap) => <li key={gap}>{gap}</li>)}
+            {gaps.map((gap, index) => <li key={`${gap}-${index}`}>{gap}</li>)}
           </ul>
         </div>
       )}
