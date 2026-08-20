@@ -36,6 +36,11 @@ _OUTPUT_SCHEMA = {
 }
 
 
+def _word_target(word_limit: int) -> tuple[int, int]:
+    """Return a useful target band without forcing filler when evidence is thin."""
+    return max(120, int(word_limit * 0.85)), max(140, int(word_limit * 0.95))
+
+
 def _fact_catalog(cards_by_id: dict[str, Any], evidence_ids: set[str]) -> tuple[list[dict[str, Any]], dict[str, dict[str, str]]]:
     cards: list[dict[str, Any]] = []
     lookup: dict[str, dict[str, str]] = {}
@@ -147,10 +152,11 @@ def semantic_application_draft(
         return None, "no_supported_requirements"
 
     cards, fact_lookup = _fact_catalog(cards_by_id, used_card_ids)
+    target_min, target_max = _word_target(word_limit)
     style_instruction = (
-        "Write a concise UK public-sector statement of suitability in first person. Combine overlapping criteria supported by the same evidence into coherent paragraphs."
+        "Write a UK public-sector statement of suitability in first person. Combine overlapping criteria supported by the same evidence into coherent paragraphs. Prioritise essential criteria and use decision rationale, actions, outcomes and reflection to add useful depth rather than repeating criteria."
         if application_type == "statement_of_suitability"
-        else "Write concise first-person responses addressing supported criteria without repetition."
+        else "Write first-person responses addressing supported criteria without repetition. Prioritise essential criteria and use grounded actions, outcomes and reflection to add useful depth."
     )
 
     try:
@@ -166,6 +172,10 @@ def semantic_application_draft(
                 "Preserve authority distinctions exactly: a recommendation must not become a decision or approval. "
                 "Do not claim unsupported, weak or missing requirements are met. Omit them. "
                 "Avoid repeating the same incident separately for overlapping criteria. "
+                f"When the supplied evidence contains enough useful detail, aim for approximately {target_min}-{target_max} words in total, while never exceeding the {word_limit}-word limit. "
+                "Treat that range as a quality target, not permission to add filler: if the evidence cannot genuinely support that length, write a shorter answer. "
+                "Spend the word budget on concrete actions, decision rationale, trade-offs, stakeholder handling, outcomes and reflection that are directly supported by cited facts. "
+                "Prioritise supported essential criteria before desirable criteria. Do not waste words restating vacancy criteria. "
                 "For every paragraph, cite only supporting_fact_ids supplied in the Evidence Card data. "
                 "EVERY paragraph must cite at least one supporting fact whose field is actions, task, or authority_context; context/title/outcome alone is not sufficient. "
                 "If a paragraph contains any number, date, percentage, duration, quantity or other numeric claim, cite the exact fact containing that number. "
@@ -178,6 +188,7 @@ def semantic_application_draft(
                 "organisation": organisation[:300],
                 "application_type": application_type,
                 "word_limit": word_limit,
+                "target_word_range": {"minimum": target_min, "maximum": target_max},
                 "style": style_instruction,
                 "requirements": payload_requirements,
                 "evidence_cards": cards,
@@ -189,10 +200,10 @@ def semantic_application_draft(
                     "strict": True,
                     "schema": _OUTPUT_SCHEMA,
                 },
-                "verbosity": "low",
+                "verbosity": "medium",
             },
             reasoning={"effort": "low"},
-            max_output_tokens=4000,
+            max_output_tokens=5000,
             store=False,
         )
         payload, payload_status = _response_payload(response)

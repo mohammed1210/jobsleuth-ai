@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from backend.lib.application_ai import _fact_catalog, _hydrate_supporting_facts
+from backend.lib.application_ai import _fact_catalog, _hydrate_supporting_facts, _word_target
 from backend.lib.application_draft import deterministic_draft
 from backend.lib.application_grounding import validate_ai_paragraph
 from backend.main import app
@@ -22,6 +22,11 @@ def evidence_card() -> ApplicationEvidence:
         outcome="The recommendation was accepted and the work was completed safely.",
         authority_context="I made the recommendation; final approval remained with the senior manager.",
     )
+
+
+def test_word_target_uses_most_of_requested_budget_without_requiring_full_limit():
+    assert _word_target(500) == (425, 475)
+    assert _word_target(200) == (170, 190)
 
 
 def test_application_builder_requires_authentication():
@@ -171,6 +176,7 @@ def test_successful_semantic_draft_has_no_fallback_reason(monkeypatch):
     data = client.post("/application-builder", headers=HEADERS, json=payload).json()
     assert data["provider"] == "openai-grounded-v1"
     assert data["fallback_reason"] is None
+    assert any("uses only" in warning for warning in data["warnings"])
 
 
 def test_builder_does_not_generate_when_no_supported_evidence(monkeypatch):
