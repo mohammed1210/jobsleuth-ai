@@ -1,13 +1,15 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import type { Session } from '@supabase/supabase-js';
 
 import type { EvidenceCard, VacancyAnalysis } from '@/lib/applyApi';
 import { buildApplication, type ApplicationDraftResult, type ApplicationType } from '@/lib/applicationBuilderApi';
+import { detectApplicationInstructions } from '@/lib/applicationInstructions';
 import { savePilotFeedback, type PaymentSignal } from '@/lib/pilotFeedbackApi';
 
-type Props = { session: Session; analysis: VacancyAnalysis; evidence: EvidenceCard[] };
+type Props = { session: Session; analysis: VacancyAnalysis; evidence: EvidenceCard[]; vacancyText: string };
 
 const statusLabel: Record<string, string> = {
   covered: 'Covered',
@@ -16,11 +18,13 @@ const statusLabel: Record<string, string> = {
   'not-used': 'Not used',
 };
 
-export default function ApplicationDraftPanel({ session, analysis, evidence }: Props) {
+export default function ApplicationDraftPanel({ session, analysis, evidence, vacancyText }: Props) {
+  const instructions = useMemo(() => detectApplicationInstructions(vacancyText), [vacancyText]);
   const [roleTitle, setRoleTitle] = useState('');
   const [organisation, setOrganisation] = useState('');
   const [applicationType, setApplicationType] = useState<ApplicationType>('statement_of_suitability');
-  const [wordLimit, setWordLimit] = useState(500);
+  const [wordLimitInput, setWordLimitInput] = useState('500');
+  const [draftAnyway, setDraftAnyway] = useState(false);
   const [result, setResult] = useState<ApplicationDraftResult | null>(null);
   const [draft, setDraft] = useState('');
   const [building, setBuilding] = useState(false);
@@ -34,9 +38,45 @@ export default function ApplicationDraftPanel({ session, analysis, evidence }: P
   const [feedbackSaved, setFeedbackSaved] = useState(false);
   const [savingFeedback, setSavingFeedback] = useState(false);
 
+  useEffect(() => {
+    setRoleTitle(instructions.roleTitle);
+    setOrganisation(instructions.organisation);
+    setApplicationType(instructions.applicationType);
+    if (instructions.wordLimit) setWordLimitInput(String(instructions.wordLimit));
+    setDraftAnyway(false);
+    setResult(null);
+    setDraft('');
+  }, [instructions]);
+
+  const wordLimit = useMemo(() => {
+    const parsed = Number(wordLimitInput);
+    if (!Number.isFinite(parsed)) return 500;
+    return Math.min(5000, Math.max(100, Math.round(parsed)));
+  }, [wordLimitInput]);
+
   const liveWordCount = useMemo(() => draft.trim() ? draft.trim().split(/\s+/).length : 0, [draft]);
 
+  const readiness = useMemo(() => {
+    const essential = analysis.requirements.filter((item) => item.category === 'essential');
+    const counts = { strong: 0, partial: 0, weak: 0, missing: 0 };
+    for (const item of essential) {
+      if (item.match_strength === 'strong') counts.strong += 1;
+      if (item.match_strength === 'partial') counts.partial += 1;
+      if (item.match_strength === 'weak') counts.weak += 1;
+      if (item.match_strength === 'missing') counts.missing += 1;
+    }
+    return {
+      total: essential.length,
+      ...counts,
+      needsStrengthening: counts.partial + counts.weak + counts.missing > 0,
+    };
+  }, [analysis.requirements]);
+
   const build = async () => {
+    if (readiness.needsStrengthening && !draftAnyway) {
+      setMessage('Review the evidence-readiness warning first. Strengthen your Evidence Bank or explicitly choose to draft with current evidence.');
+      return;
+    }
     setBuilding(true); setMessage(null); setFeedbackSaved(false);
     try {
       const next = await buildApplication(session, { roleTitle, organisation, applicationType, wordLimit, requirements: analysis.requirements, evidenceCards: evidence });
@@ -84,14 +124,43 @@ export default function ApplicationDraftPanel({ session, analysis, evidence }: P
         <p className="mt-2 text-sm text-gray-600">JobSleuth uses only Strong or Partial matched Evidence Cards. Missing evidence stays visible rather than being invented.</p>
       </div>
 
+      <div className="rounded-2xl border bg-gray-50 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Detected application instructions</p>
+            <p className="mt-1 text-sm font-medium text-gray-900">{instructions.applicationTypeLabel}{instructions.wordLimit ? ` · maximum ${instructions.wordLimit} words` : ''}</p>
+          </div>
+          {instructions.requiredDocuments.length > 0 && <p className="text-sm text-gray-600">Required: {instructions.requiredDocuments.join(' + ')}</p>}
+        </div>
+        <p className="mt-2 text-xs text-gray-500">These are pre-filled from the vacancy and remain editable.</p>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2">
         <label className="text-sm font-medium text-gray-700">Role title<input value={roleTitle} onChange={(e) => setRoleTitle(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2" placeholder="e.g. Counter Fraud Officer" /></label>
         <label className="text-sm font-medium text-gray-700">Organisation<input value={organisation} onChange={(e) => setOrganisation(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2" placeholder="Optional" /></label>
-        <label className="text-sm font-medium text-gray-700">Application type<select value={applicationType} onChange={(e) => setApplicationType(e.target.value as ApplicationType)} className="mt-1 w-full rounded-xl border px-3 py-2"><option value="statement_of_suitability">Statement of suitability</option><option value="criteria_response">Essential criteria response</option></select></label>
-        <label className="text-sm font-medium text-gray-700">Word limit<input type="number" min={150} max={1500} value={wordLimit} onWheel={(e) => e.currentTarget.blur()} onChange={(e) => setWordLimit(Math.min(1500, Math.max(150, Number(e.target.value) || 500)))} className="mt-1 w-full rounded-xl border px-3 py-2" /></label>
+        <label className="text-sm font-medium text-gray-700">Application type<select value={applicationType} onChange={(e) => setApplicationType(e.target.value as ApplicationType)} className="mt-1 w-full rounded-xl border px-3 py-2"><option value="statement_of_suitability">Personal statement / statement of suitability</option><option value="criteria_response">Essential criteria response</option></select></label>
+        <label className="text-sm font-medium text-gray-700">Word limit<input inputMode="numeric" value={wordLimitInput} onChange={(e) => setWordLimitInput(e.target.value.replace(/[^0-9]/g, ''))} onBlur={() => setWordLimitInput(String(wordLimit))} className="mt-1 w-full rounded-xl border px-3 py-2" placeholder="e.g. 750" /></label>
       </div>
 
-      <button type="button" onClick={build} disabled={building} className="btn-primary disabled:opacity-60">{building ? 'Building evidence-backed draft…' : 'Build application draft'}</button>
+      {readiness.needsStrengthening ? (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 p-5">
+          <h3 className="font-semibold text-amber-950">Evidence needs strengthening before drafting</h3>
+          <p className="mt-2 text-sm text-amber-900">Of {readiness.total} essential criteria: {readiness.strong} Strong, {readiness.partial} Partial, {readiness.weak} Weak, {readiness.missing} Missing.</p>
+          <p className="mt-2 text-sm text-amber-900">A draft can only use evidence JobSleuth can support. Missing or weak criteria will stay uncovered rather than being invented.</p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Link href="/apply" className="btn-secondary">Strengthen Evidence Bank</Link>
+            {!draftAnyway ? (
+              <button type="button" onClick={() => setDraftAnyway(true)} className="btn-secondary">Draft with current evidence anyway</button>
+            ) : (
+              <span className="inline-flex items-center rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900">Current-evidence drafting enabled</span>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"><strong>Evidence ready to draft.</strong> All {readiness.total} essential criteria have Strong support.</div>
+      )}
+
+      <button type="button" onClick={build} disabled={building || (readiness.needsStrengthening && !draftAnyway)} className="btn-primary disabled:cursor-not-allowed disabled:opacity-50">{building ? 'Building evidence-backed draft…' : 'Build application draft'}</button>
       {message && <div className="rounded-xl border bg-white px-4 py-3 text-sm text-gray-700">{message}</div>}
 
       {result && (
