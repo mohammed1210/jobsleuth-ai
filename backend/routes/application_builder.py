@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Literal
 
 from fastapi import APIRouter, Header
@@ -12,6 +13,11 @@ from lib.application_draft import coverage, deterministic_draft
 from routes.saved_jobs import verify_supabase_user
 
 router = APIRouter(prefix="/application-builder", tags=["application_builder"])
+
+_META_VERBS = r"demonstrates|shows|illustrates|supports|underpins|evidences|addresses|highlights"
+_META_COMMENTARY_RE = re.compile(
+    rf"(?i)\(?\s*(?:this paragraph|this evidence|this example|the above)\s+(?:{_META_VERBS})\b[^.!?)]*(?:[.!?]\s*\)?|\))?"
+)
 
 
 class ApplicationRequirement(BaseModel):
@@ -44,6 +50,26 @@ class ApplicationBuilderRequest(BaseModel):
     evidence_cards: list[ApplicationEvidence] = Field(default_factory=list)
 
 
+def _clean_meta_commentary(text: str) -> str:
+    """Remove assessor-facing narration while preserving the candidate's evidence prose."""
+    cleaned = _META_COMMENTARY_RE.sub("", text)
+    cleaned = re.sub(r"\s+([,.;:!?])", r"\1", cleaned)
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    return cleaned.strip(" \t\n;,-")
+
+
+def _normalise_paragraphs(paragraphs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    normalised: list[dict[str, Any]] = []
+    for paragraph in paragraphs:
+        item = dict(paragraph)
+        text = _clean_meta_commentary(str(item.get("text", "")))
+        if not text:
+            continue
+        item["text"] = text
+        normalised.append(item)
+    return normalised
+
+
 def _compose_draft(paragraphs: list[dict[str, Any]]) -> str:
     """Compose only evidence-bearing prose; avoid generic opening/closing filler."""
     return "\n\n".join(paragraph["text"].strip() for paragraph in paragraphs if paragraph.get("text", "").strip())
@@ -68,6 +94,8 @@ async def build_application(
         request.application_type,
         request.word_limit,
     )
+    if paragraphs:
+        paragraphs = _normalise_paragraphs(paragraphs)
     provider = "openai-grounded-v1" if paragraphs else "deterministic-grounded-v2"
     fallback_reason: str | None = None if paragraphs else semantic_status
 
@@ -83,6 +111,7 @@ async def build_application(
             role_title,
             word_limit=request.word_limit,
         )
+        paragraphs = _normalise_paragraphs(paragraphs)
         provider = "deterministic-grounded-v2"
 
     requirement_coverage = coverage(request.requirements, paragraphs)
