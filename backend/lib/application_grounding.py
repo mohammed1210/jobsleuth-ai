@@ -65,6 +65,66 @@ def _numbers(value: str) -> set[str]:
     return set(re.findall(r"(?<![A-Za-z])\d+(?:[.,]\d+)?%?", value))
 
 
+def _numeric_mentions(value: str) -> list[tuple[str, str]]:
+    """Return number plus nearby unit, normalised enough to match 18-hour to 18 hours."""
+    mentions: list[tuple[str, str]] = []
+    for match in re.finditer(r"(?<![A-Za-z])(\d+(?:[.,]\d+)?%?)(?:\s*[-–]?\s*([A-Za-z]+))?", value):
+        number = match.group(1)
+        unit = (match.group(2) or "").lower().rstrip("s")
+        mentions.append((number, unit))
+    return mentions
+
+
+def _fact_supports_numeric_mention(text: str, number: str, unit: str) -> bool:
+    if number not in _numbers(text):
+        return False
+    if not unit or number.endswith("%"):
+        return True
+    lowered = text.lower()
+    pattern = re.compile(rf"(?<![A-Za-z]){re.escape(number)}\s*[-–]?\s*([A-Za-z]+)")
+    for match in pattern.finditer(lowered):
+        source_unit = match.group(1).lower().rstrip("s")
+        if source_unit == unit:
+            return True
+    return False
+
+
+def _repair_numeric_grounding(
+    paragraph: str,
+    facts: list[dict[str, str]],
+    evidence_ids: list[str],
+    cards_by_id: dict[str, Any],
+) -> tuple[list[dict[str, str]], bool]:
+    """Attach an omitted exact numeric fact from the same evidence card when unambiguous."""
+    repaired = list(facts)
+    seen = {(fact.get("evidence_id", ""), fact.get("field", ""), fact.get("text", "")) for fact in repaired}
+
+    for number, unit in _numeric_mentions(paragraph):
+        if any(_fact_supports_numeric_mention(fact["text"], number, unit) for fact in repaired):
+            continue
+
+        candidates: list[dict[str, str]] = []
+        for evidence_id in evidence_ids:
+            card = cards_by_id[evidence_id]
+            for field, values in card_facts(card).items():
+                for text in values:
+                    if _fact_supports_numeric_mention(text, number, unit):
+                        candidate = {"evidence_id": evidence_id, "field": field, "text": text[:700]}
+                        key = (evidence_id, field, text[:700])
+                        if key not in seen:
+                            candidates.append(candidate)
+
+        # Automatic repair is deliberately conservative: ambiguous matches still fail.
+        unique = {(item["evidence_id"], item["field"], item["text"]): item for item in candidates}
+        if len(unique) != 1:
+            return repaired, False
+        chosen = next(iter(unique.values()))
+        repaired.append(chosen)
+        seen.add((chosen["evidence_id"], chosen["field"], chosen["text"]))
+
+    return repaired, True
+
+
 def _authority_claims_supported(paragraph: str, facts: list[dict[str, str]]) -> bool:
     lowered = paragraph.lower()
     source = " ".join(fact["text"].lower() for fact in facts)
@@ -125,8 +185,8 @@ def validate_ai_paragraph_detailed(
     if not action_fact_found:
         return None, "missing_action_fact"
 
-    source_text = " ".join(fact["text"] for fact in facts)
-    if _numbers(text) - _numbers(source_text):
+    facts, numeric_ok = _repair_numeric_grounding(text, facts, evidence_ids, cards_by_id)
+    if not numeric_ok:
         return None, "unsupported_number"
     if not _authority_claims_supported(text, facts):
         return None, "authority_upgrade"
