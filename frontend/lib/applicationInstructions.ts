@@ -68,6 +68,18 @@ export function detectApplicationInstructions(vacancyText: string): ApplicationI
   if (personalStatement) requiredDocuments.push('Personal Statement');
   if (/cover(?:ing)? letter/i.test(text)) requiredDocuments.push('Cover Letter');
 
+  // Civil Service vacancies can require one or more separately-scored behaviour
+  // examples in addition to the CV/personal statement. Preserve the behaviour
+  // name and its own word budget so the user does not mistake it for part of the
+  // main statement allowance.
+  const behaviourPattern = /Behaviour(?:s)?\s*:\s*([^\n(]+?)\s*\(\s*maximum\s+(\d{2,4})\s+words\s*\)/gi;
+  for (const match of text.matchAll(behaviourPattern)) {
+    const behaviourName = match[1]?.trim();
+    const behaviourLimit = Number(match[2]);
+    if (!behaviourName || !Number.isFinite(behaviourLimit)) continue;
+    requiredDocuments.push(`Behaviour: ${behaviourName} (${behaviourLimit} words)`);
+  }
+
   return {
     roleTitle,
     organisation,

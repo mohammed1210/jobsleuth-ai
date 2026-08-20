@@ -45,9 +45,22 @@ def _same_requirement(left: dict[str, Any], right: dict[str, Any]) -> bool:
     return left_text == right_text or left_text in right_text or right_text in left_text
 
 
+def _is_non_requirement_heading(item: dict[str, Any]) -> bool:
+    """Drop obvious advert navigation/section questions, not candidate criteria."""
+    text = str(item.get("text", "")).strip()
+    if not text:
+        return True
+    return bool(
+        text.endswith("?")
+        and re.match(r"^(who|what|when|where|why|how)\b", text, flags=re.IGNORECASE)
+    )
+
+
 def _dedupe_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     deduped: list[dict[str, Any]] = []
     for candidate in items:
+        if _is_non_requirement_heading(candidate):
+            continue
         if any(_same_requirement(candidate, existing) for existing in deduped):
             continue
         deduped.append(candidate)
@@ -73,6 +86,8 @@ def _reconcile_items(
     merged = _dedupe_items(semantic_items)
     supplemented = False
     for candidate in deterministic_items:
+        if _is_non_requirement_heading(candidate):
+            continue
         if any(_same_requirement(candidate, existing) for existing in merged):
             continue
         merged.append(candidate)
