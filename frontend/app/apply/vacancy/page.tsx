@@ -175,7 +175,7 @@ export default function VacancyApplyPage() {
         <main className="max-w-3xl mx-auto px-6 py-12">
           <div className="card p-10 text-center">
             <h1 className="text-3xl font-bold text-gray-900 mb-3">Sign in to analyse a vacancy</h1>
-            <Link href="/magic-login" className="btn-primary inline-flex">Sign in</Link>
+            <Link href="/login" className="btn-primary inline-flex">Sign in</Link>
           </div>
         </main>
       </div>
@@ -261,7 +261,7 @@ export default function VacancyApplyPage() {
               </div>
             </section>
 
-            {session && <ApplicationDraftPanel session={session} analysis={analysis} evidence={evidence} />}
+            {session && <ApplicationDraftPanel session={session} analysis={analysis} evidence={evidence} vacancyText={vacancyText} />}
           </>
         )}
       </main>
