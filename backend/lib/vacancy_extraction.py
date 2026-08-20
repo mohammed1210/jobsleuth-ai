@@ -36,6 +36,7 @@ _SECTION_HEADINGS: dict[str, Category] = {
     "essential requirements": "essential",
     "what you will need": "essential",
     "skills and experience": "essential",
+    "person specification": "essential",
     "desirable criteria": "desirable",
     "desirable": "desirable",
     "nice to have": "desirable",
@@ -60,7 +61,6 @@ _IGNORED_SECTION_HEADINGS = {
     "job summary",
     "job description",
     "responsibilities",
-    "person specification",
     "behaviours",
     "technical skills",
     "benefits",
@@ -78,6 +78,8 @@ _IGNORED_SECTION_HEADINGS = {
 _LEAD_INS = {
     "you must be able to demonstrate experience of",
     "you must demonstrate experience of",
+    "we are looking for a candidate who is",
+    "we're looking for a candidate who is",
     "we'll assess you against these behaviours during the selection process",
     "we will assess you against these behaviours during the selection process",
     "we'll assess you against these technical skills during the selection process",
@@ -142,8 +144,8 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
 
     The fallback deliberately prefers omission over invention. Every returned item
     is tied to a source line from the supplied advert. Explicit Essential/Desirable
-    sections are treated as authoritative; process/admin sections terminate that
-    scope so they cannot leak into matching.
+    sections and person-specification bullet lists are treated as authoritative;
+    process/admin sections terminate that scope so they cannot leak into matching.
     """
 
     items: list[dict[str, Any]] = []
@@ -229,10 +231,10 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
             items.append(_item(line, "practical", 0.9, explicit_blocker=explicit_blocker))
             continue
 
-        # Inside explicit criteria sections, the section heading itself is the
-        # evidence that each following short line is a criterion. This recovers
-        # criteria such as "Developing and delivering proposals and presentations"
-        # that do not contain generic words like "experience" or "ability".
+        # Inside explicit criteria/person-specification sections, the section
+        # heading itself is the evidence that each following short line is a
+        # criterion. This recovers criteria that do not contain generic words like
+        # "experience" or "ability".
         if section in {"essential", "desirable"}:
             if len(line) <= 420 and lowered not in _LEAD_INS:
                 items.append(_item(line.rstrip(";"), section, 0.9 if is_bullet else 0.86, explicit_blocker=False))
