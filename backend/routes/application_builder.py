@@ -16,7 +16,7 @@ router = APIRouter(prefix="/application-builder", tags=["application_builder"])
 
 _META_VERBS = r"demonstrates|shows|illustrates|supports|underpins|evidences|addresses|highlights"
 _META_COMMENTARY_RE = re.compile(
-    rf"(?i)\(?\s*(?:this paragraph|this evidence|this example|the above)\s+(?:{_META_VERBS})\b[^.!?)]*(?:[.!?]|\))?"
+    rf"(?i)\(?\s*(?:this paragraph|this evidence|this example|the above)\s+(?:{_META_VERBS})\b[^.!?)]*(?:[.!?]\s*\)?|\))?"
 )
 
 
