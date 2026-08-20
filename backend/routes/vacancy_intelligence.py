@@ -45,6 +45,15 @@ def _same_requirement(left: dict[str, Any], right: dict[str, Any]) -> bool:
     return left_text == right_text or left_text in right_text or right_text in left_text
 
 
+def _dedupe_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: list[dict[str, Any]] = []
+    for candidate in items:
+        if any(_same_requirement(candidate, existing) for existing in deduped):
+            continue
+        deduped.append(candidate)
+    return deduped
+
+
 def _reconcile_items(
     semantic_items: list[dict[str, Any]] | None,
     deterministic_items: list[dict[str, Any]],
@@ -57,10 +66,11 @@ def _reconcile_items(
     an Essential/Desirable/Training section while retaining source grounding.
     """
 
+    deterministic_items = _dedupe_items(deterministic_items)
     if not semantic_items:
         return deterministic_items, "deterministic-v2"
 
-    merged = list(semantic_items)
+    merged = _dedupe_items(semantic_items)
     supplemented = False
     for candidate in deterministic_items:
         if any(_same_requirement(candidate, existing) for existing in merged):
@@ -68,7 +78,7 @@ def _reconcile_items(
         merged.append(candidate)
         supplemented = True
 
-    return merged[:40], "hybrid-grounded-v3" if supplemented else "openai-grounded-v3"
+    return _dedupe_items(merged)[:40], "hybrid-grounded-v3" if supplemented else "openai-grounded-v3"
 
 
 @router.post("")
