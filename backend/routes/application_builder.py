@@ -97,6 +97,11 @@ async def build_application(
             warnings.append(f"Partial evidence is being used for this essential requirement and should be reviewed carefully: {item['requirement']}")
     if total_words > request.word_limit:
         warnings.append(f"Draft is {total_words} words, above the requested {request.word_limit}-word limit. Edit before submitting.")
+    elif paragraphs and request.word_limit >= 300 and total_words < int(request.word_limit * 0.65):
+        warnings.append(
+            f"Draft uses only {total_words} of {request.word_limit} available words. "
+            "If more verified evidence is available, strengthen the Evidence Bank rather than padding the statement with unsupported detail."
+        )
     if not paragraphs:
         warnings.append("No Strong or Partial matched evidence is available to build a supported draft.")
 
