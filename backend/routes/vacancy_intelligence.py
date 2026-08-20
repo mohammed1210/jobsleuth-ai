@@ -35,14 +35,18 @@ def _normalise(value: str) -> str:
     return re.sub(r"\W+", " ", value.lower()).strip()
 
 
-def _same_requirement(left: dict[str, Any], right: dict[str, Any]) -> bool:
-    if left.get("category") != right.get("category"):
-        return False
+def _same_text(left: dict[str, Any], right: dict[str, Any]) -> bool:
     left_text = _normalise(str(left.get("text", "")))
     right_text = _normalise(str(right.get("text", "")))
     if not left_text or not right_text:
         return False
     return left_text == right_text or left_text in right_text or right_text in left_text
+
+
+def _same_requirement(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    if left.get("category") != right.get("category"):
+        return False
+    return _same_text(left, right)
 
 
 def _is_non_requirement_heading(item: dict[str, Any]) -> bool:
@@ -76,7 +80,10 @@ def _reconcile_items(
     Semantic extraction is useful for interpreting prose-heavy adverts, while the
     deterministic extractor is intentionally conservative and strong at explicit
     sectioned criteria. Using both prevents a model from silently dropping most of
-    an Essential/Desirable/Training section while retaining source grounding.
+    an Essential/Desirable/Person Specification section while retaining source
+    grounding. If both extractors find the same source requirement but disagree on
+    its category, the deterministic section classification wins because the advert
+    structure is direct evidence of that classification.
     """
 
     deterministic_items = _dedupe_items(deterministic_items)
@@ -88,12 +95,22 @@ def _reconcile_items(
     for candidate in deterministic_items:
         if _is_non_requirement_heading(candidate):
             continue
-        if any(_same_requirement(candidate, existing) for existing in merged):
+
+        same_text_index = next(
+            (index for index, existing in enumerate(merged) if _same_text(candidate, existing)),
+            None,
+        )
+        if same_text_index is not None:
+            existing = merged[same_text_index]
+            if existing.get("category") != candidate.get("category"):
+                merged[same_text_index] = candidate
+                supplemented = True
             continue
+
         merged.append(candidate)
         supplemented = True
 
-    return _dedupe_items(merged)[:40], "hybrid-grounded-v3" if supplemented else "openai-grounded-v3"
+    return _dedupe_items(merged)[:40], "hybrid-grounded-v4" if supplemented else "openai-grounded-v3"
 
 
 @router.post("")
