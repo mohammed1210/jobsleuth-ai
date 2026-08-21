@@ -204,7 +204,7 @@ def test_reconcile_supplements_semantic_omissions_without_duplicates():
 
     merged, provider = _reconcile_items(semantic, deterministic)
 
-    assert provider == "hybrid-grounded-v3"
+    assert provider == "hybrid-grounded-v4"
     assert len(merged) == len(deterministic)
     assert sum(1 for item in merged if "right to work" in item["text"].lower()) == 1
     assert any("stakeholder management" in item["text"].lower() for item in merged)
@@ -286,6 +286,6 @@ def test_route_supplements_under_extracted_semantic_result(monkeypatch):
 
     assert response.status_code == 200
     data = response.json()
-    assert data["provider"] == "hybrid-grounded-v3"
+    assert data["provider"] == "hybrid-grounded-v4"
     assert data["summary"]["items"] >= 7
     assert len([item for item in data["requirements"] if item["category"] == "trainable"]) == 2
