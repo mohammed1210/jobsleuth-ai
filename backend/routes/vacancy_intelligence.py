@@ -43,6 +43,12 @@ def _same_text(left: dict[str, Any], right: dict[str, Any]) -> bool:
     return left_text == right_text or left_text in right_text or right_text in left_text
 
 
+def _exact_text(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    left_text = _normalise(str(left.get("text", "")))
+    right_text = _normalise(str(right.get("text", "")))
+    return bool(left_text and right_text and left_text == right_text)
+
+
 def _same_requirement(left: dict[str, Any], right: dict[str, Any]) -> bool:
     if left.get("category") != right.get("category"):
         return False
@@ -81,9 +87,12 @@ def _reconcile_items(
     deterministic extractor is intentionally conservative and strong at explicit
     sectioned criteria. Using both prevents a model from silently dropping most of
     an Essential/Desirable/Person Specification section while retaining source
-    grounding. If both extractors find the same source requirement but disagree on
-    its category, the deterministic section classification wins because the advert
-    structure is direct evidence of that classification.
+    grounding.
+
+    Reconciliation deliberately resolves exact text/category conflicts before
+    considering substring similarity. A broader essential requirement and a more
+    specific desirable requirement may legitimately overlap in wording and must not
+    collapse into one another simply because one string contains the other.
     """
 
     deterministic_items = _dedupe_items(deterministic_items)
@@ -96,21 +105,31 @@ def _reconcile_items(
         if _is_non_requirement_heading(candidate):
             continue
 
-        same_text_index = next(
-            (index for index, existing in enumerate(merged) if _same_text(candidate, existing)),
+        exact_index = next(
+            (index for index, existing in enumerate(merged) if _exact_text(candidate, existing)),
             None,
         )
-        if same_text_index is not None:
-            existing = merged[same_text_index]
+        if exact_index is not None:
+            existing = merged[exact_index]
             if existing.get("category") != candidate.get("category"):
-                merged[same_text_index] = candidate
+                merged[exact_index] = candidate
                 supplemented = True
+            continue
+
+        # Fuzzy/substring matching is only safe within the same category. Across
+        # categories, overlapping wording can represent two genuine requirements
+        # (for example a broad essential criterion plus a narrower desirable one).
+        same_category_index = next(
+            (index for index, existing in enumerate(merged) if _same_requirement(candidate, existing)),
+            None,
+        )
+        if same_category_index is not None:
             continue
 
         merged.append(candidate)
         supplemented = True
 
-    return _dedupe_items(merged)[:40], "hybrid-grounded-v4" if supplemented else "openai-grounded-v3"
+    return _dedupe_items(merged)[:40], "hybrid-grounded-v5" if supplemented else "openai-grounded-v3"
 
 
 @router.post("")
