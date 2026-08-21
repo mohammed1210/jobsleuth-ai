@@ -24,6 +24,26 @@ You must hold DV Clearance to be eligible to apply for this EOI.
     assert "You must hold DV Clearance to be eligible to apply for this EOI." in eligibility_texts
 
 
+def test_person_specification_introductory_prose_is_not_promoted_to_essential():
+    advert = """
+Person specification
+This role sits in a busy operational team and provides support across several workstreams.
+The successful post holder will work closely with senior colleagues across the organisation.
+Motivated and able to take responsibility for your personal performance and delivering your work objectives.
+Well organised and efficient, able to prioritise different pieces of work with different deadlines.
+Benefits
+Learning and development tailored to your role.
+"""
+
+    items = deterministic_extract(advert)
+    essential_texts = [item["text"] for item in items if item["category"] == "essential"]
+
+    assert "This role sits in a busy operational team and provides support across several workstreams." not in essential_texts
+    assert "The successful post holder will work closely with senior colleagues across the organisation." not in essential_texts
+    assert "Motivated and able to take responsibility for your personal performance and delivering your work objectives." in essential_texts
+    assert "Well organised and efficient, able to prioritise different pieces of work with different deadlines." in essential_texts
+
+
 def test_deterministic_section_classification_wins_same_text_category_conflict():
     text = "You should be adaptable and willing to consider a diverse range of views, working collaboratively to resolve challenging issues."
     semantic = [{
@@ -46,3 +66,29 @@ def test_deterministic_section_classification_wins_same_text_category_conflict()
     assert len(merged) == 1
     assert merged[0]["category"] == "essential"
     assert provider == "hybrid-grounded-v4"
+
+
+def test_cross_category_substring_requirements_are_preserved_separately():
+    broad = "Experience managing projects"
+    specific = "Experience managing projects in government"
+    semantic = [{
+        "text": broad,
+        "category": "essential",
+        "source_text": broad,
+        "confidence": 1.0,
+        "explicit_blocker": False,
+    }]
+    deterministic = [{
+        "text": specific,
+        "category": "desirable",
+        "source_text": specific,
+        "confidence": 0.9,
+        "explicit_blocker": False,
+    }]
+
+    merged, provider = _reconcile_items(semantic, deterministic)
+
+    assert provider == "hybrid-grounded-v4"
+    assert len(merged) == 2
+    assert any(item["text"] == broad and item["category"] == "essential" for item in merged)
+    assert any(item["text"] == specific and item["category"] == "desirable" for item in merged)
