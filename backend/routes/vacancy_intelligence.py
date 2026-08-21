@@ -110,7 +110,7 @@ def _reconcile_items(
         merged.append(candidate)
         supplemented = True
 
-    return _dedupe_items(merged)[:40], "hybrid-grounded-v3" if supplemented else "openai-grounded-v3"
+    return _dedupe_items(merged)[:40], "hybrid-grounded-v4" if supplemented else "openai-grounded-v3"
 
 
 @router.post("")
