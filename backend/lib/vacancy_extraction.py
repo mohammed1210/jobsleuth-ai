@@ -86,6 +86,21 @@ _LEAD_INS = {
     "we will assess you against these technical skills during the selection process",
 }
 
+_PERSON_SPEC_CRITERION_PREFIXES = (
+    "able to ",
+    "a team player",
+    "detail-oriented",
+    "detail oriented",
+    "experienced ",
+    "motivated ",
+    "well organised",
+    "well-organised",
+    "you must ",
+    "you should ",
+    "you will be able to ",
+    "strong ",
+)
+
 _NON_REQUIREMENT_PREFIXES = (
     "apply before ",
     "application – by ",
@@ -139,17 +154,33 @@ def _heading_section(line: str, raw: str, is_bullet: bool) -> Category | Literal
     return None
 
 
+def _looks_like_person_spec_criterion(line: str, is_bullet: bool) -> bool:
+    """Require a criterion signal inside broad Person Specification sections.
+
+    Copied job adverts often lose visible bullet glyphs, so this cannot rely on
+    ``is_bullet`` alone. The accepted prefixes cover common candidate-attribute
+    wording while rejecting introductory prose and duty descriptions that happen to
+    sit under the same heading.
+    """
+
+    if is_bullet:
+        return True
+    lowered = line.lower().strip()
+    return any(lowered.startswith(prefix) for prefix in _PERSON_SPEC_CRITERION_PREFIXES)
+
+
 def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
     """Extract grounded criteria from vacancy text without external services.
 
     The fallback deliberately prefers omission over invention. Every returned item
     is tied to a source line from the supplied advert. Explicit Essential/Desirable
-    sections and person-specification bullet lists are treated as authoritative;
+    sections and signalled person-specification criteria are treated as authoritative;
     process/admin sections terminate that scope so they cannot leak into matching.
     """
 
     items: list[dict[str, Any]] = []
     section: Category | None = None
+    in_person_specification = False
 
     eligibility_cues = (
         "right to work",
@@ -213,6 +244,7 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
 
         heading = _heading_section(line, raw, is_bullet)
         if heading is not None:
+            in_person_specification = lowered == "person specification"
             section = None if heading == "ignore" else heading
             continue
 
@@ -231,11 +263,13 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
             items.append(_item(line, "practical", 0.9, explicit_blocker=explicit_blocker))
             continue
 
-        # Inside explicit criteria/person-specification sections, the section
-        # heading itself is the evidence that each following short line is a
-        # criterion. This recovers criteria that do not contain generic words like
-        # "experience" or "ability".
+        # Explicit Essential/Desirable sections remain authoritative. Person
+        # Specification is broader, so it additionally requires a bullet or a
+        # candidate-criterion signal to avoid turning introductory prose into an
+        # essential requirement.
         if section in {"essential", "desirable"}:
+            if in_person_specification and not _looks_like_person_spec_criterion(line, is_bullet):
+                continue
             if len(line) <= 420 and lowered not in _LEAD_INS:
                 items.append(_item(line.rstrip(";"), section, 0.9 if is_bullet else 0.86, explicit_blocker=False))
             continue
