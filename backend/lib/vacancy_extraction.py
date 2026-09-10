@@ -88,10 +88,13 @@ _LEAD_INS = {
 
 _PERSON_SPEC_CRITERION_PREFIXES = (
     "able to ",
+    "ability to ",
     "a team player",
     "detail-oriented",
     "detail oriented",
+    "experience ",
     "experienced ",
+    "knowledge ",
     "motivated ",
     "well organised",
     "well-organised",
