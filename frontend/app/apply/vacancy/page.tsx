@@ -14,6 +14,19 @@ import { extractVacancyIntelligence, type IntelligenceItem } from '@/lib/vacancy
 import { parseVacancyText } from '@/lib/vacancyParser';
 
 const lines = (value: string) => value.split('\n').map((item) => item.trim()).filter(Boolean);
+const VACANCY_DRAFT_KEY = 'jobsleuth.apply.vacancyDraft.v1';
+
+type VacancyDraftState = {
+  vacancyText: string;
+  eligibility: string;
+  essential: string;
+  desirable: string;
+  trainable: string;
+  practical: string;
+  extractedItems: IntelligenceItem[];
+  extractionProvider: string | null;
+  analysis: VacancyAnalysis | null;
+};
 
 export default function VacancyApplyPage() {
   const [session, setSession] = useState<Session | null>(null);
@@ -31,6 +44,52 @@ export default function VacancyApplyPage() {
   const [analysis, setAnalysis] = useState<VacancyAnalysis | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [draftStateReady, setDraftStateReady] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = window.sessionStorage.getItem(VACANCY_DRAFT_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as Partial<VacancyDraftState>;
+        if (typeof saved.vacancyText === 'string') setVacancyText(saved.vacancyText);
+        if (typeof saved.eligibility === 'string') setEligibility(saved.eligibility);
+        if (typeof saved.essential === 'string') setEssential(saved.essential);
+        if (typeof saved.desirable === 'string') setDesirable(saved.desirable);
+        if (typeof saved.trainable === 'string') setTrainable(saved.trainable);
+        if (typeof saved.practical === 'string') setPractical(saved.practical);
+        if (Array.isArray(saved.extractedItems)) setExtractedItems(saved.extractedItems);
+        if (typeof saved.extractionProvider === 'string' || saved.extractionProvider === null) {
+          setExtractionProvider(saved.extractionProvider ?? null);
+        }
+        if (saved.analysis && typeof saved.analysis === 'object') setAnalysis(saved.analysis as VacancyAnalysis);
+      }
+    } catch {
+      window.sessionStorage.removeItem(VACANCY_DRAFT_KEY);
+    } finally {
+      setDraftStateReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!draftStateReady) return;
+    const snapshot: VacancyDraftState = {
+      vacancyText,
+      eligibility,
+      essential,
+      desirable,
+      trainable,
+      practical,
+      extractedItems,
+      extractionProvider,
+      analysis,
+    };
+    const hasWork = vacancyText.trim() || eligibility.trim() || essential.trim() || desirable.trim() || trainable.trim() || practical.trim() || extractedItems.length > 0 || analysis;
+    if (!hasWork) {
+      window.sessionStorage.removeItem(VACANCY_DRAFT_KEY);
+      return;
+    }
+    window.sessionStorage.setItem(VACANCY_DRAFT_KEY, JSON.stringify(snapshot));
+  }, [draftStateReady, vacancyText, eligibility, essential, desirable, trainable, practical, extractedItems, extractionProvider, analysis]);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
