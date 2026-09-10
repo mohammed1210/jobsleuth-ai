@@ -22,6 +22,18 @@ function firstMatch(text: string, patterns: RegExp[]): string | null {
   return null;
 }
 
+function hasNegatedDocumentInstruction(text: string, documentPattern: string): boolean {
+  const actionNegation = new RegExp(
+    `(?:do\\s+not|don't|must\\s+not|should\\s+not)\\s+(?:submit|provide|include|attach|upload)[^\\n.!?]{0,80}${documentPattern}`,
+    'i',
+  );
+  const requirementNegation = new RegExp(
+    `${documentPattern}[^\\n.!?]{0,60}(?:is|are)?\\s*(?:not\\s+required|not\\s+necessary|optional)`,
+    'i',
+  );
+  return actionNegation.test(text) || requirementNegation.test(text);
+}
+
 export function detectApplicationInstructions(vacancyText: string): ApplicationInstructions {
   const text = vacancyText.trim();
   const lines = cleanLines(text);
@@ -42,7 +54,9 @@ export function detectApplicationInstructions(vacancyText: string): ApplicationI
     || lines.find((line, index) => index > 0 && /home office|nhs|council|university|department|agency|service|company|limited|ltd\.?$/i.test(line))
     || '';
 
-  const personalStatement = /personal statement/i.test(text);
+  const personalStatementMentioned = /personal statement/i.test(text);
+  const personalStatementNegated = hasNegatedDocumentInstruction(text, 'personal\\s+statement');
+  const personalStatement = personalStatementMentioned && !personalStatementNegated;
   const criteriaResponse = /essential criteria response|criteria response/i.test(text);
   const applicationType: ApplicationType = criteriaResponse ? 'criteria_response' : 'statement_of_suitability';
   const applicationTypeLabel = personalStatement
@@ -62,11 +76,16 @@ export function detectApplicationInstructions(vacancyText: string): ApplicationI
   const wordLimit = parsedLimit && parsedLimit >= 100 && parsedLimit <= 5000 ? parsedLimit : null;
 
   const requiredDocuments: string[] = [];
-  if (/\b(?:a\s+)?CV\b/i.test(text) && /application process|asked to complete|submit|sift|scored/i.test(text)) {
+  const cvMentioned = /\b(?:a\s+)?CV\b/i.test(text);
+  const cvNegated = hasNegatedDocumentInstruction(text, '(?:a\\s+)?CV');
+  if (cvMentioned && !cvNegated && /application process|asked to complete|submit|sift|scored/i.test(text)) {
     requiredDocuments.push('CV');
   }
   if (personalStatement) requiredDocuments.push('Personal Statement');
-  if (/cover(?:ing)? letter/i.test(text)) requiredDocuments.push('Cover Letter');
+
+  const coverLetterMentioned = /cover(?:ing)? letter/i.test(text);
+  const coverLetterNegated = hasNegatedDocumentInstruction(text, 'cover(?:ing)?\\s+letter');
+  if (coverLetterMentioned && !coverLetterNegated) requiredDocuments.push('Cover Letter');
 
   // Civil Service vacancies can require one or more separately-scored behaviour
   // examples in addition to the CV/personal statement. Preserve the behaviour
