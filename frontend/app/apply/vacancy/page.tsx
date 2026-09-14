@@ -14,9 +14,10 @@ import { extractVacancyIntelligence, type IntelligenceItem } from '@/lib/vacancy
 import { parseVacancyText } from '@/lib/vacancyParser';
 
 const lines = (value: string) => value.split('\n').map((item) => item.trim()).filter(Boolean);
-const VACANCY_DRAFT_KEY = 'jobsleuth.apply.vacancyDraft.v1';
+const VACANCY_DRAFT_KEY = 'jobsleuth.apply.vacancyDraft.v2';
 
 type VacancyDraftState = {
+  userId: string;
   vacancyText: string;
   eligibility: string;
   essential: string;
@@ -46,33 +47,49 @@ export default function VacancyApplyPage() {
   const [loading, setLoading] = useState(true);
   const [draftStateReady, setDraftStateReady] = useState(false);
 
-  useEffect(() => {
+  const clearDraftFields = () => {
+    setVacancyText('');
+    setEligibility('');
+    setEssential('');
+    setDesirable('');
+    setTrainable('');
+    setPractical('');
+    setExtractedItems([]);
+    setExtractionProvider(null);
+    setAnalysis(null);
+  };
+
+  const restoreDraftForUser = (userId: string) => {
     try {
       const raw = window.sessionStorage.getItem(VACANCY_DRAFT_KEY);
-      if (raw) {
-        const saved = JSON.parse(raw) as Partial<VacancyDraftState>;
-        if (typeof saved.vacancyText === 'string') setVacancyText(saved.vacancyText);
-        if (typeof saved.eligibility === 'string') setEligibility(saved.eligibility);
-        if (typeof saved.essential === 'string') setEssential(saved.essential);
-        if (typeof saved.desirable === 'string') setDesirable(saved.desirable);
-        if (typeof saved.trainable === 'string') setTrainable(saved.trainable);
-        if (typeof saved.practical === 'string') setPractical(saved.practical);
-        if (Array.isArray(saved.extractedItems)) setExtractedItems(saved.extractedItems);
-        if (typeof saved.extractionProvider === 'string' || saved.extractionProvider === null) {
-          setExtractionProvider(saved.extractionProvider ?? null);
-        }
-        if (saved.analysis && typeof saved.analysis === 'object') setAnalysis(saved.analysis as VacancyAnalysis);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as Partial<VacancyDraftState>;
+      if (saved.userId !== userId) {
+        window.sessionStorage.removeItem(VACANCY_DRAFT_KEY);
+        clearDraftFields();
+        return;
       }
+      if (typeof saved.vacancyText === 'string') setVacancyText(saved.vacancyText);
+      if (typeof saved.eligibility === 'string') setEligibility(saved.eligibility);
+      if (typeof saved.essential === 'string') setEssential(saved.essential);
+      if (typeof saved.desirable === 'string') setDesirable(saved.desirable);
+      if (typeof saved.trainable === 'string') setTrainable(saved.trainable);
+      if (typeof saved.practical === 'string') setPractical(saved.practical);
+      if (Array.isArray(saved.extractedItems)) setExtractedItems(saved.extractedItems);
+      if (typeof saved.extractionProvider === 'string' || saved.extractionProvider === null) {
+        setExtractionProvider(saved.extractionProvider ?? null);
+      }
+      if (saved.analysis && typeof saved.analysis === 'object') setAnalysis(saved.analysis as VacancyAnalysis);
     } catch {
       window.sessionStorage.removeItem(VACANCY_DRAFT_KEY);
-    } finally {
-      setDraftStateReady(true);
+      clearDraftFields();
     }
-  }, []);
+  };
 
   useEffect(() => {
-    if (!draftStateReady) return;
+    if (!draftStateReady || !session) return;
     const snapshot: VacancyDraftState = {
+      userId: session.user.id,
       vacancyText,
       eligibility,
       essential,
@@ -89,29 +106,42 @@ export default function VacancyApplyPage() {
       return;
     }
     window.sessionStorage.setItem(VACANCY_DRAFT_KEY, JSON.stringify(snapshot));
-  }, [draftStateReady, vacancyText, eligibility, essential, desirable, trainable, practical, extractedItems, extractionProvider, analysis]);
+  }, [draftStateReady, session, vacancyText, eligibility, essential, desirable, trainable, practical, extractedItems, extractionProvider, analysis]);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
       setMessage('Supabase is not configured yet.');
       setLoading(false);
+      setDraftStateReady(true);
       return;
     }
 
     const supabase = getSupabaseClient();
     let active = true;
 
+    const loadEvidenceForSession = async (nextSession: Session) => {
+      try {
+        const nextEvidence = await fetchEvidence(nextSession);
+        if (active) setEvidence(nextEvidence);
+      } catch (error) {
+        if (active) setMessage(error instanceof Error ? error.message : 'Could not load your Evidence Bank.');
+      }
+    };
+
     const load = async () => {
       const current = await getFreshSession();
       if (!active) return;
       setSession(current);
       if (current) {
-        try {
-          setEvidence(await fetchEvidence(current));
-        } catch (error) {
-          setMessage(error instanceof Error ? error.message : 'Could not load your Evidence Bank.');
-        }
+        restoreDraftForUser(current.user.id);
+        await loadEvidenceForSession(current);
+      } else {
+        window.sessionStorage.removeItem(VACANCY_DRAFT_KEY);
+        clearDraftFields();
+        setEvidence([]);
       }
+      if (!active) return;
+      setDraftStateReady(true);
       setLoading(false);
     };
 
@@ -120,7 +150,37 @@ export default function VacancyApplyPage() {
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       if (!active) return;
       setSession(nextSession);
-      if (!nextSession) setAnalysis(null);
+      setDraftStateReady(false);
+
+      if (!nextSession) {
+        window.sessionStorage.removeItem(VACANCY_DRAFT_KEY);
+        clearDraftFields();
+        setEvidence([]);
+        setDraftStateReady(true);
+        return;
+      }
+
+      try {
+        const raw = window.sessionStorage.getItem(VACANCY_DRAFT_KEY);
+        if (raw) {
+          const saved = JSON.parse(raw) as Partial<VacancyDraftState>;
+          if (saved.userId !== nextSession.user.id) {
+            window.sessionStorage.removeItem(VACANCY_DRAFT_KEY);
+            clearDraftFields();
+          } else {
+            restoreDraftForUser(nextSession.user.id);
+          }
+        } else {
+          clearDraftFields();
+        }
+      } catch {
+        window.sessionStorage.removeItem(VACANCY_DRAFT_KEY);
+        clearDraftFields();
+      }
+
+      setEvidence([]);
+      void loadEvidenceForSession(nextSession);
+      setDraftStateReady(true);
     });
 
     return () => {
