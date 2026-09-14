@@ -23,15 +23,34 @@ function firstMatch(text: string, patterns: RegExp[]): string | null {
 }
 
 function hasNegatedDocumentInstruction(text: string, documentPattern: string): boolean {
-  const actionNegation = new RegExp(
-    `(?:do\\s+not|don't|must\\s+not|should\\s+not)\\s+(?:submit|provide|include|attach|upload)[^\\n.!?]{0,80}${documentPattern}`,
+  const segments = text
+    .split(/(?<=[.!?])\s+|\r?\n+/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  let sawNegatedMention = false;
+  let sawPositiveMention = false;
+
+  const directActionNegation = new RegExp(
+    `(?:do\\s+not|don't|must\\s+not|should\\s+not)\\s+(?:submit|provide|include|attach|upload)\\s+(?:(?:an?|the|your)\\s+)?${documentPattern}\\b`,
     'i',
   );
   const requirementNegation = new RegExp(
-    `${documentPattern}[^\\n.!?]{0,60}(?:is|are)?\\s*(?:not\\s+required|not\\s+necessary|optional)`,
+    `(?:${documentPattern})\\b[^\\n.!?]{0,40}(?:is|are)?\\s*(?:not\\s+required|not\\s+necessary|optional)\\b`,
     'i',
   );
-  return actionNegation.test(text) || requirementNegation.test(text);
+  const documentMention = new RegExp(`(?:${documentPattern})\\b`, 'i');
+
+  for (const segment of segments) {
+    if (!documentMention.test(segment)) continue;
+    if (directActionNegation.test(segment) || requirementNegation.test(segment)) {
+      sawNegatedMention = true;
+      continue;
+    }
+    sawPositiveMention = true;
+  }
+
+  return sawNegatedMention && !sawPositiveMention;
 }
 
 export function detectApplicationInstructions(vacancyText: string): ApplicationInstructions {
