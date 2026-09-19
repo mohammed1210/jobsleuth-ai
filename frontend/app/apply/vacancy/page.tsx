@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { Session } from '@supabase/supabase-js';
 
@@ -16,6 +16,8 @@ import { parseVacancyText } from '@/lib/vacancyParser';
 const lines = (value: string) => value.split('\n').map((item) => item.trim()).filter(Boolean);
 const VACANCY_DRAFT_KEY = 'jobsleuth.apply.vacancyDraft.v2';
 
+const evidenceFingerprint = (cards: EvidenceCard[]) => JSON.stringify(cards);
+
 type VacancyDraftState = {
   userId: string;
   vacancyText: string;
@@ -27,6 +29,7 @@ type VacancyDraftState = {
   extractedItems: IntelligenceItem[];
   extractionProvider: string | null;
   analysis: VacancyAnalysis | null;
+  analysisEvidenceFingerprint: string | null;
 };
 
 export default function VacancyApplyPage() {
@@ -43,6 +46,8 @@ export default function VacancyApplyPage() {
   const [extracting, setExtracting] = useState(false);
   const [analysing, setAnalysing] = useState(false);
   const [analysis, setAnalysis] = useState<VacancyAnalysis | null>(null);
+  const [analysisEvidenceFingerprint, setAnalysisEvidenceFingerprint] = useState<string | null>(null);
+  const sessionUserIdRef = useRef<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [draftStateReady, setDraftStateReady] = useState(false);
@@ -57,6 +62,7 @@ export default function VacancyApplyPage() {
     setExtractedItems([]);
     setExtractionProvider(null);
     setAnalysis(null);
+    setAnalysisEvidenceFingerprint(null);
   };
 
   const restoreDraftForUser = (userId: string) => {
@@ -79,7 +85,12 @@ export default function VacancyApplyPage() {
       if (typeof saved.extractionProvider === 'string' || saved.extractionProvider === null) {
         setExtractionProvider(saved.extractionProvider ?? null);
       }
-      if (saved.analysis && typeof saved.analysis === 'object') setAnalysis(saved.analysis as VacancyAnalysis);
+      if (saved.analysis && typeof saved.analysis === 'object') {
+        setAnalysis(saved.analysis as VacancyAnalysis);
+        setAnalysisEvidenceFingerprint(
+          typeof saved.analysisEvidenceFingerprint === 'string' ? saved.analysisEvidenceFingerprint : null,
+        );
+      }
     } catch {
       window.sessionStorage.removeItem(VACANCY_DRAFT_KEY);
       clearDraftFields();
@@ -99,6 +110,7 @@ export default function VacancyApplyPage() {
       extractedItems,
       extractionProvider,
       analysis,
+      analysisEvidenceFingerprint,
     };
     const hasWork = vacancyText.trim() || eligibility.trim() || essential.trim() || desirable.trim() || trainable.trim() || practical.trim() || extractedItems.length > 0 || analysis;
     if (!hasWork) {
@@ -106,7 +118,7 @@ export default function VacancyApplyPage() {
       return;
     }
     window.sessionStorage.setItem(VACANCY_DRAFT_KEY, JSON.stringify(snapshot));
-  }, [draftStateReady, session, vacancyText, eligibility, essential, desirable, trainable, practical, extractedItems, extractionProvider, analysis]);
+  }, [draftStateReady, session, vacancyText, eligibility, essential, desirable, trainable, practical, extractedItems, extractionProvider, analysis, analysisEvidenceFingerprint]);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
@@ -120,17 +132,41 @@ export default function VacancyApplyPage() {
     let active = true;
 
     const loadEvidenceForSession = async (nextSession: Session) => {
+      const requestedUserId = nextSession.user.id;
       try {
         const nextEvidence = await fetchEvidence(nextSession);
-        if (active) setEvidence(nextEvidence);
+        if (!active || sessionUserIdRef.current !== requestedUserId) return;
+
+        setEvidence(nextEvidence);
+
+        try {
+          const raw = window.sessionStorage.getItem(VACANCY_DRAFT_KEY);
+          if (raw) {
+            const saved = JSON.parse(raw) as Partial<VacancyDraftState>;
+            if (
+              saved.userId === requestedUserId
+              && saved.analysis
+              && saved.analysisEvidenceFingerprint !== evidenceFingerprint(nextEvidence)
+            ) {
+              setAnalysis(null);
+              setAnalysisEvidenceFingerprint(null);
+            }
+          }
+        } catch {
+          setAnalysis(null);
+          setAnalysisEvidenceFingerprint(null);
+        }
       } catch (error) {
-        if (active) setMessage(error instanceof Error ? error.message : 'Could not load your Evidence Bank.');
+        if (active && sessionUserIdRef.current === requestedUserId) {
+          setMessage(error instanceof Error ? error.message : 'Could not load your Evidence Bank.');
+        }
       }
     };
 
     const load = async () => {
       const current = await getFreshSession();
       if (!active) return;
+      sessionUserIdRef.current = current?.user.id ?? null;
       setSession(current);
       if (current) {
         restoreDraftForUser(current.user.id);
@@ -149,6 +185,7 @@ export default function VacancyApplyPage() {
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       if (!active) return;
+      sessionUserIdRef.current = nextSession?.user.id ?? null;
       setSession(nextSession);
       setDraftStateReady(false);
 
@@ -191,6 +228,7 @@ export default function VacancyApplyPage() {
 
   const currentSession = async () => {
     const fresh = await getFreshSession();
+    sessionUserIdRef.current = fresh?.user.id ?? null;
     setSession(fresh);
     if (!fresh) setMessage('Your session has expired. Sign in again to continue.');
     return fresh;
@@ -242,6 +280,7 @@ export default function VacancyApplyPage() {
 
     setExtracting(true);
     setAnalysis(null);
+    setAnalysisEvidenceFingerprint(null);
     setMessage(null);
     try {
       const result = await extractVacancyIntelligence(activeSession, vacancyText);
@@ -275,10 +314,13 @@ export default function VacancyApplyPage() {
 
     setAnalysing(true);
     setAnalysis(null);
+    setAnalysisEvidenceFingerprint(null);
     setMessage('Analysing your evidence against the vacancy…');
     try {
       const result = await analyseVacancy(activeSession, requirements, evidence, lines(practical));
+      if (sessionUserIdRef.current !== activeSession.user.id) return;
       setAnalysis(result);
+      setAnalysisEvidenceFingerprint(evidenceFingerprint(evidence));
       setMessage(null);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Vacancy analysis failed.');
