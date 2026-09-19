@@ -36,7 +36,7 @@ function hasNegatedDocumentInstruction(text: string, documentPattern: string): b
     'i',
   );
   const requirementNegation = new RegExp(
-    `(?:${documentPattern})\\b[^\\n.!?]{0,40}(?:is|are)?\\s*(?:not\\s+required|not\\s+necessary|optional)\\b`,
+    `(?:${documentPattern})\\b\\s*(?:(?:is|are)\\s*)?(?:not\\s+required|not\\s+necessary|optional)\\b`,
     'i',
   );
   const documentMention = new RegExp(`(?:${documentPattern})\\b`, 'i');
