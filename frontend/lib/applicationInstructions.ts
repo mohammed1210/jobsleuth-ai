@@ -24,33 +24,48 @@ function firstMatch(text: string, patterns: RegExp[]): string | null {
 
 function hasNegatedDocumentInstruction(text: string, documentPattern: string): boolean {
   const segments = text
-    .split(/(?<=[.!?;])\s+|\r?\n+|[,;]\s*(?=(?:instead|but|however)\b)|\s+(?=(?:instead|but|however)\b)|\s+and\s+(?=(?:submit|provide|include|attach|upload)\b)/i)
+    .split(/(?<=[.!?;])\s+|\r?\n+|[,;]\s*(?=(?:instead|but|however)\b)|\s+(?=(?:instead|but|however)\b)|\s+and\s+(?=(?:(?:do\s+not|don't|must\s+not|should\s+not)\s+)?(?:submit|provide|include|attach|upload|complete)\b)/i)
     .map((segment) => segment.replace(/^(?:instead|but|however)\s*,?\s*/i, '').trim())
     .filter(Boolean);
 
   let sawNegatedMention = false;
-  let sawPositiveMention = false;
+  let sawPositiveAction = false;
 
-  const directActionNegation = new RegExp(
-    `(?:do\\s+not|don't|must\\s+not|should\\s+not)\\s+(?:submit|provide|include|attach|upload)\\s+(?:(?:an?|the|your)\\s+)?${documentPattern}\\b`,
-    'i',
-  );
+  const documentMention = new RegExp(`(?:${documentPattern})\\b`, 'i');
   const requirementNegation = new RegExp(
     `(?:${documentPattern})\\b\\s*(?:(?:is|are)\\s*)?(?:not\\s+required|not\\s+necessary|optional)\\b`,
     'i',
   );
-  const documentMention = new RegExp(`(?:${documentPattern})\\b`, 'i');
+  const knownDocument = '(?:CV|curriculum\\s+vitae|personal\\s+statement|statement\\s+of\\s+suitability|cover(?:ing)?\\s+letter)';
+  const documentObjectList = `(?:(?:an?|the|your)\\s+)?${knownDocument}(?:\\s*(?:,|or|and)\\s*(?:(?:an?|the|your)\\s+)?${knownDocument})*`;
+  const documentAction = new RegExp(
+    `((?:do\\s+not|don't|must\\s+not|should\\s+not)\\s+)?(?:submit|provide|include|attach|upload|complete)\\s+(${documentObjectList})`,
+    'ig',
+  );
 
   for (const segment of segments) {
     if (!documentMention.test(segment)) continue;
-    if (directActionNegation.test(segment) || requirementNegation.test(segment)) {
+
+    if (requirementNegation.test(segment)) {
       sawNegatedMention = true;
-      continue;
     }
-    sawPositiveMention = true;
+
+    documentAction.lastIndex = 0;
+    for (const match of segment.matchAll(documentAction)) {
+      const objectList = match[2] ?? '';
+      if (!documentMention.test(objectList)) continue;
+      if (match[1]) {
+        sawNegatedMention = true;
+      } else {
+        sawPositiveAction = true;
+      }
+    }
   }
 
-  return sawNegatedMention && !sawPositiveMention;
+  // Neutral references must not override an explicit prohibition. If the
+  // advert also contains a genuine positive action for the same document,
+  // keep it as required.
+  return sawNegatedMention && !sawPositiveAction;
 }
 
 export function detectApplicationInstructions(vacancyText: string): ApplicationInstructions {
