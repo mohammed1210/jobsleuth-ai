@@ -5,14 +5,14 @@ export default function TagsFields({ initial }: { initial?: EvidenceCard | null 
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
         <label className="block">
-          <span className="text-sm font-semibold text-gray-800">Civil Service behaviours</span>
+          <span className="text-sm font-semibold text-gray-800">Framework / behaviour labels <span className="font-normal text-gray-500">(optional)</span></span>
           <input
             name="behaviours"
             defaultValue={initial?.behaviours.join(', ') ?? ''}
             className="mt-1 w-full rounded-xl border px-4 py-3"
-            placeholder="Managing a Quality Service, Making Effective Decisions"
+            placeholder="e.g. Managing a Quality Service, customer obsession, leadership"
           />
-          <span className="mt-1 block text-xs text-gray-500">Use the exact behaviour names where possible so JobSleuth can reuse this example for behaviour components.</span>
+          <span className="mt-1 block text-xs text-gray-500">For Civil Service applications, use exact behaviour names where possible. For other sectors, add a named competency/framework label only if it is genuinely useful; otherwise leave this blank.</span>
         </label>
         <label className="block">
           <span className="text-sm font-semibold text-gray-800">Skills / capabilities</span>
