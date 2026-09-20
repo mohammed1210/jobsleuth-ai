@@ -47,6 +47,32 @@ Hybrid working
 """
 
 
+PRIVATE_SECTOR_BOUNDARY_VACANCY = """
+Operations Manager
+
+Requirements
+- Experience leading operational teams.
+- Strong analytical and stakeholder-management skills.
+
+What we offer
+Private medical insurance
+Annual learning allowance
+A collaborative and inclusive culture
+"""
+
+
+PRIVATE_SECTOR_CURLY_HEADING_VACANCY = """
+Product Operations Lead
+
+What you’ll bring
+- Experience improving operational processes.
+- Strong written communication skills.
+
+What we’re looking for
+- Ability to manage competing priorities.
+"""
+
+
 MESSY_CIVIL_SERVICE_VACANCY = """
 Job summary
 We believe a positive, open and supportive culture is essential to help everyone deliver their best work.
@@ -167,6 +193,26 @@ def test_private_sector_headings_extract_core_requirements_without_civil_service
     assert any("regulated industry" in item["text"].lower() for item in desirables)
     assert any("two days per week" in item["text"].lower() for item in practical)
     assert all(item["source_text"] in PRIVATE_SECTOR_VACANCY for item in items)
+
+
+def test_private_sector_non_criteria_heading_terminates_essential_section():
+    items = deterministic_extract(PRIVATE_SECTOR_BOUNDARY_VACANCY)
+    essentials = [item for item in items if item["category"] == "essential"]
+    combined = "\n".join(item["text"].lower() for item in items)
+
+    assert len(essentials) == 2
+    assert "private medical insurance" not in combined
+    assert "annual learning allowance" not in combined
+    assert "collaborative and inclusive culture" not in combined
+
+
+def test_private_sector_curly_apostrophe_headings_are_recognised():
+    items = deterministic_extract(PRIVATE_SECTOR_CURLY_HEADING_VACANCY)
+    essentials = [item for item in items if item["category"] == "essential"]
+
+    assert len(essentials) == 3
+    assert any("operational processes" in item["text"].lower() for item in essentials)
+    assert any("competing priorities" in item["text"].lower() for item in essentials)
 
 
 def test_ai_validation_rejects_ungrounded_source_text():
