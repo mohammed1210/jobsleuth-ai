@@ -22,6 +22,105 @@ function firstMatch(text: string, patterns: RegExp[]): string | null {
   return null;
 }
 
+function hasNegatedDocumentInstruction(text: string, documentPattern: string): boolean {
+  const segments = text
+    .split(/(?<=[.!?;])\s+|\r?\n+|[,;]\s*(?=(?:instead|but|however)\b)|\s+(?=(?:instead|but|however)\b)|\s+and\s+(?=(?:(?:do\s+not|don't|must\s+not|should\s+not)\s+)?(?:submit|provide|include|attach|upload|complete)\b)/i)
+    .map((segment) => segment.replace(/^(?:instead|but|however)\s*,?\s*/i, '').trim())
+    .filter(Boolean);
+
+  let sawNegatedMention = false;
+  let sawPositiveAction = false;
+
+  const documentMention = new RegExp(`(?:${documentPattern})\\b`, 'i');
+  const requirementNegation = new RegExp(
+    `(?:${documentPattern})\\b\\s*(?:(?:is|are)\\s*)?(?:not\\s+required|not\\s+necessary|optional)\\b`,
+    'i',
+  );
+
+  const knownDocument = '(?:CV|curriculum\\s+vitae|personal\\s+statement|statement\\s+of\\s+suitability|cover(?:ing)?\\s+letter)';
+  const documentSeparator = '(?:\\s*,\\s*(?:(?:and|or)\\s+)?|\\s+(?:and|or)\\s+)';
+  const documentObject = `(?:(?:an?|the|your)\\s+)?${knownDocument}`;
+  const documentObjectList = `(?:either\\s+)?${documentObject}(?:${documentSeparator}${documentObject})*`;
+  const actionVerb = '(?:submit|provide|include|attach|upload|complete)';
+  const passiveActionVerb = '(?:submitted|provided|included|attached|uploaded|completed)';
+
+  const negatedAction = new RegExp(
+    `(?:(?:do\\s+not|don't|must\\s+not|should\\s+not)\\s+${actionVerb}|(?:you\\s+)?(?:do|does)\\s+not\\s+(?:need|have)\\s+to\\s+${actionVerb}|(?:you\\s+)?(?:will\\s+)?not\\s+be\\s+(?:required|expected|needed)\\s+to\\s+${actionVerb}|(?:you\\s+)?(?:are|is)\\s+not\\s+(?:required|expected|needed)\\s+to\\s+${actionVerb})\\s+(${documentObjectList})`,
+    'ig',
+  );
+  const positiveAction = new RegExp(
+    `${actionVerb}\\s+(${documentObjectList})`,
+    'ig',
+  );
+  const passivePositiveAction = new RegExp(
+    `(${documentObjectList})\\s+(?:(?:must|should)\\s+be|(?:is|are)\\s+required\\s+to\\s+be)\\s+${passiveActionVerb}\\b`,
+    'ig',
+  );
+  const listRequirementNegation = new RegExp(
+    `(${documentObjectList})\\s+(?:is|are)\\s+(?:optional|not\\s+required|not\\s+necessary)\\b`,
+    'ig',
+  );
+  const leadingNoRequirement = new RegExp(
+    `\\bno\\s+(${documentObjectList})\\s+(?:is|are)\\s+(?:required|necessary)\\b`,
+    'ig',
+  );
+
+  for (const segment of segments) {
+    if (!documentMention.test(segment)) continue;
+
+    if (requirementNegation.test(segment)) {
+      sawNegatedMention = true;
+    }
+
+    listRequirementNegation.lastIndex = 0;
+    for (const match of segment.matchAll(listRequirementNegation)) {
+      if (documentMention.test(match[1] ?? '')) {
+        sawNegatedMention = true;
+      }
+    }
+
+    leadingNoRequirement.lastIndex = 0;
+    for (const match of segment.matchAll(leadingNoRequirement)) {
+      if (documentMention.test(match[1] ?? '')) {
+        sawNegatedMention = true;
+      }
+    }
+
+    // Remove fully-negated action phrases before looking for affirmative
+    // instructions. Otherwise a phrase such as "not required to submit a CV"
+    // would also be rediscovered as the bare positive substring "submit a CV".
+    let positiveCandidate = segment;
+    negatedAction.lastIndex = 0;
+    positiveCandidate = positiveCandidate.replace(negatedAction, (match, objectList: string) => {
+      if (documentMention.test(objectList ?? '')) {
+        sawNegatedMention = true;
+      }
+      return ' '.repeat(match.length);
+    });
+
+    positiveAction.lastIndex = 0;
+    for (const match of positiveCandidate.matchAll(positiveAction)) {
+      const objectList = match[1] ?? '';
+      if (documentMention.test(objectList)) {
+        sawPositiveAction = true;
+      }
+    }
+
+    passivePositiveAction.lastIndex = 0;
+    for (const match of positiveCandidate.matchAll(passivePositiveAction)) {
+      const objectList = match[1] ?? '';
+      if (documentMention.test(objectList)) {
+        sawPositiveAction = true;
+      }
+    }
+  }
+
+  // Neutral references must not override an explicit prohibition. If the
+  // advert also contains a genuine positive action for the same document,
+  // keep it as required.
+  return sawNegatedMention && !sawPositiveAction;
+}
+
 export function detectApplicationInstructions(vacancyText: string): ApplicationInstructions {
   const text = vacancyText.trim();
   const lines = cleanLines(text);
@@ -42,7 +141,9 @@ export function detectApplicationInstructions(vacancyText: string): ApplicationI
     || lines.find((line, index) => index > 0 && /home office|nhs|council|university|department|agency|service|company|limited|ltd\.?$/i.test(line))
     || '';
 
-  const personalStatement = /personal statement/i.test(text);
+  const personalStatementMentioned = /personal statement/i.test(text);
+  const personalStatementNegated = hasNegatedDocumentInstruction(text, 'personal\\s+statement');
+  const personalStatement = personalStatementMentioned && !personalStatementNegated;
   const criteriaResponse = /essential criteria response|criteria response/i.test(text);
   const applicationType: ApplicationType = criteriaResponse ? 'criteria_response' : 'statement_of_suitability';
   const applicationTypeLabel = personalStatement
@@ -62,11 +163,16 @@ export function detectApplicationInstructions(vacancyText: string): ApplicationI
   const wordLimit = parsedLimit && parsedLimit >= 100 && parsedLimit <= 5000 ? parsedLimit : null;
 
   const requiredDocuments: string[] = [];
-  if (/\b(?:a\s+)?CV\b/i.test(text) && /application process|asked to complete|submit|sift|scored/i.test(text)) {
+  const cvMentioned = /\b(?:a\s+)?CV\b/i.test(text);
+  const cvNegated = hasNegatedDocumentInstruction(text, '(?:a\\s+)?CV');
+  if (cvMentioned && !cvNegated && /application process|asked to complete|submit|sift|scored/i.test(text)) {
     requiredDocuments.push('CV');
   }
   if (personalStatement) requiredDocuments.push('Personal Statement');
-  if (/cover(?:ing)? letter/i.test(text)) requiredDocuments.push('Cover Letter');
+
+  const coverLetterMentioned = /cover(?:ing)? letter/i.test(text);
+  const coverLetterNegated = hasNegatedDocumentInstruction(text, 'cover(?:ing)?\\s+letter');
+  if (coverLetterMentioned && !coverLetterNegated) requiredDocuments.push('Cover Letter');
 
   // Civil Service vacancies can require one or more separately-scored behaviour
   // examples in addition to the CV/personal statement. Preserve the behaviour

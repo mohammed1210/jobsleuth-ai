@@ -45,7 +45,7 @@ class ApplicationEvidence(BaseModel):
 class ApplicationBuilderRequest(BaseModel):
     job: dict[str, Any] = Field(default_factory=dict)
     application_type: Literal["statement_of_suitability", "criteria_response"] = "statement_of_suitability"
-    word_limit: int = Field(default=500, ge=150, le=1500)
+    word_limit: int = Field(default=500, ge=100, le=5000)
     requirements: list[ApplicationRequirement] = Field(default_factory=list)
     evidence_cards: list[ApplicationEvidence] = Field(default_factory=list)
 

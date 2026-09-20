@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { Session } from '@supabase/supabase-js';
 
@@ -14,6 +14,30 @@ import { extractVacancyIntelligence, type IntelligenceItem } from '@/lib/vacancy
 import { parseVacancyText } from '@/lib/vacancyParser';
 
 const lines = (value: string) => value.split('\n').map((item) => item.trim()).filter(Boolean);
+const VACANCY_DRAFT_KEY = 'jobsleuth.apply.vacancyDraft.v2';
+
+const evidenceFingerprint = (cards: EvidenceCard[]) => JSON.stringify(cards);
+const analysisInputFingerprint = (essential: string, desirable: string, trainable: string, practical: string) => JSON.stringify({
+  essential: lines(essential),
+  desirable: lines(desirable),
+  trainable: lines(trainable),
+  practical: lines(practical),
+});
+
+type VacancyDraftState = {
+  userId: string;
+  vacancyText: string;
+  eligibility: string;
+  essential: string;
+  desirable: string;
+  trainable: string;
+  practical: string;
+  extractedItems: IntelligenceItem[];
+  extractionProvider: string | null;
+  analysis: VacancyAnalysis | null;
+  analysisEvidenceFingerprint: string | null;
+  analysisInputFingerprint: string | null;
+};
 
 export default function VacancyApplyPage() {
   const [session, setSession] = useState<Session | null>(null);
@@ -29,30 +53,164 @@ export default function VacancyApplyPage() {
   const [extracting, setExtracting] = useState(false);
   const [analysing, setAnalysing] = useState(false);
   const [analysis, setAnalysis] = useState<VacancyAnalysis | null>(null);
+  const [analysisEvidenceFingerprint, setAnalysisEvidenceFingerprint] = useState<string | null>(null);
+  const [analysisInputFingerprintValue, setAnalysisInputFingerprintValue] = useState<string | null>(null);
+  const [analysisValidated, setAnalysisValidated] = useState(false);
+  const sessionUserIdRef = useRef<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [draftStateReady, setDraftStateReady] = useState(false);
+
+  const clearDraftFields = () => {
+    setVacancyText('');
+    setEligibility('');
+    setEssential('');
+    setDesirable('');
+    setTrainable('');
+    setPractical('');
+    setExtractedItems([]);
+    setExtractionProvider(null);
+    setAnalysis(null);
+    setAnalysisEvidenceFingerprint(null);
+    setAnalysisInputFingerprintValue(null);
+    setAnalysisValidated(false);
+  };
+
+  const restoreDraftForUser = (userId: string) => {
+    try {
+      const raw = window.sessionStorage.getItem(VACANCY_DRAFT_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as Partial<VacancyDraftState>;
+      if (saved.userId !== userId) {
+        window.sessionStorage.removeItem(VACANCY_DRAFT_KEY);
+        clearDraftFields();
+        return;
+      }
+      if (typeof saved.vacancyText === 'string') setVacancyText(saved.vacancyText);
+      if (typeof saved.eligibility === 'string') setEligibility(saved.eligibility);
+      if (typeof saved.essential === 'string') setEssential(saved.essential);
+      if (typeof saved.desirable === 'string') setDesirable(saved.desirable);
+      if (typeof saved.trainable === 'string') setTrainable(saved.trainable);
+      if (typeof saved.practical === 'string') setPractical(saved.practical);
+      if (Array.isArray(saved.extractedItems)) setExtractedItems(saved.extractedItems);
+      if (typeof saved.extractionProvider === 'string' || saved.extractionProvider === null) {
+        setExtractionProvider(saved.extractionProvider ?? null);
+      }
+      if (saved.analysis && typeof saved.analysis === 'object') {
+        setAnalysis(saved.analysis as VacancyAnalysis);
+        setAnalysisEvidenceFingerprint(
+          typeof saved.analysisEvidenceFingerprint === 'string' ? saved.analysisEvidenceFingerprint : null,
+        );
+        setAnalysisInputFingerprintValue(
+          typeof saved.analysisInputFingerprint === 'string' ? saved.analysisInputFingerprint : null,
+        );
+        setAnalysisValidated(false);
+      }
+    } catch {
+      window.sessionStorage.removeItem(VACANCY_DRAFT_KEY);
+      clearDraftFields();
+    }
+  };
+
+  useEffect(() => {
+    if (!draftStateReady || !session) return;
+    const snapshot: VacancyDraftState = {
+      userId: session.user.id,
+      vacancyText,
+      eligibility,
+      essential,
+      desirable,
+      trainable,
+      practical,
+      extractedItems,
+      extractionProvider,
+      analysis,
+      analysisEvidenceFingerprint,
+      analysisInputFingerprint: analysisInputFingerprintValue,
+    };
+    const hasWork = vacancyText.trim() || eligibility.trim() || essential.trim() || desirable.trim() || trainable.trim() || practical.trim() || extractedItems.length > 0 || analysis;
+    if (!hasWork) {
+      window.sessionStorage.removeItem(VACANCY_DRAFT_KEY);
+      return;
+    }
+    window.sessionStorage.setItem(VACANCY_DRAFT_KEY, JSON.stringify(snapshot));
+  }, [draftStateReady, session, vacancyText, eligibility, essential, desirable, trainable, practical, extractedItems, extractionProvider, analysis, analysisEvidenceFingerprint, analysisInputFingerprintValue]);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
       setMessage('Supabase is not configured yet.');
       setLoading(false);
+      setDraftStateReady(true);
       return;
     }
 
     const supabase = getSupabaseClient();
     let active = true;
 
-    const load = async () => {
-      const current = await getFreshSession();
-      if (!active) return;
-      setSession(current);
-      if (current) {
+    const loadEvidenceForSession = async (nextSession: Session) => {
+      const requestedUserId = nextSession.user.id;
+      try {
+        const nextEvidence = await fetchEvidence(nextSession);
+        if (!active || sessionUserIdRef.current !== requestedUserId) return;
+
+        setEvidence(nextEvidence);
+
         try {
-          setEvidence(await fetchEvidence(current));
-        } catch (error) {
+          const raw = window.sessionStorage.getItem(VACANCY_DRAFT_KEY);
+          if (raw) {
+            const saved = JSON.parse(raw) as Partial<VacancyDraftState>;
+            if (saved.userId === requestedUserId && saved.analysis) {
+              const savedInputsFingerprint = analysisInputFingerprint(
+                typeof saved.essential === 'string' ? saved.essential : '',
+                typeof saved.desirable === 'string' ? saved.desirable : '',
+                typeof saved.trainable === 'string' ? saved.trainable : '',
+                typeof saved.practical === 'string' ? saved.practical : '',
+              );
+              const evidenceStillMatches = saved.analysisEvidenceFingerprint === evidenceFingerprint(nextEvidence);
+              const inputsStillMatch = saved.analysisInputFingerprint === savedInputsFingerprint;
+              if (!evidenceStillMatches || !inputsStillMatch) {
+                setAnalysis(null);
+                setAnalysisEvidenceFingerprint(null);
+                setAnalysisInputFingerprintValue(null);
+                setAnalysisValidated(false);
+              } else {
+                setAnalysisValidated(true);
+              }
+            } else {
+              setAnalysisValidated(false);
+            }
+          }
+        } catch {
+          setAnalysis(null);
+          setAnalysisEvidenceFingerprint(null);
+        }
+      } catch (error) {
+        if (active && sessionUserIdRef.current === requestedUserId) {
+          setEvidence([]);
+          setAnalysis(null);
+          setAnalysisEvidenceFingerprint(null);
+          setAnalysisInputFingerprintValue(null);
+          setAnalysisValidated(false);
           setMessage(error instanceof Error ? error.message : 'Could not load your Evidence Bank.');
         }
       }
+    };
+
+    const load = async () => {
+      const current = await getFreshSession();
+      if (!active) return;
+      sessionUserIdRef.current = current?.user.id ?? null;
+      setSession(current);
+      if (current) {
+        restoreDraftForUser(current.user.id);
+        await loadEvidenceForSession(current);
+      } else {
+        window.sessionStorage.removeItem(VACANCY_DRAFT_KEY);
+        clearDraftFields();
+        setEvidence([]);
+      }
+      if (!active) return;
+      setDraftStateReady(true);
       setLoading(false);
     };
 
@@ -60,8 +218,39 @@ export default function VacancyApplyPage() {
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       if (!active) return;
+      sessionUserIdRef.current = nextSession?.user.id ?? null;
       setSession(nextSession);
-      if (!nextSession) setAnalysis(null);
+      setDraftStateReady(false);
+
+      if (!nextSession) {
+        window.sessionStorage.removeItem(VACANCY_DRAFT_KEY);
+        clearDraftFields();
+        setEvidence([]);
+        setDraftStateReady(true);
+        return;
+      }
+
+      try {
+        const raw = window.sessionStorage.getItem(VACANCY_DRAFT_KEY);
+        if (raw) {
+          const saved = JSON.parse(raw) as Partial<VacancyDraftState>;
+          if (saved.userId !== nextSession.user.id) {
+            window.sessionStorage.removeItem(VACANCY_DRAFT_KEY);
+            clearDraftFields();
+          } else {
+            restoreDraftForUser(nextSession.user.id);
+          }
+        } else {
+          clearDraftFields();
+        }
+      } catch {
+        window.sessionStorage.removeItem(VACANCY_DRAFT_KEY);
+        clearDraftFields();
+      }
+
+      setEvidence([]);
+      void loadEvidenceForSession(nextSession);
+      setDraftStateReady(true);
     });
 
     return () => {
@@ -72,6 +261,7 @@ export default function VacancyApplyPage() {
 
   const currentSession = async () => {
     const fresh = await getFreshSession();
+    sessionUserIdRef.current = fresh?.user.id ?? null;
     setSession(fresh);
     if (!fresh) setMessage('Your session has expired. Sign in again to continue.');
     return fresh;
@@ -123,9 +313,13 @@ export default function VacancyApplyPage() {
 
     setExtracting(true);
     setAnalysis(null);
+    setAnalysisEvidenceFingerprint(null);
+    setAnalysisInputFingerprintValue(null);
+    setAnalysisValidated(false);
     setMessage(null);
     try {
       const result = await extractVacancyIntelligence(activeSession, vacancyText);
+      if (sessionUserIdRef.current !== activeSession.user.id) return;
       const items = [...result.eligibility, ...result.requirements, ...result.practical];
       applyRequirements(items);
       setExtractedItems(items);
@@ -133,6 +327,7 @@ export default function VacancyApplyPage() {
       const lowConfidence = result.summary.low_confidence ? ` ${result.summary.low_confidence} item(s) need extra review.` : '';
       setMessage(`Extracted ${result.summary.items} grounded item(s). Review and edit before analysing.${lowConfidence}`);
     } catch {
+      if (sessionUserIdRef.current !== activeSession.user.id) return;
       const count = localFallback();
       setMessage(count ? `The intelligence service was unavailable, so JobSleuth used the local fallback and found ${count} item(s). Review carefully.` : 'No clear criteria found. Edit the fields manually below.');
     } finally {
@@ -156,10 +351,17 @@ export default function VacancyApplyPage() {
 
     setAnalysing(true);
     setAnalysis(null);
+    setAnalysisEvidenceFingerprint(null);
+    setAnalysisInputFingerprintValue(null);
+    setAnalysisValidated(false);
     setMessage('Analysing your evidence against the vacancy…');
     try {
       const result = await analyseVacancy(activeSession, requirements, evidence, lines(practical));
+      if (sessionUserIdRef.current !== activeSession.user.id) return;
       setAnalysis(result);
+      setAnalysisEvidenceFingerprint(evidenceFingerprint(evidence));
+      setAnalysisInputFingerprintValue(analysisInputFingerprint(essential, desirable, trainable, practical));
+      setAnalysisValidated(true);
       setMessage(null);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Vacancy analysis failed.');
@@ -167,6 +369,16 @@ export default function VacancyApplyPage() {
       setAnalysing(false);
     }
   };
+
+  useEffect(() => {
+    if (!analysis || !analysisInputFingerprintValue) return;
+    if (analysisInputFingerprintValue !== analysisInputFingerprint(essential, desirable, trainable, practical)) {
+      setAnalysis(null);
+      setAnalysisEvidenceFingerprint(null);
+      setAnalysisInputFingerprintValue(null);
+      setAnalysisValidated(false);
+    }
+  }, [analysis, analysisInputFingerprintValue, essential, desirable, trainable, practical]);
 
   if (!loading && !session) {
     return (
@@ -227,7 +439,7 @@ export default function VacancyApplyPage() {
 
         <ExtractionAudit items={extractedItems} provider={extractionProvider} />
 
-        {analysis && (
+        {analysis && analysisValidated && (
           <>
             <section className="card p-6 space-y-5">
               <div className="flex flex-wrap items-center justify-between gap-4">
