@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { Session } from '@supabase/supabase-js';
 
-import type { EvidenceCard, VacancyAnalysis } from '@/lib/applyApi';
+import type { EvidenceCard, RequirementAnalysis, VacancyAnalysis } from '@/lib/applyApi';
 import { buildApplication, type ApplicationDraftResult, type ApplicationType } from '@/lib/applicationBuilderApi';
 import { detectApplicationInstructions } from '@/lib/applicationInstructions';
 import { savePilotFeedback, type PaymentSignal } from '@/lib/pilotFeedbackApi';
 
 type Props = { session: Session; analysis: VacancyAnalysis; evidence: EvidenceCard[]; vacancyText: string };
+
+const EVIDENCE_TARGET_KEY = 'jobsleuth.evidence.target.v1';
 
 const statusLabel: Record<string, string> = {
   covered: 'Covered',
@@ -18,10 +20,13 @@ const statusLabel: Record<string, string> = {
   'not-used': 'Not used',
 };
 
+const normalise = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
 export default function ApplicationDraftPanel({ session, analysis, evidence, vacancyText }: Props) {
   const instructions = useMemo(() => detectApplicationInstructions(vacancyText), [vacancyText]);
   const [roleTitle, setRoleTitle] = useState('');
   const [organisation, setOrganisation] = useState('');
+  const [selectedPartId, setSelectedPartId] = useState('');
   const [applicationType, setApplicationType] = useState<ApplicationType>('statement_of_suitability');
   const [wordLimitInput, setWordLimitInput] = useState('500');
   const [draftAnyway, setDraftAnyway] = useState(false);
@@ -38,15 +43,32 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
   const [feedbackSaved, setFeedbackSaved] = useState(false);
   const [savingFeedback, setSavingFeedback] = useState(false);
 
+  const selectedPart = useMemo(
+    () => instructions.applicationParts.find((part) => part.id === selectedPartId) ?? instructions.applicationParts[0],
+    [instructions.applicationParts, selectedPartId],
+  );
+
   useEffect(() => {
     setRoleTitle(instructions.roleTitle);
     setOrganisation(instructions.organisation);
-    setApplicationType(instructions.applicationType);
-    if (instructions.wordLimit) setWordLimitInput(String(instructions.wordLimit));
+    const first = instructions.applicationParts[0];
+    setSelectedPartId(first?.id ?? '');
+    setApplicationType(first?.kind === 'criteria' ? 'criteria_response' : 'statement_of_suitability');
+    setWordLimitInput(String(first?.wordLimit ?? instructions.wordLimit ?? 500));
     setDraftAnyway(false);
     setResult(null);
     setDraft('');
   }, [instructions]);
+
+  useEffect(() => {
+    if (!selectedPart) return;
+    setApplicationType(selectedPart.kind === 'criteria' || selectedPart.kind === 'behaviour' ? 'criteria_response' : 'statement_of_suitability');
+    setWordLimitInput(String(selectedPart.wordLimit ?? (selectedPart.kind === 'behaviour' ? 250 : instructions.wordLimit ?? 500)));
+    setDraftAnyway(false);
+    setResult(null);
+    setDraft('');
+    setMessage(null);
+  }, [selectedPart?.id]);
 
   const wordLimit = useMemo(() => {
     const parsed = Number(wordLimitInput);
@@ -54,10 +76,47 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
     return Math.min(5000, Math.max(100, Math.round(parsed)));
   }, [wordLimitInput]);
 
+  const activeRequirements = useMemo<RequirementAnalysis[]>(() => {
+    if (selectedPart?.kind !== 'behaviour' || !selectedPart.behaviourName) return analysis.requirements;
+
+    const behaviourKey = normalise(selectedPart.behaviourName);
+    const matchedCards = evidence.filter((card) =>
+      (card.behaviours || []).some((label) => {
+        const key = normalise(label);
+        return key === behaviourKey || key.includes(behaviourKey) || behaviourKey.includes(key);
+      }),
+    );
+
+    return [{
+      requirement: `Civil Service behaviour: ${selectedPart.behaviourName}`,
+      category: 'essential',
+      blocker: false,
+      status: matchedCards.length ? 'matched' : 'evidence-gap',
+      match_strength: matchedCards.length ? 'strong' : 'missing',
+      confidence: matchedCards.length ? 1 : 0.96,
+      why: matchedCards.length
+        ? 'Evidence Bank examples are explicitly tagged to this behaviour.'
+        : 'No Evidence Bank example is explicitly tagged to this behaviour yet.',
+      gaps: matchedCards.length ? [] : [`Add a genuine example demonstrating ${selectedPart.behaviourName}.`],
+      evidence: matchedCards.map((card) => ({
+        id: card.id,
+        title: card.title,
+        strength: 'strong' as const,
+        score: 100,
+        confidence: 1,
+        why: `Tagged to ${selectedPart.behaviourName}.`,
+        gaps: [],
+        supporting_facts: [],
+        signals: { concepts: [selectedPart.behaviourName], evidence_quality: 1 },
+        matched_terms: [selectedPart.behaviourName],
+      })),
+    }];
+  }, [analysis.requirements, evidence, selectedPart]);
+
   const liveWordCount = useMemo(() => draft.trim() ? draft.trim().split(/\s+/).length : 0, [draft]);
 
   const readiness = useMemo(() => {
-    const essential = analysis.requirements.filter((item) => item.category === 'essential');
+    const essential = activeRequirements.filter((item) => item.category === 'essential');
     const counts = { strong: 0, partial: 0, weak: 0, missing: 0 };
     for (const item of essential) {
       if (item.match_strength === 'strong') counts.strong += 1;
@@ -70,7 +129,7 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
       ...counts,
       needsStrengthening: counts.partial + counts.weak + counts.missing > 0,
     };
-  }, [analysis.requirements]);
+  }, [activeRequirements]);
 
   const build = async () => {
     if (readiness.needsStrengthening && !draftAnyway) {
@@ -79,12 +138,34 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
     }
     setBuilding(true); setMessage(null); setFeedbackSaved(false);
     try {
-      const next = await buildApplication(session, { roleTitle, organisation, applicationType, wordLimit, requirements: analysis.requirements, evidenceCards: evidence });
+      const next = await buildApplication(session, {
+        roleTitle,
+        organisation,
+        applicationType,
+        wordLimit,
+        requirements: activeRequirements,
+        evidenceCards: evidence,
+      });
       setResult(next); setDraft(next.draft);
       if (!next.can_generate) setMessage('JobSleuth did not find enough supported evidence to draft safely. Strengthen the Evidence Bank first.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Application Builder could not generate a draft. Please try again.');
     } finally { setBuilding(false); }
+  };
+
+  const prepareEvidenceTarget = () => {
+    const weakest = activeRequirements.find((item) => item.match_strength !== 'strong' && item.match_strength !== 'trainable')
+      ?? activeRequirements[0];
+    if (!weakest) return;
+    window.sessionStorage.setItem(EVIDENCE_TARGET_KEY, JSON.stringify({
+      userId: session.user.id,
+      requirement: weakest.requirement,
+      category: weakest.category,
+      matchStrength: weakest.match_strength,
+      gaps: Array.isArray(weakest.gaps) ? weakest.gaps : [],
+      returnTo: '/apply/vacancy',
+      createdAt: new Date().toISOString(),
+    }));
   };
 
   const copyDraft = async () => {
@@ -120,35 +201,58 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
     <section className="card p-6 space-y-5">
       <div>
         <p className="text-sm font-semibold text-brand-700">Application Builder</p>
-        <h2 className="mt-1 text-2xl font-bold text-gray-900">Turn matched evidence into a supported draft</h2>
-        <p className="mt-2 text-sm text-gray-600">JobSleuth uses only Strong or Partial matched Evidence Cards. Missing evidence stays visible rather than being invented.</p>
+        <h2 className="mt-1 text-2xl font-bold text-gray-900">Turn matched evidence into supported application components</h2>
+        <p className="mt-2 text-sm text-gray-600">JobSleuth keeps separate word limits separate and only drafts from evidence it can support.</p>
       </div>
 
       <div className="rounded-2xl border bg-gray-50 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Detected application instructions</p>
-            <p className="mt-1 text-sm font-medium text-gray-900">{instructions.applicationTypeLabel}{instructions.wordLimit ? ` · maximum ${instructions.wordLimit} words` : ''}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {instructions.applicationParts.map((part) => (
+                <span key={part.id} className="rounded-full bg-white px-3 py-1 text-sm font-medium text-gray-800">
+                  {part.label}{part.wordLimit ? ` · ${part.wordLimit} words` : ''}
+                </span>
+              ))}
+            </div>
           </div>
-          {instructions.requiredDocuments.length > 0 && <p className="text-sm text-gray-600">Required: {instructions.requiredDocuments.join(' + ')}</p>}
+          {instructions.requiredDocuments.length > 0 && <p className="max-w-xl text-sm text-gray-600">Required: {instructions.requiredDocuments.join(' + ')}</p>}
         </div>
-        <p className="mt-2 text-xs text-gray-500">These are pre-filled from the vacancy and remain editable.</p>
+        <p className="mt-2 text-xs text-gray-500">Each detected component keeps its own word budget. CV requirements are shown but are not drafted here.</p>
       </div>
+
+      {instructions.applicationParts.length > 1 && (
+        <label className="block text-sm font-medium text-gray-700">
+          Application component
+          <select value={selectedPart?.id ?? ''} onChange={(e) => setSelectedPartId(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2">
+            {instructions.applicationParts.map((part) => (
+              <option key={part.id} value={part.id}>{part.label}{part.wordLimit ? ` — ${part.wordLimit} words` : ''}</option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      {selectedPart?.kind === 'behaviour' && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+          <strong>Behaviour component:</strong> JobSleuth will only use Evidence Bank examples explicitly tagged <strong>{selectedPart.behaviourName}</strong>.
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         <label className="text-sm font-medium text-gray-700">Role title<input value={roleTitle} onChange={(e) => setRoleTitle(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2" placeholder="e.g. Counter Fraud Officer" /></label>
         <label className="text-sm font-medium text-gray-700">Organisation<input value={organisation} onChange={(e) => setOrganisation(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2" placeholder="Optional" /></label>
-        <label className="text-sm font-medium text-gray-700">Application type<select value={applicationType} onChange={(e) => setApplicationType(e.target.value as ApplicationType)} className="mt-1 w-full rounded-xl border px-3 py-2"><option value="statement_of_suitability">Personal statement / statement of suitability</option><option value="criteria_response">Essential criteria response</option></select></label>
+        <label className="text-sm font-medium text-gray-700">Draft format<select value={applicationType} onChange={(e) => setApplicationType(e.target.value as ApplicationType)} className="mt-1 w-full rounded-xl border px-3 py-2"><option value="statement_of_suitability">Personal statement / statement of suitability</option><option value="criteria_response">Criteria / behaviour response</option></select></label>
         <label className="text-sm font-medium text-gray-700">Word limit<input inputMode="numeric" value={wordLimitInput} onChange={(e) => setWordLimitInput(e.target.value.replace(/[^0-9]/g, ''))} onBlur={() => setWordLimitInput(String(wordLimit))} className="mt-1 w-full rounded-xl border px-3 py-2" placeholder="e.g. 750" /></label>
       </div>
 
       {readiness.needsStrengthening ? (
         <div className="rounded-2xl border border-amber-300 bg-amber-50 p-5">
-          <h3 className="font-semibold text-amber-950">Evidence needs strengthening before drafting</h3>
+          <h3 className="font-semibold text-amber-950">Evidence needs strengthening before drafting this component</h3>
           <p className="mt-2 text-sm text-amber-900">Of {readiness.total} essential criteria: {readiness.strong} Strong, {readiness.partial} Partial, {readiness.weak} Weak, {readiness.missing} Missing.</p>
-          <p className="mt-2 text-sm text-amber-900">A draft can only use evidence JobSleuth can support. Missing or weak criteria will stay uncovered rather than being invented.</p>
+          <p className="mt-2 text-sm text-amber-900">A draft can only use evidence JobSleuth can support. Missing or weak criteria stay uncovered rather than being invented.</p>
           <div className="mt-4 flex flex-wrap gap-3">
-            <Link href="/apply" className="btn-secondary">Strengthen Evidence Bank</Link>
+            <Link href="/apply" onClick={prepareEvidenceTarget} className="btn-secondary">Strengthen Evidence Bank</Link>
             {!draftAnyway ? (
               <button type="button" onClick={() => setDraftAnyway(true)} className="btn-secondary">Draft with current evidence anyway</button>
             ) : (
@@ -157,10 +261,10 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
           </div>
         </div>
       ) : (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"><strong>Evidence ready to draft.</strong> All {readiness.total} essential criteria have Strong support.</div>
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"><strong>Evidence ready to draft.</strong> All {readiness.total} essential criteria for this component have Strong support.</div>
       )}
 
-      <button type="button" onClick={build} disabled={building || (readiness.needsStrengthening && !draftAnyway)} className="btn-primary disabled:cursor-not-allowed disabled:opacity-50">{building ? 'Building evidence-backed draft…' : 'Build application draft'}</button>
+      <button type="button" onClick={build} disabled={building || (readiness.needsStrengthening && !draftAnyway)} className="btn-primary disabled:cursor-not-allowed disabled:opacity-50">{building ? 'Building evidence-backed draft…' : `Build ${selectedPart?.label ?? 'application'} draft`}</button>
       {message && <div className="rounded-xl border bg-white px-4 py-3 text-sm text-gray-700">{message}</div>}
 
       {result && (
@@ -169,7 +273,7 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
 
           <div>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <div><h3 className="font-semibold text-gray-900">Editable draft</h3><p className="text-xs text-gray-500">Provider: {result.provider}{result.fallback_reason ? ` · fallback: ${result.fallback_reason}` : ''}</p></div>
+              <div><h3 className="font-semibold text-gray-900">{selectedPart?.label ?? 'Editable'} draft</h3><p className="text-xs text-gray-500">Provider: {result.provider}{result.fallback_reason ? ` · fallback: ${result.fallback_reason}` : ''}</p></div>
               <div className="flex items-center gap-3"><span className="text-sm text-gray-600">{liveWordCount} / {wordLimit} words</span><button type="button" onClick={copyDraft} className="btn-secondary">Copy</button></div>
             </div>
             <textarea value={draft} onChange={(e) => setDraft(e.target.value)} className="min-h-[28rem] w-full rounded-xl border px-4 py-3 leading-7" placeholder="A supported draft will appear here." />

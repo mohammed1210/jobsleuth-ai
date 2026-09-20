@@ -1,5 +1,13 @@
 import type { ApplicationType } from '@/lib/applicationBuilderApi';
 
+export type ApplicationPart = {
+  id: string;
+  kind: 'statement' | 'criteria' | 'behaviour';
+  label: string;
+  wordLimit: number | null;
+  behaviourName?: string;
+};
+
 export type ApplicationInstructions = {
   roleTitle: string;
   organisation: string;
@@ -7,6 +15,7 @@ export type ApplicationInstructions = {
   applicationTypeLabel: string;
   wordLimit: number | null;
   requiredDocuments: string[];
+  applicationParts: ApplicationPart[];
 };
 
 const cleanLines = (text: string) => text
@@ -163,6 +172,14 @@ export function detectApplicationInstructions(vacancyText: string): ApplicationI
   const wordLimit = parsedLimit && parsedLimit >= 100 && parsedLimit <= 5000 ? parsedLimit : null;
 
   const requiredDocuments: string[] = [];
+  const applicationParts: ApplicationPart[] = [];
+
+  applicationParts.push({
+    id: applicationType === 'criteria_response' ? 'criteria-response' : 'main-statement',
+    kind: applicationType === 'criteria_response' ? 'criteria' : 'statement',
+    label: applicationTypeLabel,
+    wordLimit,
+  });
   const cvMentioned = /\b(?:a\s+)?CV\b/i.test(text);
   const cvNegated = hasNegatedDocumentInstruction(text, '(?:a\\s+)?CV');
   if (cvMentioned && !cvNegated && /application process|asked to complete|submit|sift|scored/i.test(text)) {
@@ -184,6 +201,13 @@ export function detectApplicationInstructions(vacancyText: string): ApplicationI
     const behaviourLimit = Number(match[2]);
     if (!behaviourName || !Number.isFinite(behaviourLimit)) continue;
     requiredDocuments.push(`Behaviour: ${behaviourName} (${behaviourLimit} words)`);
+    applicationParts.push({
+      id: `behaviour-${behaviourName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      kind: 'behaviour',
+      label: `Behaviour: ${behaviourName}`,
+      wordLimit: behaviourLimit,
+      behaviourName,
+    });
   }
 
   return {
@@ -193,5 +217,6 @@ export function detectApplicationInstructions(vacancyText: string): ApplicationI
     applicationTypeLabel,
     wordLimit,
     requiredDocuments: [...new Set(requiredDocuments)],
+    applicationParts: applicationParts.filter((part, index, parts) => parts.findIndex((candidate) => candidate.id === part.id) === index),
   };
 }
