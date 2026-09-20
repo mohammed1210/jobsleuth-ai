@@ -17,6 +17,12 @@ const lines = (value: string) => value.split('\n').map((item) => item.trim()).fi
 const VACANCY_DRAFT_KEY = 'jobsleuth.apply.vacancyDraft.v2';
 
 const evidenceFingerprint = (cards: EvidenceCard[]) => JSON.stringify(cards);
+const analysisInputFingerprint = (essential: string, desirable: string, trainable: string, practical: string) => JSON.stringify({
+  essential: lines(essential),
+  desirable: lines(desirable),
+  trainable: lines(trainable),
+  practical: lines(practical),
+});
 
 type VacancyDraftState = {
   userId: string;
@@ -30,6 +36,7 @@ type VacancyDraftState = {
   extractionProvider: string | null;
   analysis: VacancyAnalysis | null;
   analysisEvidenceFingerprint: string | null;
+  analysisInputFingerprint: string | null;
 };
 
 export default function VacancyApplyPage() {
@@ -47,6 +54,8 @@ export default function VacancyApplyPage() {
   const [analysing, setAnalysing] = useState(false);
   const [analysis, setAnalysis] = useState<VacancyAnalysis | null>(null);
   const [analysisEvidenceFingerprint, setAnalysisEvidenceFingerprint] = useState<string | null>(null);
+  const [analysisInputFingerprintValue, setAnalysisInputFingerprintValue] = useState<string | null>(null);
+  const [analysisValidated, setAnalysisValidated] = useState(false);
   const sessionUserIdRef = useRef<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,6 +72,8 @@ export default function VacancyApplyPage() {
     setExtractionProvider(null);
     setAnalysis(null);
     setAnalysisEvidenceFingerprint(null);
+    setAnalysisInputFingerprintValue(null);
+    setAnalysisValidated(false);
   };
 
   const restoreDraftForUser = (userId: string) => {
@@ -90,6 +101,10 @@ export default function VacancyApplyPage() {
         setAnalysisEvidenceFingerprint(
           typeof saved.analysisEvidenceFingerprint === 'string' ? saved.analysisEvidenceFingerprint : null,
         );
+        setAnalysisInputFingerprintValue(
+          typeof saved.analysisInputFingerprint === 'string' ? saved.analysisInputFingerprint : null,
+        );
+        setAnalysisValidated(false);
       }
     } catch {
       window.sessionStorage.removeItem(VACANCY_DRAFT_KEY);
@@ -111,6 +126,7 @@ export default function VacancyApplyPage() {
       extractionProvider,
       analysis,
       analysisEvidenceFingerprint,
+      analysisInputFingerprint: analysisInputFingerprintValue,
     };
     const hasWork = vacancyText.trim() || eligibility.trim() || essential.trim() || desirable.trim() || trainable.trim() || practical.trim() || extractedItems.length > 0 || analysis;
     if (!hasWork) {
@@ -118,7 +134,7 @@ export default function VacancyApplyPage() {
       return;
     }
     window.sessionStorage.setItem(VACANCY_DRAFT_KEY, JSON.stringify(snapshot));
-  }, [draftStateReady, session, vacancyText, eligibility, essential, desirable, trainable, practical, extractedItems, extractionProvider, analysis, analysisEvidenceFingerprint]);
+  }, [draftStateReady, session, vacancyText, eligibility, essential, desirable, trainable, practical, extractedItems, extractionProvider, analysis, analysisEvidenceFingerprint, analysisInputFingerprintValue]);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
@@ -143,13 +159,25 @@ export default function VacancyApplyPage() {
           const raw = window.sessionStorage.getItem(VACANCY_DRAFT_KEY);
           if (raw) {
             const saved = JSON.parse(raw) as Partial<VacancyDraftState>;
-            if (
-              saved.userId === requestedUserId
-              && saved.analysis
-              && saved.analysisEvidenceFingerprint !== evidenceFingerprint(nextEvidence)
-            ) {
-              setAnalysis(null);
-              setAnalysisEvidenceFingerprint(null);
+            if (saved.userId === requestedUserId && saved.analysis) {
+              const savedInputsFingerprint = analysisInputFingerprint(
+                typeof saved.essential === 'string' ? saved.essential : '',
+                typeof saved.desirable === 'string' ? saved.desirable : '',
+                typeof saved.trainable === 'string' ? saved.trainable : '',
+                typeof saved.practical === 'string' ? saved.practical : '',
+              );
+              const evidenceStillMatches = saved.analysisEvidenceFingerprint === evidenceFingerprint(nextEvidence);
+              const inputsStillMatch = saved.analysisInputFingerprint === savedInputsFingerprint;
+              if (!evidenceStillMatches || !inputsStillMatch) {
+                setAnalysis(null);
+                setAnalysisEvidenceFingerprint(null);
+                setAnalysisInputFingerprintValue(null);
+                setAnalysisValidated(false);
+              } else {
+                setAnalysisValidated(true);
+              }
+            } else {
+              setAnalysisValidated(false);
             }
           }
         } catch {
@@ -161,6 +189,8 @@ export default function VacancyApplyPage() {
           setEvidence([]);
           setAnalysis(null);
           setAnalysisEvidenceFingerprint(null);
+          setAnalysisInputFingerprintValue(null);
+          setAnalysisValidated(false);
           setMessage(error instanceof Error ? error.message : 'Could not load your Evidence Bank.');
         }
       }
@@ -284,6 +314,8 @@ export default function VacancyApplyPage() {
     setExtracting(true);
     setAnalysis(null);
     setAnalysisEvidenceFingerprint(null);
+    setAnalysisInputFingerprintValue(null);
+    setAnalysisValidated(false);
     setMessage(null);
     try {
       const result = await extractVacancyIntelligence(activeSession, vacancyText);
@@ -320,12 +352,16 @@ export default function VacancyApplyPage() {
     setAnalysing(true);
     setAnalysis(null);
     setAnalysisEvidenceFingerprint(null);
+    setAnalysisInputFingerprintValue(null);
+    setAnalysisValidated(false);
     setMessage('Analysing your evidence against the vacancy…');
     try {
       const result = await analyseVacancy(activeSession, requirements, evidence, lines(practical));
       if (sessionUserIdRef.current !== activeSession.user.id) return;
       setAnalysis(result);
       setAnalysisEvidenceFingerprint(evidenceFingerprint(evidence));
+      setAnalysisInputFingerprintValue(analysisInputFingerprint(essential, desirable, trainable, practical));
+      setAnalysisValidated(true);
       setMessage(null);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Vacancy analysis failed.');
@@ -333,6 +369,16 @@ export default function VacancyApplyPage() {
       setAnalysing(false);
     }
   };
+
+  useEffect(() => {
+    if (!analysis || !analysisInputFingerprintValue) return;
+    if (analysisInputFingerprintValue !== analysisInputFingerprint(essential, desirable, trainable, practical)) {
+      setAnalysis(null);
+      setAnalysisEvidenceFingerprint(null);
+      setAnalysisInputFingerprintValue(null);
+      setAnalysisValidated(false);
+    }
+  }, [analysis, analysisInputFingerprintValue, essential, desirable, trainable, practical]);
 
   if (!loading && !session) {
     return (
@@ -393,7 +439,7 @@ export default function VacancyApplyPage() {
 
         <ExtractionAudit items={extractedItems} provider={extractionProvider} />
 
-        {analysis && (
+        {analysis && analysisValidated && (
           <>
             <section className="card p-6 space-y-5">
               <div className="flex flex-wrap items-center justify-between gap-4">
