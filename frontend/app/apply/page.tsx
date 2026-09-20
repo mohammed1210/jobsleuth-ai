@@ -113,7 +113,7 @@ export default function ApplyPage() {
         <div>
           <p className="text-sm font-semibold text-brand-700 mb-2">Evidence Bank</p>
           <h1 className="text-4xl font-bold text-gray-900">Saved examples</h1>
-          <p className="text-gray-600 mt-3">Capture structured details and keep them consistent.</p>
+          <p className="text-gray-600 mt-3">Capture reusable proof from any role or sector. JobSleuth matches the same evidence to different vacancies without inventing experience.</p>
         </div>
         {(error || bank.recordError) && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">{error || bank.recordError}</div>}
 
@@ -134,6 +134,17 @@ export default function ApplyPage() {
                     </ul>
                   </div>
                 )}
+                <div className="mt-4 rounded-xl border border-brand-100 bg-white/70 p-4">
+                  <p className="text-sm font-semibold text-gray-900">Use a real example and answer these prompts in the Evidence Card:</p>
+                  <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-gray-700">
+                    <li>What was happening, and why did it matter?</li>
+                    <li>What were you personally responsible for?</li>
+                    <li>What did you personally do? Include decisions, tools, checks, stakeholders or processes where relevant.</li>
+                    <li>What changed because of your actions? Use a concrete result where possible.</li>
+                    <li>What did you learn, improve or do differently afterwards?</li>
+                  </ol>
+                  <p className="mt-2 text-xs text-gray-500">JobSleuth will reuse the verified facts later; you do not need to copy the vacancy wording.</p>
+                </div>
               </div>
               <div className="flex gap-2">
                 <Link href={target.returnTo || '/apply/vacancy'} className="btn-secondary text-sm">Back to vacancy</Link>
