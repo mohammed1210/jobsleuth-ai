@@ -31,6 +31,8 @@ export default function RecordForm({ initial, busy = false, onSave, onCancel }: 
       outcome: text(data.get('outcome')),
       reflection: text(data.get('reflection')),
       tags: list(data.get('tags')),
+      behaviours: list(data.get('behaviours')),
+      skills: list(data.get('skills')),
       confidence: Number(data.get('confidence') ?? 70),
     });
   };
