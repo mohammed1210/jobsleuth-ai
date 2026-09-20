@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import type { Session } from '@supabase/supabase-js';
 
 import ApplicationDraftPanel from '@/components/application/ApplicationDraftPanel';
@@ -15,6 +16,7 @@ import { parseVacancyText } from '@/lib/vacancyParser';
 
 const lines = (value: string) => value.split('\n').map((item) => item.trim()).filter(Boolean);
 const VACANCY_DRAFT_KEY = 'jobsleuth.apply.vacancyDraft.v2';
+const EVIDENCE_TARGET_KEY = 'jobsleuth.evidence.target.v1';
 
 const evidenceFingerprint = (cards: EvidenceCard[]) => JSON.stringify(cards);
 const analysisInputFingerprint = (essential: string, desirable: string, trainable: string, practical: string) => JSON.stringify({
@@ -40,6 +42,7 @@ type VacancyDraftState = {
 };
 
 export default function VacancyApplyPage() {
+  const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [evidence, setEvidence] = useState<EvidenceCard[]>([]);
   const [vacancyText, setVacancyText] = useState('');
@@ -335,6 +338,21 @@ export default function VacancyApplyPage() {
     }
   };
 
+  const strengthenEvidence = (item: import('@/lib/applyApi').RequirementAnalysis) => {
+    if (!session) return;
+    const target = {
+      userId: session.user.id,
+      requirement: item.requirement,
+      category: item.category,
+      matchStrength: item.match_strength,
+      gaps: Array.isArray(item.gaps) ? item.gaps.filter(Boolean) : [],
+      returnTo: '/apply/vacancy',
+      createdAt: new Date().toISOString(),
+    };
+    window.sessionStorage.setItem(EVIDENCE_TARGET_KEY, JSON.stringify(target));
+    router.push('/apply');
+  };
+
   const analyse = async () => {
     const activeSession = await currentSession();
     if (!activeSession) return;
@@ -468,7 +486,7 @@ export default function VacancyApplyPage() {
 
               <div className="space-y-3">
                 {analysis.requirements.map((item, index) => (
-                  <RequirementMatchCard key={`${item.requirement}-${index}`} item={item} />
+                  <RequirementMatchCard key={`${item.requirement}-${index}`} item={item} onStrengthen={strengthenEvidence} />
                 ))}
               </div>
             </section>
