@@ -39,15 +39,29 @@ function hasNegatedDocumentInstruction(text: string, documentPattern: string): b
 
   const knownDocument = '(?:CV|curriculum\\s+vitae|personal\\s+statement|statement\\s+of\\s+suitability|cover(?:ing)?\\s+letter)';
   const documentSeparator = '(?:\\s*,\\s*(?:(?:and|or)\\s+)?|\\s+(?:and|or)\\s+)';
-  const documentObjectList = `(?:(?:an?|the|your)\\s+)?${knownDocument}(?:${documentSeparator}(?:(?:an?|the|your)\\s+)?${knownDocument})*`;
+  const documentObject = `(?:(?:an?|the|your)\\s+)?${knownDocument}`;
+  const documentObjectList = `(?:either\\s+)?${documentObject}(?:${documentSeparator}${documentObject})*`;
   const actionVerb = '(?:submit|provide|include|attach|upload|complete)';
+  const passiveActionVerb = '(?:submitted|provided|included|attached|uploaded|completed)';
 
   const negatedAction = new RegExp(
-    `(?:(?:do\\s+not|don't|must\\s+not|should\\s+not)\\s+${actionVerb}|(?:you\\s+)?(?:will\\s+)?not\\s+be\\s+(?:required|expected|needed)\\s+to\\s+${actionVerb}|(?:you\\s+)?(?:are|is)\\s+not\\s+(?:required|expected|needed)\\s+to\\s+${actionVerb})\\s+(${documentObjectList})`,
+    `(?:(?:do\\s+not|don't|must\\s+not|should\\s+not)\\s+${actionVerb}|(?:you\\s+)?(?:do|does)\\s+not\\s+(?:need|have)\\s+to\\s+${actionVerb}|(?:you\\s+)?(?:will\\s+)?not\\s+be\\s+(?:required|expected|needed)\\s+to\\s+${actionVerb}|(?:you\\s+)?(?:are|is)\\s+not\\s+(?:required|expected|needed)\\s+to\\s+${actionVerb})\\s+(${documentObjectList})`,
     'ig',
   );
   const positiveAction = new RegExp(
     `${actionVerb}\\s+(${documentObjectList})`,
+    'ig',
+  );
+  const passivePositiveAction = new RegExp(
+    `(${documentObjectList})\\s+(?:(?:must|should)\\s+be|(?:is|are)\\s+required\\s+to\\s+be)\\s+${passiveActionVerb}\\b`,
+    'ig',
+  );
+  const listRequirementNegation = new RegExp(
+    `(${documentObjectList})\\s+(?:is|are)\\s+(?:optional|not\\s+required|not\\s+necessary)\\b`,
+    'ig',
+  );
+  const leadingNoRequirement = new RegExp(
+    `\\bno\\s+(${documentObjectList})\\s+(?:is|are)\\s+(?:required|necessary)\\b`,
     'ig',
   );
 
@@ -56,6 +70,20 @@ function hasNegatedDocumentInstruction(text: string, documentPattern: string): b
 
     if (requirementNegation.test(segment)) {
       sawNegatedMention = true;
+    }
+
+    listRequirementNegation.lastIndex = 0;
+    for (const match of segment.matchAll(listRequirementNegation)) {
+      if (documentMention.test(match[1] ?? '')) {
+        sawNegatedMention = true;
+      }
+    }
+
+    leadingNoRequirement.lastIndex = 0;
+    for (const match of segment.matchAll(leadingNoRequirement)) {
+      if (documentMention.test(match[1] ?? '')) {
+        sawNegatedMention = true;
+      }
     }
 
     // Remove fully-negated action phrases before looking for affirmative
@@ -72,6 +100,14 @@ function hasNegatedDocumentInstruction(text: string, documentPattern: string): b
 
     positiveAction.lastIndex = 0;
     for (const match of positiveCandidate.matchAll(positiveAction)) {
+      const objectList = match[1] ?? '';
+      if (documentMention.test(objectList)) {
+        sawPositiveAction = true;
+      }
+    }
+
+    passivePositiveAction.lastIndex = 0;
+    for (const match of positiveCandidate.matchAll(passivePositiveAction)) {
       const objectList = match[1] ?? '';
       if (documentMention.test(objectList)) {
         sawPositiveAction = true;
