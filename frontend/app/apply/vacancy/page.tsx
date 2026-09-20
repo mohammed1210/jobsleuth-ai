@@ -158,6 +158,9 @@ export default function VacancyApplyPage() {
         }
       } catch (error) {
         if (active && sessionUserIdRef.current === requestedUserId) {
+          setEvidence([]);
+          setAnalysis(null);
+          setAnalysisEvidenceFingerprint(null);
           setMessage(error instanceof Error ? error.message : 'Could not load your Evidence Bank.');
         }
       }
@@ -284,6 +287,7 @@ export default function VacancyApplyPage() {
     setMessage(null);
     try {
       const result = await extractVacancyIntelligence(activeSession, vacancyText);
+      if (sessionUserIdRef.current !== activeSession.user.id) return;
       const items = [...result.eligibility, ...result.requirements, ...result.practical];
       applyRequirements(items);
       setExtractedItems(items);
@@ -291,6 +295,7 @@ export default function VacancyApplyPage() {
       const lowConfidence = result.summary.low_confidence ? ` ${result.summary.low_confidence} item(s) need extra review.` : '';
       setMessage(`Extracted ${result.summary.items} grounded item(s). Review and edit before analysing.${lowConfidence}`);
     } catch {
+      if (sessionUserIdRef.current !== activeSession.user.id) return;
       const count = localFallback();
       setMessage(count ? `The intelligence service was unavailable, so JobSleuth used the local fallback and found ${count} item(s). Review carefully.` : 'No clear criteria found. Edit the fields manually below.');
     } finally {
