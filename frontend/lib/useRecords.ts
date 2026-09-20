@@ -25,8 +25,8 @@ export function useRecords(session: Session | null) {
       .finally(() => setLoadingRecords(false));
   }, [session]);
 
-  const saveRecord = async (input: Pick<EvidenceCard, 'title'> & Partial<EvidenceCard>) => {
-    if (!session) return;
+  const saveRecord = async (input: Pick<EvidenceCard, 'title'> & Partial<EvidenceCard>): Promise<EvidenceCard | null> => {
+    if (!session) return null;
     setSavingRecord(true);
     setRecordError(null);
     try {
@@ -34,12 +34,15 @@ export function useRecords(session: Session | null) {
         const saved = await updateEvidence(session, editing.id, input);
         setRecords((current) => current.map((card) => card.id === saved.id ? saved : card));
         setEditing(null);
+        return saved;
       } else {
         const saved = await createEvidence(session, input);
         setRecords((current) => [saved, ...current]);
+        return saved;
       }
     } catch (error) {
       setRecordError(errorMessage(error, 'Could not save this record.'));
+      return null;
     } finally {
       setSavingRecord(false);
     }
