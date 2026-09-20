@@ -27,6 +27,26 @@ Working pattern:
 - The role requires a minimum of 30 hours per week across 4 days.
 """
 
+
+
+PRIVATE_SECTOR_VACANCY = """
+Senior Operations Analyst
+Acme Technology
+
+What you'll bring
+- Experience analysing operational data and turning findings into clear recommendations.
+- Strong stakeholder management and written communication skills.
+- Ability to manage competing priorities in a fast-paced environment.
+
+Preferred qualifications
+- Experience working in a regulated industry.
+- Familiarity with SQL or business intelligence tools.
+
+Hybrid working
+- You will be expected to work from the London office at least two days per week.
+"""
+
+
 MESSY_CIVIL_SERVICE_VACANCY = """
 Job summary
 We believe a positive, open and supportive culture is essential to help everyone deliver their best work.
@@ -131,6 +151,22 @@ def test_civil_service_admin_copy_does_not_leak_into_requirements():
     assert "national pay locations" not in combined
     assert any(item["category"] == "practical" and "full-time basis" in item["text"].lower() for item in items)
     assert any(item["category"] == "eligibility" and "security vetting" in item["text"].lower() for item in items)
+
+
+
+
+def test_private_sector_headings_extract_core_requirements_without_civil_service_language():
+    items = deterministic_extract(PRIVATE_SECTOR_VACANCY)
+    essentials = [item for item in items if item["category"] == "essential"]
+    desirables = [item for item in items if item["category"] == "desirable"]
+    practical = [item for item in items if item["category"] == "practical"]
+
+    assert len(essentials) == 3
+    assert len(desirables) == 2
+    assert any("operational data" in item["text"].lower() for item in essentials)
+    assert any("regulated industry" in item["text"].lower() for item in desirables)
+    assert any("two days per week" in item["text"].lower() for item in practical)
+    assert all(item["source_text"] in PRIVATE_SECTOR_VACANCY for item in items)
 
 
 def test_ai_validation_rejects_ungrounded_source_text():
