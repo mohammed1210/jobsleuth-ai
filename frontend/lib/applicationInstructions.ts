@@ -36,10 +36,18 @@ function hasNegatedDocumentInstruction(text: string, documentPattern: string): b
     `(?:${documentPattern})\\b\\s*(?:(?:is|are)\\s*)?(?:not\\s+required|not\\s+necessary|optional)\\b`,
     'i',
   );
+
   const knownDocument = '(?:CV|curriculum\\s+vitae|personal\\s+statement|statement\\s+of\\s+suitability|cover(?:ing)?\\s+letter)';
-  const documentObjectList = `(?:(?:an?|the|your)\\s+)?${knownDocument}(?:\\s*(?:,|or|and)\\s*(?:(?:an?|the|your)\\s+)?${knownDocument})*`;
-  const documentAction = new RegExp(
-    `((?:do\\s+not|don't|must\\s+not|should\\s+not)\\s+)?(?:submit|provide|include|attach|upload|complete)\\s+(${documentObjectList})`,
+  const documentSeparator = '(?:\\s*,\\s*(?:(?:and|or)\\s+)?|\\s+(?:and|or)\\s+)';
+  const documentObjectList = `(?:(?:an?|the|your)\\s+)?${knownDocument}(?:${documentSeparator}(?:(?:an?|the|your)\\s+)?${knownDocument})*`;
+  const actionVerb = '(?:submit|provide|include|attach|upload|complete)';
+
+  const negatedAction = new RegExp(
+    `(?:(?:do\\s+not|don't|must\\s+not|should\\s+not)\\s+${actionVerb}|(?:you\\s+)?(?:will\\s+)?not\\s+be\\s+(?:required|expected|needed)\\s+to\\s+${actionVerb}|(?:you\\s+)?(?:are|is)\\s+not\\s+(?:required|expected|needed)\\s+to\\s+${actionVerb})\\s+(${documentObjectList})`,
+    'ig',
+  );
+  const positiveAction = new RegExp(
+    `${actionVerb}\\s+(${documentObjectList})`,
     'ig',
   );
 
@@ -50,13 +58,22 @@ function hasNegatedDocumentInstruction(text: string, documentPattern: string): b
       sawNegatedMention = true;
     }
 
-    documentAction.lastIndex = 0;
-    for (const match of segment.matchAll(documentAction)) {
-      const objectList = match[2] ?? '';
-      if (!documentMention.test(objectList)) continue;
-      if (match[1]) {
+    // Remove fully-negated action phrases before looking for affirmative
+    // instructions. Otherwise a phrase such as "not required to submit a CV"
+    // would also be rediscovered as the bare positive substring "submit a CV".
+    let positiveCandidate = segment;
+    negatedAction.lastIndex = 0;
+    positiveCandidate = positiveCandidate.replace(negatedAction, (match, objectList: string) => {
+      if (documentMention.test(objectList ?? '')) {
         sawNegatedMention = true;
-      } else {
+      }
+      return ' '.repeat(match.length);
+    });
+
+    positiveAction.lastIndex = 0;
+    for (const match of positiveCandidate.matchAll(positiveAction)) {
+      const objectList = match[1] ?? '';
+      if (documentMention.test(objectList)) {
         sawPositiveAction = true;
       }
     }
