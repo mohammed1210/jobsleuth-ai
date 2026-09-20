@@ -85,6 +85,23 @@ _IGNORED_SECTION_HEADINGS = {
     "breaking tied scores",
     "standards",
     "criminal record check",
+    # Common private-sector sections that end candidate criteria and begin
+    # employer-marketing, reward or culture copy.
+    "what we offer",
+    "what we can offer",
+    "what you'll get",
+    "what you will get",
+    "perks",
+    "perks and benefits",
+    "benefits and perks",
+    "our benefits",
+    "our values",
+    "our culture",
+    "company culture",
+    "why join us",
+    "why work with us",
+    "about us",
+    "about the company",
 }
 
 _LEAD_INS = {
@@ -158,7 +175,9 @@ def is_non_requirement_text(value: str) -> bool:
 def _heading_section(line: str, raw: str, is_bullet: bool) -> Category | Literal["ignore"] | None:
     if is_bullet or len(line) > 120:
         return None
-    lowered = line.lower().rstrip(":").strip()
+    # Job sites commonly preserve typographic apostrophes in headings
+    # (for example “What you’ll bring”). Normalise them before exact lookup.
+    lowered = line.lower().replace("’", "'").replace("‘", "'").rstrip(":").strip()
     looks_like_heading = raw.strip().endswith(":") or len(line.split()) <= 8
     if not looks_like_heading:
         return None
