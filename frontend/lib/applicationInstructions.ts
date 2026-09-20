@@ -24,8 +24,8 @@ function firstMatch(text: string, patterns: RegExp[]): string | null {
 
 function hasNegatedDocumentInstruction(text: string, documentPattern: string): boolean {
   const segments = text
-    .split(/(?<=[.!?])\s+|\r?\n+/)
-    .map((segment) => segment.trim())
+    .split(/(?<=[.!?;])\s+|\r?\n+|[,;]\s*(?=(?:instead|but|however)\b)|\s+(?=(?:instead|but|however)\b)/i)
+    .map((segment) => segment.replace(/^(?:instead|but|however)\s*,?\s*/i, '').trim())
     .filter(Boolean);
 
   let sawNegatedMention = false;
