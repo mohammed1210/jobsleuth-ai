@@ -22,7 +22,12 @@ function normaliseGaps(value: RequirementAnalysis['gaps'] | string | null | unde
   return [];
 }
 
-export default function RequirementMatchCard({ item }: { item: RequirementAnalysis }) {
+type Props = {
+  item: RequirementAnalysis;
+  onStrengthen?: (item: RequirementAnalysis) => void;
+};
+
+export default function RequirementMatchCard({ item, onStrengthen }: Props) {
   const top = item.evidence[0];
   const confidence = Math.round((item.confidence ?? 0) * 100);
   const gaps = normaliseGaps(item.gaps);
@@ -79,6 +84,14 @@ export default function RequirementMatchCard({ item }: { item: RequirementAnalys
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-700">
             {gaps.map((gap, index) => <li key={`${gap}-${index}`}>{gap}</li>)}
           </ul>
+        </div>
+      )}
+
+      {onStrengthen && item.match_strength !== 'strong' && item.match_strength !== 'trainable' && (
+        <div className="border-t pt-4">
+          <button type="button" className="btn-secondary text-sm" onClick={() => onStrengthen(item)}>
+            {item.match_strength === 'missing' ? 'Add evidence for this criterion' : 'Strengthen evidence for this criterion'}
+          </button>
         </div>
       )}
     </article>

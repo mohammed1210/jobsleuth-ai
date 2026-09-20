@@ -9,7 +9,7 @@ import TagsFields from '@/components/forms/TagsFields';
 type Props = {
   initial?: EvidenceCard | null;
   busy?: boolean;
-  onSave: (input: Pick<EvidenceCard, 'title'> & Partial<EvidenceCard>) => Promise<void> | void;
+  onSave: (input: Pick<EvidenceCard, 'title'> & Partial<EvidenceCard>) => Promise<unknown> | unknown;
   onCancel?: () => void;
 };
 
