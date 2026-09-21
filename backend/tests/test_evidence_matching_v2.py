@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from backend.lib.evidence_matching import deterministic_match
+from backend.lib.evidence_matching import deterministic_match, requires_personal_management_scope
 from backend.lib.evidence_semantic import _validated_match
 from backend.main import app
 from backend.routes.vacancy_analysis import Evidence
@@ -98,6 +98,27 @@ def test_management_level_requirement_needs_personal_management_scope():
     assert match["strength"] in {"weak", "missing"}
     assert match["score"] < 48
     assert any("management or supervisory responsibility" in gap for gap in match["gaps"])
+
+
+def test_management_verb_without_people_scope_does_not_satisfy_requirement():
+    card = Evidence(
+        id="ev-managed-risk",
+        title="Security risk management",
+        task="I managed security risks in operations.",
+        actions=["I reviewed controls and mitigated operational risks."],
+        outcome="The operation progressed safely.",
+    )
+    match = deterministic_match(
+        "Previous experience at management level within security operations",
+        card,
+    )
+    assert match["strength"] in {"weak", "missing"}
+    assert any("management or supervisory responsibility" in gap for gap in match["gaps"])
+
+
+def test_line_manager_reference_is_not_a_management_requirement():
+    assert not requires_personal_management_scope("Work effectively with your line manager and colleagues")
+    assert requires_personal_management_scope("Previous experience at management level within security operations")
 
 
 def test_management_scope_accepts_common_first_person_constructions():
