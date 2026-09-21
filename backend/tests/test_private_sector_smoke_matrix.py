@@ -174,6 +174,8 @@ About You
 - Experience coordinating a hybrid schedule across regional teams.
 - Experience managing hybrid working arrangements for distributed teams.
 - Hybrid working experience is essential for this role.
+
+Working arrangements: Hybrid
 """
 
     items = deterministic_extract(advert)
@@ -186,3 +188,4 @@ About You
     assert not any("hybrid schedule" in item["text"].lower() for item in practical)
     assert not any("hybrid working arrangements" in item["text"].lower() for item in practical)
     assert not any("hybrid working experience" in item["text"].lower() for item in practical)
+    assert any("working arrangements: hybrid" in item["text"].lower() for item in practical)
