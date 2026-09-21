@@ -236,15 +236,51 @@ def _is_full_time_practical_metadata(lowered: str) -> bool:
 
 
 def _is_private_sector_practical_metadata(lowered: str) -> bool:
-    """Capture common work-pattern metadata without stealing experience criteria."""
+    """Capture work-pattern metadata without stealing experience criteria.
+
+    Hybrid wording is only practical when the whole line is metadata-shaped or
+    directly describes how the role/team works. Experience requirements such as
+    "Experience coordinating a hybrid schedule" must stay in evidence matching.
+    """
     value = lowered.strip()
     if _is_full_time_practical_metadata(value):
         return True
-    if re.fullmatch(r"(?:job\s+type\s*:\s*)?hybrid", value, flags=re.IGNORECASE):
+    if re.fullmatch(
+        r"(?:job\s+type\s*:\s*)?hybrid(?:\s+(?:working|schedule))?",
+        value,
+        flags=re.IGNORECASE,
+    ):
         return True
     if (
-        re.match(r"^(?:job\s+type|work(?:ing)?\s+model|work(?:ing)?\s+arrangement|tenure)\s*[:|]", value, flags=re.IGNORECASE)
+        re.match(
+            r"^(?:job\s+type|work(?:ing)?\s+model|work(?:ing)?\s+arrangement|tenure)\s*[:|]",
+            value,
+            flags=re.IGNORECASE,
+        )
         and re.search(r"\bhybrid\b", value, flags=re.IGNORECASE)
+    ):
+        return True
+    if re.match(r"^hybrid\s+(?:working|schedule)\b", value, flags=re.IGNORECASE):
+        return True
+    if (
+        re.search(r"\bhybrid\b", value, flags=re.IGNORECASE)
+        and (
+            re.match(
+                r"^(?:we|employees?|staff)\s+(?:will\s+)?(?:work|operate)\b",
+                value,
+                flags=re.IGNORECASE,
+            )
+            or re.match(
+                r"^you(?:'ll|\s+will)?\s+(?:work|be\s+working)\b",
+                value,
+                flags=re.IGNORECASE,
+            )
+            or re.match(
+                r"^(?:this|the)\s+role\s+(?:is|will\s+be|works?|operates?)\b",
+                value,
+                flags=re.IGNORECASE,
+            )
+        )
     ):
         return True
     return False
@@ -288,8 +324,6 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "working arrangements",
         "office attendance",
         "working time in an office",
-        "hybrid working",
-        "hybrid schedule",
         "work in person at the location",
         "only available on a full-time basis",
         "only available on a full time basis",
