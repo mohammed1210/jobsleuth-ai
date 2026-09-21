@@ -61,3 +61,20 @@ The role is a permanent position supporting regional operations.
   assert.equal(result.roleTitle, 'Operations Manager');
   assert.equal(result.organisation, 'Example Security Ltd');
 });
+
+
+test('generic company heading does not block the real employer fallback', () => {
+  const vacancy = `
+Operations Manager
+The Company
+Example Security Ltd
+
+About the role
+We support regional operations.
+`;
+
+  const result = detectApplicationInstructions(vacancy);
+
+  assert.equal(result.roleTitle, 'Operations Manager');
+  assert.equal(result.organisation, 'Example Security Ltd');
+});
