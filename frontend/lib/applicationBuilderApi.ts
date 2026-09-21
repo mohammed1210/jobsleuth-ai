@@ -3,7 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import type { EvidenceCard, RequirementAnalysis } from '@/lib/applyApi';
 import { apiError, getBackendUrl } from '@/lib/backendConfig';
 
-export type ApplicationType = 'statement_of_suitability' | 'criteria_response';
+export type ApplicationType = 'statement_of_suitability' | 'criteria_response' | 'cover_letter';
 
 export type ApplicationCoverage = {
   requirement: string;
