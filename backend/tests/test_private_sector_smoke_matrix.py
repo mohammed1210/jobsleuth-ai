@@ -164,3 +164,22 @@ def test_customer_success_matching_supports_generic_fit_without_inventing_sector
     assert legal["match_strength"] in {"weak", "missing"}
     assert private_markets["match_strength"] in {"weak", "missing"}
     assert data["decision"] in {"APPLY", "CONSIDER"}
+
+
+def test_hybrid_schedule_experience_stays_in_evidence_requirements():
+    advert = """
+Customer Operations Manager
+
+About You
+- Experience coordinating a hybrid schedule across regional teams.
+- Experience managing hybrid working arrangements for distributed teams.
+"""
+
+    items = deterministic_extract(advert)
+    essentials = [item for item in items if item["category"] == "essential"]
+    practical = [item for item in items if item["category"] == "practical"]
+
+    assert any("coordinating a hybrid schedule" in item["text"].lower() for item in essentials)
+    assert any("managing hybrid working arrangements" in item["text"].lower() for item in essentials)
+    assert not any("hybrid schedule" in item["text"].lower() for item in practical)
+    assert not any("hybrid working arrangements" in item["text"].lower() for item in practical)
