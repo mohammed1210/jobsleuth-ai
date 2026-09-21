@@ -215,3 +215,44 @@ def test_route_batches_ambiguous_semantic_work_once(monkeypatch):
     client.post("/vacancy-analysis", headers=HEADERS, json=payload)
     assert len(calls) == 1
     assert len(calls[0]) >= 1
+
+
+def test_semantic_reassessment_cannot_restore_false_management_match(monkeypatch):
+    card = Evidence(
+        id="ev-security-risk",
+        title="High-risk freight examination",
+        situation="A secure operational examination involved significant security risks.",
+        task="I assessed options and contributed a recommendation to senior management.",
+        actions=["I assessed risks and recommended a revised operational plan."],
+        outcome="The operation progressed safely.",
+    )
+
+    def fake_batch(entries):
+        return {
+            entries[0][0]: {
+                card.id: {
+                    "strength": "strong",
+                    "score": 88,
+                    "confidence": 0.9,
+                    "why": "Operational security experience appears related.",
+                    "gaps": [],
+                    "supporting_facts": [],
+                    "signals": {"concepts": ["risk"], "matched_terms": ["security"], "evidence_quality": 1},
+                }
+            }
+        }
+
+    monkeypatch.setattr("routes.vacancy_analysis.semantic_assess_batch", fake_batch)
+    payload = {
+        "job": {"title": "Security Operations Manager"},
+        "requirements": [
+            {"text": "Previous experience at management level within security operations", "category": "essential"}
+        ],
+        "evidence_cards": [card.model_dump()],
+    }
+
+    data = client.post("/vacancy-analysis", headers=HEADERS, json=payload).json()
+    item = data["requirements"][0]
+    assert item["match_strength"] == "weak"
+    assert item["evidence"][0]["score"] <= 39
+    assert any("management or supervisory responsibility" in gap for gap in item["gaps"])
