@@ -44,6 +44,8 @@ _SECTION_HEADINGS: dict[str, Category] = {
     "what you will bring": "essential",
     "what we're looking for": "essential",
     "what we are looking for": "essential",
+    "about you": "essential",
+    "who you are": "essential",
     "your skills and experience": "essential",
     "skills and experience": "essential",
     "person specification": "essential",
@@ -103,6 +105,17 @@ _IGNORED_SECTION_HEADINGS = {
     "why work with us",
     "about us",
     "about the company",
+    "the company you'll join",
+    "the company you will join",
+    "the problems you'll solve",
+    "the problems you will solve",
+    "the team you'll work with",
+    "the team you will work with",
+    "disclosures",
+    "apply for this job",
+    "create a job alert",
+    "voluntary self-identification",
+    "voluntary self-identification of disability",
 }
 
 _LEAD_INS = {
@@ -110,6 +123,8 @@ _LEAD_INS = {
     "you must demonstrate experience of",
     "we are looking for a candidate who is",
     "we're looking for a candidate who is",
+    "specifically, we're looking for",
+    "specifically, we are looking for",
     "we'll assess you against these behaviours during the selection process",
     "we will assess you against these behaviours during the selection process",
     "we'll assess you against these technical skills during the selection process",
@@ -220,6 +235,21 @@ def _is_full_time_practical_metadata(lowered: str) -> bool:
     )
 
 
+def _is_private_sector_practical_metadata(lowered: str) -> bool:
+    """Capture common work-pattern metadata without stealing experience criteria."""
+    value = lowered.strip()
+    if _is_full_time_practical_metadata(value):
+        return True
+    if re.fullmatch(r"(?:job\s+type\s*:\s*)?hybrid", value, flags=re.IGNORECASE):
+        return True
+    if (
+        re.match(r"^(?:job\s+type|work(?:ing)?\s+model|work(?:ing)?\s+arrangement|tenure)\s*[:|]", value, flags=re.IGNORECASE)
+        and re.search(r"\bhybrid\b", value, flags=re.IGNORECASE)
+    ):
+        return True
+    return False
+
+
 def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
     """Extract grounded criteria from vacancy text without external services.
 
@@ -259,6 +289,8 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "office attendance",
         "working time in an office",
         "hybrid working",
+        "hybrid schedule",
+        "work in person at the location",
         "only available on a full-time basis",
         "only available on a full time basis",
         "minimum hours",
@@ -355,8 +387,15 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         if section != "desirable" and (any(cue in lowered for cue in eligibility_cues) or credential_mandatory):
             items.append(_item(line, "eligibility", 0.9, explicit_blocker=explicit_blocker))
             continue
-        if _is_full_time_practical_metadata(lowered) or any(cue in lowered for cue in practical_cues):
+        if _is_private_sector_practical_metadata(lowered) or any(cue in lowered for cue in practical_cues):
             items.append(_item(line, "practical", 0.9, explicit_blocker=explicit_blocker))
+            continue
+
+        if section == "essential" and re.search(
+            r"\b(?:is\s+(?:highly\s+)?desirable|would\s+be\s+(?:an\s+)?advantage(?:ous)?|is\s+(?:a|an)\s+(?:significant\s+)?advantage|(?:a|an)\s+bonus|nice\s+to\s+have)\b",
+            lowered,
+        ):
+            items.append(_item(line.rstrip(";"), "desirable", 0.88, explicit_blocker=False))
             continue
 
         # Explicit Essential/Desirable sections remain authoritative. Person
