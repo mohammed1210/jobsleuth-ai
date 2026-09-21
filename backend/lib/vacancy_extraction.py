@@ -253,7 +253,7 @@ def _is_private_sector_practical_metadata(lowered: str) -> bool:
         return True
     if (
         re.match(
-            r"^(?:job\s+type|work(?:ing)?\s+model|work(?:ing)?\s+arrangement|tenure)\s*[:|]",
+            r"^(?:job\s+type|work(?:ing)?\s+model|work(?:ing)?\s+arrangements?|tenure)\s*[:|]",
             value,
             flags=re.IGNORECASE,
         )
