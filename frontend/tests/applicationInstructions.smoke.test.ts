@@ -46,3 +46,18 @@ To apply, please submit your CV and cover letter.
   assert.ok(result.requiredDocuments.includes('CV'));
   assert.ok(result.requiredDocuments.includes('Cover Letter'));
 });
+
+
+test('descriptive role sentence cannot override a valid employer fallback', () => {
+  const vacancy = `
+Operations Manager
+Example Security Ltd
+
+The role is a permanent position supporting regional operations.
+`;
+
+  const result = detectApplicationInstructions(vacancy);
+
+  assert.equal(result.roleTitle, 'Operations Manager');
+  assert.equal(result.organisation, 'Example Security Ltd');
+});
