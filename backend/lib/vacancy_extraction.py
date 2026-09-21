@@ -256,8 +256,6 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "night work",
         "work location: in person",
         "work location",
-        "full-time",
-        "full time",
         "full-time training",
         "full time training",
     )
@@ -309,10 +307,10 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         if any(cue in lowered for cue in trainable_cues):
             items.append(_item(line, "trainable", 0.96))
             continue
-        if any(cue in lowered for cue in eligibility_cues):
+        if section != "desirable" and any(cue in lowered for cue in eligibility_cues):
             items.append(_item(line, "eligibility", 0.9, explicit_blocker=explicit_blocker))
             continue
-        if any(cue in lowered for cue in practical_cues):
+        if lowered in {"full-time", "full time"} or any(cue in lowered for cue in practical_cues):
             items.append(_item(line, "practical", 0.9, explicit_blocker=explicit_blocker))
             continue
 
