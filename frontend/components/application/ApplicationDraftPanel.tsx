@@ -144,8 +144,7 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
       setMessage('Review the evidence-readiness warning first. Strengthen your Evidence Bank or explicitly choose to draft with current evidence.');
       return;
     }
-    setBuilding(true); setMessage(null); setFeedbackSaved(false);
-    setPilotFeedback({ ...EMPTY_PILOT_FEEDBACK });
+    setBuilding(true); setMessage(null);
     try {
       const next = await buildApplication(session, {
         roleTitle,
@@ -155,6 +154,8 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
         requirements: activeRequirements,
         evidenceCards: evidence,
       });
+      setFeedbackSaved(false);
+      setPilotFeedback({ ...EMPTY_PILOT_FEEDBACK });
       setResult(next); setDraft(next.draft);
       if (!next.can_generate) setMessage('JobSleuth did not find enough supported evidence to draft safely. Strengthen the Evidence Bank first.');
     } catch (error) {
