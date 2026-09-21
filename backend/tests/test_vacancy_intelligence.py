@@ -316,6 +316,34 @@ def test_desirable_driving_licence_is_not_promoted_to_mandatory_eligibility():
     )
 
 
+def test_negated_driving_licence_is_not_emitted_as_mandatory_eligibility():
+    items = deterministic_extract(
+        """Operations Coordinator
+
+Requirements
+A driving licence is not required.
+Strong organisational skills.
+"""
+    )
+    assert not any(
+        item["category"] == "eligibility" and "driving licence" in item["text"].lower()
+        for item in items
+    )
+
+
+def test_optional_driving_licence_outside_desirable_section_stays_optional():
+    items = deterministic_extract(
+        """Operations Coordinator
+
+A driving licence would be advantageous.
+"""
+    )
+    licence_items = [item for item in items if "driving licence" in item["text"].lower()]
+    assert len(licence_items) == 1
+    assert licence_items[0]["category"] == "desirable"
+    assert licence_items[0]["explicit_blocker"] is False
+
+
 def test_full_time_experience_remains_an_essential_criterion():
     items = deterministic_extract(PRIVATE_SECTOR_FULL_TIME_EXPERIENCE_VACANCY)
     assert any(
