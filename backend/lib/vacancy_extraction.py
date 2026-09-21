@@ -325,7 +325,6 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "hours per week",
         "days per week",
         "working pattern",
-        "working arrangements",
         "office attendance",
         "working time in an office",
         "work in person at the location",
