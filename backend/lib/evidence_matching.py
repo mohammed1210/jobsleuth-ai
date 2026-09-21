@@ -151,6 +151,33 @@ def _strength(score: float) -> str:
 def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
     signals = _support_signals(requirement, card)
     score = signals["score"]
+
+    # Scope-sensitive management requirements must be supported by the candidate's
+    # own management/leadership actions, not merely by words such as "security",
+    # "operations" or references to senior management in the surrounding context.
+    management_requirement = bool(
+        re.search(
+            r"\b(?:management\s+level|management\s+experience|managerial|manager|supervisory|supervision|leadership)\b",
+            requirement,
+            flags=re.IGNORECASE,
+        )
+    )
+    personal_scope_text = " ".join(
+        [
+            str(getattr(card, "task", "") or ""),
+            *[str(value) for value in (getattr(card, "actions", []) or [])],
+            *[str(value) for value in (getattr(card, "skills", []) or [])],
+            *[str(value) for value in (getattr(card, "tags", []) or [])],
+            *[str(value) for value in (getattr(card, "behaviours", []) or [])],
+            str(getattr(card, "authority_context", "") or ""),
+        ]
+    )
+    has_management_scope = bool(
+        re.search(r"\b(?:manag\w*|lead\w*|supervis\w*|coach\w*|delegat\w*)\b", personal_scope_text, flags=re.IGNORECASE)
+    )
+    if management_requirement and not has_management_scope:
+        score = min(score, 39.0)
+
     strength = _strength(score)
     has_actions = bool(getattr(card, "actions", []) and any(str(value).strip() for value in getattr(card, "actions", []) or []))
     has_outcome = bool(str(getattr(card, "outcome", "") or "").strip())
@@ -177,6 +204,8 @@ def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
         gaps.append("Personal actions are not recorded clearly enough.")
     if not has_outcome:
         gaps.append("Outcome or impact is not recorded.")
+    if management_requirement and not has_management_scope:
+        gaps.append("The evidence does not demonstrate management or supervisory responsibility at the required level.")
     if signals["concepts"] == [] and strength != "missing":
         gaps.append("The evidence does not clearly demonstrate the underlying capability, only related wording.")
     if strength == "missing":
