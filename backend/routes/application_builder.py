@@ -105,12 +105,18 @@ async def build_application(
         paragraphs = None
 
     fallback_used = not paragraphs
+    cover_letter_intro = ""
+    cover_letter_closing = ""
+    if request.application_type == "cover_letter":
+        organisation_phrase = f" at {organisation}" if organisation else ""
+        cover_letter_intro = f"I am applying for the {role_title} role{organisation_phrase}."
+        cover_letter_closing = "Thank you for considering my application."
+
     if not paragraphs:
         fallback_budget = request.word_limit
         if request.application_type == "cover_letter":
-            # Reserve a small amount of the user's word budget for safe formatting
-            # around the evidence-bearing body.
-            fallback_budget = max(100, request.word_limit - 30)
+            framing_words = len(cover_letter_intro.split()) + len(cover_letter_closing.split())
+            fallback_budget = max(1, request.word_limit - framing_words)
         paragraphs = deterministic_draft(
             request.requirements,
             cards_by_id,
@@ -123,12 +129,7 @@ async def build_application(
     requirement_coverage = coverage(request.requirements, paragraphs)
     draft = _compose_draft(paragraphs)
     if draft and fallback_used and request.application_type == "cover_letter":
-        organisation_phrase = f" at {organisation}" if organisation else ""
-        draft = (
-            f"I am applying for the {role_title} role{organisation_phrase}.\n\n"
-            f"{draft}\n\n"
-            "Thank you for considering my application."
-        )
+        draft = f"{cover_letter_intro}\n\n{draft}\n\n{cover_letter_closing}"
         provider = "deterministic-grounded-cover-letter-v1"
     total_words = len(draft.split()) if draft else 0
 
