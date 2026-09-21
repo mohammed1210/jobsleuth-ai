@@ -100,6 +100,35 @@ def test_management_level_requirement_needs_personal_management_scope():
     assert any("management or supervisory responsibility" in gap for gap in match["gaps"])
 
 
+def test_management_scope_accepts_common_first_person_constructions():
+    variants = [
+        Evidence(
+            id="ev-managed",
+            title="Team management",
+            task="I have managed a team across several sites.",
+            actions=["I set priorities and reviewed performance."],
+            outcome="Service levels improved.",
+        ),
+        Evidence(
+            id="ev-supervised",
+            title="Team supervision",
+            task="I was responsible for supervising officers on shift.",
+            actions=["I allocated work and supported staff."],
+            outcome="Coverage was maintained.",
+        ),
+        Evidence(
+            id="ev-fragment",
+            title="Team leadership",
+            actions=["Managed a team of officers across multiple locations."],
+            outcome="Standards were maintained.",
+        ),
+    ]
+
+    for card in variants:
+        match = deterministic_match("Previous experience at management level within security operations", card)
+        assert "management or supervisory responsibility" not in " ".join(match["gaps"])
+
+
 def test_semantic_match_requires_grounded_supporting_facts():
     card = strong_card()
     cards = {card.id: card}
