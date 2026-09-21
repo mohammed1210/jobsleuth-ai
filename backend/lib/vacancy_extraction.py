@@ -260,7 +260,11 @@ def _is_private_sector_practical_metadata(lowered: str) -> bool:
         and re.search(r"\bhybrid\b", value, flags=re.IGNORECASE)
     ):
         return True
-    if re.match(r"^hybrid\s+(?:working|schedule)\b", value, flags=re.IGNORECASE):
+    if re.match(
+        r"^hybrid\s+(?:working|schedule)\s*[:|–—-]",
+        value,
+        flags=re.IGNORECASE,
+    ):
         return True
     if (
         re.search(r"\bhybrid\b", value, flags=re.IGNORECASE)
