@@ -73,6 +73,39 @@ What we’re looking for
 """
 
 
+PRIVATE_SECURITY_VACANCY = """
+Job details
+Job type
+Permanent
+Full-time
+Shift and schedule
+Weekend availability
+Nights as needed
+
+About the Role
+H&M Security Services, an ACS-accredited security provider, is seeking an experienced Manned Guarding Operations Manager to join our team.
+
+Requirements
+
+Essential:
+Valid and in-date Frontline SIA Licence
+Strong background in the Manned Guarding industry
+Previous experience at management level within security operations
+Full Manual UK Driving Licence
+Excellent written and verbal English communication skills
+High level of IT proficiency, including Microsoft Office and rostering systems
+Ability to work independently and within a team
+5-year checkable employment history
+Ability to pass SC Clearance
+
+What We Offer
+Competitive salary
+Annual leave
+
+Work Location: In person
+"""
+
+
 MESSY_CIVIL_SERVICE_VACANCY = """
 Job summary
 We believe a positive, open and supportive culture is essential to help everyone deliver their best work.
@@ -213,6 +246,25 @@ def test_private_sector_curly_apostrophe_headings_are_recognised():
     assert len(essentials) == 3
     assert any("operational processes" in item["text"].lower() for item in essentials)
     assert any("competing priorities" in item["text"].lower() for item in essentials)
+
+
+def test_private_security_advert_separates_credentials_and_practical_constraints():
+    items = deterministic_extract(PRIVATE_SECURITY_VACANCY)
+    essentials = [item for item in items if item["category"] == "essential"]
+    eligibility = [item for item in items if item["category"] == "eligibility"]
+    practical = [item for item in items if item["category"] == "practical"]
+    combined_essential = "\n".join(item["text"].lower() for item in essentials)
+
+    assert "essential" not in {item["text"].lower().rstrip(":") for item in essentials}
+    assert any("manned guarding industry" in item["text"].lower() for item in essentials)
+    assert any("sia licence" in item["text"].lower() for item in eligibility)
+    assert any("driving licence" in item["text"].lower() for item in eligibility)
+    assert any("checkable employment history" in item["text"].lower() for item in eligibility)
+    assert any("sc clearance" in item["text"].lower() for item in eligibility)
+    assert any("weekend availability" in item["text"].lower() for item in practical)
+    assert any("nights as needed" in item["text"].lower() for item in practical)
+    assert any("work location: in person" in item["text"].lower() for item in practical)
+    assert "competitive salary" not in combined_essential
 
 
 def test_ai_validation_rejects_ungrounded_source_text():
