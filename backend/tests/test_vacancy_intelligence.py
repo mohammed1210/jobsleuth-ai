@@ -106,6 +106,21 @@ Work Location: In person
 """
 
 
+PRIVATE_SECTOR_OPTIONAL_LICENCE_VACANCY = """
+Operations Coordinator
+
+Desirable:
+A full UK driving licence would be advantageous.
+"""
+
+PRIVATE_SECTOR_FULL_TIME_EXPERIENCE_VACANCY = """
+Security Operations Manager
+
+Essential:
+At least three years of full-time experience in security operations.
+"""
+
+
 MESSY_CIVIL_SERVICE_VACANCY = """
 Job summary
 We believe a positive, open and supportive culture is essential to help everyone deliver their best work.
@@ -265,6 +280,30 @@ def test_private_security_advert_separates_credentials_and_practical_constraints
     assert any("nights as needed" in item["text"].lower() for item in practical)
     assert any("work location: in person" in item["text"].lower() for item in practical)
     assert "competitive salary" not in combined_essential
+
+
+def test_desirable_driving_licence_is_not_promoted_to_mandatory_eligibility():
+    items = deterministic_extract(PRIVATE_SECTOR_OPTIONAL_LICENCE_VACANCY)
+    assert any(
+        item["category"] == "desirable" and "driving licence" in item["text"].lower()
+        for item in items
+    )
+    assert not any(
+        item["category"] == "eligibility" and "driving licence" in item["text"].lower()
+        for item in items
+    )
+
+
+def test_full_time_experience_remains_an_essential_criterion():
+    items = deterministic_extract(PRIVATE_SECTOR_FULL_TIME_EXPERIENCE_VACANCY)
+    assert any(
+        item["category"] == "essential" and "full-time experience" in item["text"].lower()
+        for item in items
+    )
+    assert not any(
+        item["category"] == "practical" and "full-time experience" in item["text"].lower()
+        for item in items
+    )
 
 
 def test_ai_validation_rejects_ungrounded_source_text():
