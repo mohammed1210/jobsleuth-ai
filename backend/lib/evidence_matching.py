@@ -148,6 +148,41 @@ def _strength(score: float) -> str:
     return "missing"
 
 
+def requires_personal_management_scope(requirement: str) -> bool:
+    return bool(
+        re.search(
+            r"\b(?:management\s+level|management\s+experience|managerial|manager|supervisory|supervision|leadership)\b",
+            requirement,
+            flags=re.IGNORECASE,
+        )
+    )
+
+
+def has_personal_management_scope(card: Any) -> bool:
+    """Require evidence that the candidate personally managed/led/supervised.
+
+    References to "senior management" or somebody else's manager are not enough.
+    Accept common first-person constructions and action-field fragments such as
+    "Managed a team..." or "I was responsible for supervising...".
+    """
+    values = [
+        str(getattr(card, "task", "") or ""),
+        *[str(value) for value in (getattr(card, "actions", []) or [])],
+        str(getattr(card, "authority_context", "") or ""),
+    ]
+    pattern = re.compile(
+        r"(?:^|[.!?]\s+|\bI\s+)"
+        r"(?:(?:have|had)\s+|(?:was|am)\s+responsible\s+for\s+)?"
+        r"(?:managed?|managing|led|lead|leading|supervised?|supervising|coached?|coaching|delegated?|delegating)\b",
+        flags=re.IGNORECASE,
+    )
+    action_fragment = re.compile(
+        r"^\s*(?:managed?|managing|led|lead|leading|supervised?|supervising|coached?|coaching|delegated?|delegating)\b",
+        flags=re.IGNORECASE,
+    )
+    return any(pattern.search(value) or action_fragment.search(value) for value in values if value.strip())
+
+
 def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
     signals = _support_signals(requirement, card)
     score = signals["score"]
