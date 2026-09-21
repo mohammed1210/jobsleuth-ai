@@ -78,6 +78,28 @@ def test_public_service_operational_context_is_not_treated_as_wording_only():
     assert "public_service" in match["signals"]["concepts"]
 
 
+def test_management_level_requirement_needs_personal_management_scope():
+    card = Evidence(
+        id="ev-security-risk",
+        title="High-risk freight examination",
+        situation="A secure operational examination involved significant security risks.",
+        task="I assessed options and contributed a recommendation to senior management.",
+        actions=[
+            "I assessed security and transport risks.",
+            "I consulted colleagues and recommended a revised operational plan.",
+        ],
+        outcome="The operation progressed safely.",
+        skills=["risk assessment", "operational decision making"],
+    )
+    match = deterministic_match(
+        "Previous experience at management level within security operations",
+        card,
+    )
+    assert match["strength"] in {"weak", "missing"}
+    assert match["score"] < 48
+    assert any("management or supervisory responsibility" in gap for gap in match["gaps"])
+
+
 def test_semantic_match_requires_grounded_supporting_facts():
     card = strong_card()
     cards = {card.id: card}
