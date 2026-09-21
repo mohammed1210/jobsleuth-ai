@@ -190,39 +190,8 @@ def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
     # Scope-sensitive management requirements must be supported by the candidate's
     # own management/leadership actions, not merely by words such as "security",
     # "operations" or references to senior management in the surrounding context.
-    management_requirement = bool(
-        re.search(
-            r"\b(?:management\s+level|management\s+experience|managerial|manager|supervisory|supervision|leadership)\b",
-            requirement,
-            flags=re.IGNORECASE,
-        )
-    )
-    personal_action_text = " ".join(
-        [
-            str(getattr(card, "task", "") or ""),
-            *[str(value) for value in (getattr(card, "actions", []) or [])],
-            str(getattr(card, "authority_context", "") or ""),
-        ]
-    )
-    management_label_text = " ".join(
-        [
-            *[str(value) for value in (getattr(card, "skills", []) or [])],
-            *[str(value) for value in (getattr(card, "tags", []) or [])],
-            *[str(value) for value in (getattr(card, "behaviours", []) or [])],
-        ]
-    )
-    has_management_scope = bool(
-        re.search(
-            r"\bI\s+(?:(?:personally|directly|successfully)\s+)?(?:manag\w*|lead|led|supervis\w*|coach\w*|delegat\w*)\b",
-            personal_action_text,
-            flags=re.IGNORECASE,
-        )
-        or re.search(
-            r"\b(?:management|managerial|leadership|supervision|supervisory)\b",
-            management_label_text,
-            flags=re.IGNORECASE,
-        )
-    )
+    management_requirement = requires_personal_management_scope(requirement)
+    has_management_scope = has_personal_management_scope(card)
     if management_requirement and not has_management_scope:
         score = min(score, 39.0)
 
