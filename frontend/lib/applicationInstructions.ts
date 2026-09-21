@@ -177,6 +177,8 @@ export function detectApplicationInstructions(vacancyText: string): ApplicationI
     /personal statement[^\n]{0,120}?maximum\s+(\d{2,4})\s+words/i,
     /personal statement[^\n]{0,120}?up to\s+(\d{2,4})\s+words/i,
     /statement of suitability[^\n]{0,120}?maximum\s+(\d{2,4})\s+words/i,
+    /cover(?:ing)? letter[^\n]{0,120}?maximum\s+(\d{2,4})\s+words/i,
+    /cover(?:ing)? letter[^\n]{0,120}?up to\s+(\d{2,4})\s+words/i,
     /maximum\s+(\d{2,4})\s+words/i,
     /word limit\s*[:\-]?\s*(\d{2,4})/i,
   ]);

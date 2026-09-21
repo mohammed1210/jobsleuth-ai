@@ -237,13 +237,13 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "right to work",
         "eligible to apply",
         "nationality requirement",
+    )
+    credential_cues = (
         "security clearance",
         "security check",
         "security vetting",
         "uk security vetting",
         "mandatory qualification",
-        "required driving licence",
-        "required driving license",
         "driving licence",
         "driving license",
         "sia licence",
@@ -323,7 +323,36 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         if any(cue in lowered for cue in trainable_cues):
             items.append(_item(line, "trainable", 0.96))
             continue
-        if section != "desirable" and any(cue in lowered for cue in eligibility_cues):
+
+        has_credential = any(cue in lowered for cue in credential_cues)
+        credential_negated = has_credential and bool(
+            re.search(
+                r"\b(?:not\s+(?:required|essential|mandatory|needed)|(?:do|does)\s+not\s+require)\b",
+                lowered,
+            )
+        )
+        credential_optional = has_credential and bool(
+            re.search(
+                r"\b(?:advantageous|desirable|preferred|optional|nice\s+to\s+have)\b",
+                lowered,
+            )
+        )
+        credential_mandatory = has_credential and (
+            section in {"essential", "eligibility"}
+            or bool(
+                re.search(
+                    r"\b(?:must\s+(?:have|hold|obtain)|required|mandatory|essential|need(?:ed)?\s+to\s+(?:have|hold|obtain))\b",
+                    lowered,
+                )
+            )
+        )
+
+        if credential_negated:
+            continue
+        if credential_optional:
+            items.append(_item(line, "desirable", 0.88, explicit_blocker=False))
+            continue
+        if section != "desirable" and (any(cue in lowered for cue in eligibility_cues) or credential_mandatory):
             items.append(_item(line, "eligibility", 0.9, explicit_blocker=explicit_blocker))
             continue
         if _is_full_time_practical_metadata(lowered) or any(cue in lowered for cue in practical_cues):

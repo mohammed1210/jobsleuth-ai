@@ -149,9 +149,18 @@ def _strength(score: float) -> str:
 
 
 def requires_personal_management_scope(requirement: str) -> bool:
+    """Return True only when the requirement asks for the candidate's own management scope."""
     return bool(
         re.search(
-            r"\b(?:management\s+level|management\s+experience|managerial|manager|supervisory|supervision|leadership)\b",
+            r"\b(?:"
+            r"management\s+(?:level|experience|responsibilit(?:y|ies))"
+            r"|managerial(?:\s+(?:experience|responsibilit(?:y|ies)))?"
+            r"|supervisory(?:\s+(?:experience|responsibilit(?:y|ies)))?"
+            r"|supervision"
+            r"|experience\s+as\s+(?:a\s+)?manager"
+            r"|(?:people|team|staff)\s+(?:management|leadership)"
+            r"|(?:manage|lead|supervise)\s+(?:a\s+)?(?:team|staff|people|employees|officers|direct\s+reports)"
+            r")\b",
             requirement,
             flags=re.IGNORECASE,
         )
@@ -159,28 +168,40 @@ def requires_personal_management_scope(requirement: str) -> bool:
 
 
 def has_personal_management_scope(card: Any) -> bool:
-    """Require evidence that the candidate personally managed/led/supervised.
+    """Require evidence that the candidate personally managed people.
 
-    References to "senior management" or somebody else's manager are not enough.
-    Accept common first-person constructions and action-field fragments such as
-    "Managed a team..." or "I was responsible for supervising...".
+    Management verbs only count when they govern a team, staff, reports or a
+    comparable group of people. Managing risks, cases, projects or operations
+    therefore cannot bypass a people-management requirement.
     """
     values = [
         str(getattr(card, "task", "") or ""),
         *[str(value) for value in (getattr(card, "actions", []) or [])],
         str(getattr(card, "authority_context", "") or ""),
     ]
-    pattern = re.compile(
-        r"(?:^|[.!?]\s+|\bI\s+)"
-        r"(?:(?:have|had)\s+|(?:was|am)\s+responsible\s+for\s+)?"
-        r"(?:managed?|managing|led|lead|leading|supervised?|supervising|coached?|coaching|delegated?|delegating)\b",
+    person_scope = r"(?:team(?:\s+members)?|staff|people|employees|officers|colleagues|direct\s+reports|reports)"
+    prefix = r"(?:^|[.!?]\s+|\bI\s+)(?:(?:have|had)\s+|(?:was|am)\s+responsible\s+for\s+)?"
+    direct_management = re.compile(
+        prefix
+        + r"(?:managed?|managing|led|lead|leading|supervised?|supervising|coached?|coaching)\s+"
+        + r"(?:(?:a|an|the|my|our)\s+)?(?:\d+\s+)?(?:[A-Za-z-]+\s+){0,3}"
+        + person_scope
+        + r"\b",
         flags=re.IGNORECASE,
     )
-    action_fragment = re.compile(
-        r"^\s*(?:managed?|managing|led|lead|leading|supervised?|supervising|coached?|coaching|delegated?|delegating)\b",
+    delegated_to_people = re.compile(
+        prefix
+        + r"(?:delegated?|delegating)\b(?:\s+[A-Za-z0-9'-]+){0,5}\s+to\s+"
+        + r"(?:(?:a|an|the|my|our)\s+)?"
+        + person_scope
+        + r"\b",
         flags=re.IGNORECASE,
     )
-    return any(pattern.search(value) or action_fragment.search(value) for value in values if value.strip())
+    return any(
+        direct_management.search(value) or delegated_to_people.search(value)
+        for value in values
+        if value.strip()
+    )
 
 
 def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
