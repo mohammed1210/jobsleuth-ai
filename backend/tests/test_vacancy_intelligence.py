@@ -121,6 +121,17 @@ At least three years of full-time experience in security operations.
 """
 
 
+PRIVATE_FULL_TIME_METADATA_VACANCY = """
+Security Operations Manager
+
+Requirements
+- At least three years of full-time experience in security operations.
+- Strong client communication skills.
+
+Job type: Full-time
+"""
+
+
 MESSY_CIVIL_SERVICE_VACANCY = """
 Job summary
 We believe a positive, open and supportive culture is essential to help everyone deliver their best work.
@@ -304,6 +315,15 @@ def test_full_time_experience_remains_an_essential_criterion():
         item["category"] == "practical" and "full-time experience" in item["text"].lower()
         for item in items
     )
+
+
+def test_full_time_metadata_does_not_steal_full_time_experience_requirement():
+    items = deterministic_extract(PRIVATE_FULL_TIME_METADATA_VACANCY)
+    essentials = [item for item in items if item["category"] == "essential"]
+    practical = [item for item in items if item["category"] == "practical"]
+
+    assert any("three years of full-time experience" in item["text"].lower() for item in essentials)
+    assert any("job type: full-time" in item["text"].lower() for item in practical)
 
 
 def test_ai_validation_rejects_ungrounded_source_text():
