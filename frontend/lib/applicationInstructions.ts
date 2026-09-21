@@ -192,6 +192,25 @@ export function detectApplicationInstructions(vacancyText: string): ApplicationI
     label: applicationTypeLabel,
     wordLimit,
   });
+
+  // Some adverts request more than one drafted document. Keep each as its own
+  // selectable component instead of only listing the second document as metadata.
+  if (personalStatement && applicationType !== 'statement_of_suitability') {
+    applicationParts.push({
+      id: 'main-statement',
+      kind: 'statement',
+      label: 'Personal statement',
+      wordLimit,
+    });
+  }
+  if (coverLetter && applicationType !== 'cover_letter') {
+    applicationParts.push({
+      id: 'cover-letter',
+      kind: 'cover_letter',
+      label: 'Cover letter',
+      wordLimit: null,
+    });
+  }
   const cvMentioned = /\b(?:a\s+)?CV\b/i.test(text);
   const cvNegated = hasNegatedDocumentInstruction(text, '(?:a\\s+)?CV');
   if (cvMentioned && !cvNegated && /application process|asked to complete|submit|sift|scored/i.test(text)) {
