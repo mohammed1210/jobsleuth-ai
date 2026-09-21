@@ -162,7 +162,9 @@ export function detectApplicationInstructions(vacancyText: string): ApplicationI
     ? explicitOrganisationCandidate.trim()
     : '';
   const fallbackOrganisation = lines.find(
-    (line, index) => index > 0 && /home office|nhs|council|university|department|agency|service|company|limited|ltd\.?$/i.test(line),
+    (line, index) => index > 0
+      && !genericOrganisationSubject.test(line.trim())
+      && /home office|nhs|council|university|department|agency|service|company|limited|ltd\.?$/i.test(line),
   ) || '';
   const organisation = explicitOrganisation || fallbackOrganisation.trim();
 
