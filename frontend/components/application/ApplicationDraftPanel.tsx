@@ -7,7 +7,14 @@ import type { Session } from '@supabase/supabase-js';
 import type { EvidenceCard, RequirementAnalysis, VacancyAnalysis } from '@/lib/applyApi';
 import { buildApplication, type ApplicationDraftResult, type ApplicationType } from '@/lib/applicationBuilderApi';
 import { detectApplicationInstructions } from '@/lib/applicationInstructions';
-import { savePilotFeedback, type PaymentSignal } from '@/lib/pilotFeedbackApi';
+import { savePilotFeedback } from '@/lib/pilotFeedbackApi';
+import {
+  binaryPilotAnswer,
+  EMPTY_PILOT_FEEDBACK,
+  isPilotFeedbackComplete,
+  type BinaryPilotAnswer,
+  type PilotFeedbackDraft,
+} from '@/lib/pilotFeedbackForm';
 
 type Props = { session: Session; analysis: VacancyAnalysis; evidence: EvidenceCard[]; vacancyText: string };
 
@@ -34,12 +41,7 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
   const [draft, setDraft] = useState('');
   const [building, setBuilding] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [usefulness, setUsefulness] = useState(8);
-  const [wouldSubmit, setWouldSubmit] = useState(true);
-  const [recommendationTrust, setRecommendationTrust] = useState(true);
-  const [timeSaving, setTimeSaving] = useState(true);
-  const [wouldUseAgain, setWouldUseAgain] = useState(true);
-  const [paymentSignal, setPaymentSignal] = useState<PaymentSignal>('maybe');
+  const [pilotFeedback, setPilotFeedback] = useState<PilotFeedbackDraft>(() => ({ ...EMPTY_PILOT_FEEDBACK }));
   const [feedbackSaved, setFeedbackSaved] = useState(false);
   const [savingFeedback, setSavingFeedback] = useState(false);
 
@@ -143,6 +145,7 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
       return;
     }
     setBuilding(true); setMessage(null); setFeedbackSaved(false);
+    setPilotFeedback({ ...EMPTY_PILOT_FEEDBACK });
     try {
       const next = await buildApplication(session, {
         roleTitle,
@@ -182,6 +185,10 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
 
   const submitFeedback = async () => {
     if (!result) return;
+    if (!isPilotFeedbackComplete(pilotFeedback)) {
+      setMessage('Please answer every pilot feedback question before saving.');
+      return;
+    }
     setSavingFeedback(true); setMessage(null);
     try {
       await savePilotFeedback(session, {
@@ -189,12 +196,12 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
         recommendation: analysis.decision,
         application_type: applicationType,
         word_count: liveWordCount,
-        usefulness,
-        would_submit: wouldSubmit,
-        recommendation_trust: recommendationTrust,
-        material_time_saving: timeSaving,
-        would_use_again: wouldUseAgain,
-        payment_signal: paymentSignal,
+        usefulness: pilotFeedback.usefulness as number,
+        would_submit: binaryPilotAnswer(pilotFeedback.wouldSubmit),
+        recommendation_trust: binaryPilotAnswer(pilotFeedback.recommendationTrust),
+        material_time_saving: binaryPilotAnswer(pilotFeedback.materialTimeSaving),
+        would_use_again: binaryPilotAnswer(pilotFeedback.wouldUseAgain),
+        payment_signal: pilotFeedback.paymentSignal as 'yes' | 'maybe' | 'no',
       });
       setFeedbackSaved(true);
       setMessage('Pilot feedback saved. Thank you — no vacancy, evidence or draft text was stored with this feedback.');
@@ -292,12 +299,50 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
 
           <div className="rounded-2xl border border-brand-100 bg-brand-50/40 p-5 space-y-4">
             <div><h3 className="font-semibold text-gray-900">Tester feedback</h3><p className="mt-1 text-sm text-gray-600">Help us validate JobSleuth. We store these ratings only — not your vacancy, evidence or draft text.</p></div>
-            <label className="block text-sm font-medium text-gray-700">How useful was this result? <strong>{usefulness}/10</strong><input className="mt-2 w-full" type="range" min={1} max={10} value={usefulness} onChange={(e) => setUsefulness(Number(e.target.value))} /></label>
+            <label className="block text-sm font-medium text-gray-700">How useful was this result?
+              <select
+                value={pilotFeedback.usefulness ?? ''}
+                onChange={(e) => setPilotFeedback((current) => ({ ...current, usefulness: e.target.value ? Number(e.target.value) : null }))}
+                className="mt-1 w-full rounded-xl border px-3 py-2"
+              >
+                <option value="">Choose 1–10</option>
+                {Array.from({ length: 10 }, (_, index) => index + 1).map((score) => <option key={score} value={score}>{score}/10</option>)}
+              </select>
+            </label>
             <div className="grid gap-3 md:grid-cols-2">
-              {[['Would you submit this after review?', wouldSubmit, setWouldSubmit], ['Did you trust the Apply/Consider/Skip recommendation?', recommendationTrust, setRecommendationTrust], ['Did this materially save you time?', timeSaving, setTimeSaving], ['Would you use JobSleuth for another vacancy?', wouldUseAgain, setWouldUseAgain]].map(([label, value, setter]) => <label key={String(label)} className="flex items-center justify-between gap-3 rounded-xl bg-white p-3 text-sm"><span>{String(label)}</span><input type="checkbox" checked={Boolean(value)} onChange={(e) => (setter as (v: boolean) => void)(e.target.checked)} /></label>)}
+              {([
+                ['Would you submit this after review?', 'wouldSubmit', pilotFeedback.wouldSubmit],
+                ['Did you trust the Apply/Consider/Skip recommendation?', 'recommendationTrust', pilotFeedback.recommendationTrust],
+                ['Did this materially save you time?', 'materialTimeSaving', pilotFeedback.materialTimeSaving],
+                ['Would you use JobSleuth for another vacancy?', 'wouldUseAgain', pilotFeedback.wouldUseAgain],
+              ] as const).map(([label, field, value]) => (
+                <label key={field} className="rounded-xl bg-white p-3 text-sm">
+                  <span>{label}</span>
+                  <select
+                    value={value}
+                    onChange={(e) => setPilotFeedback((current) => ({ ...current, [field]: e.target.value as BinaryPilotAnswer }))}
+                    className="mt-2 w-full rounded-lg border px-3 py-2"
+                  >
+                    <option value="">Choose</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </label>
+              ))}
             </div>
-            <label className="block text-sm font-medium text-gray-700">Would you pay for continued access?<select value={paymentSignal} onChange={(e) => setPaymentSignal(e.target.value as PaymentSignal)} className="mt-1 w-full rounded-xl border px-3 py-2"><option value="yes">Yes</option><option value="maybe">Maybe</option><option value="no">No</option></select></label>
-            <button type="button" disabled={savingFeedback || feedbackSaved} onClick={submitFeedback} className="btn-secondary disabled:opacity-60">{feedbackSaved ? 'Feedback saved' : savingFeedback ? 'Saving…' : 'Save tester feedback'}</button>
+            <label className="block text-sm font-medium text-gray-700">Would you pay for continued access?
+              <select
+                value={pilotFeedback.paymentSignal}
+                onChange={(e) => setPilotFeedback((current) => ({ ...current, paymentSignal: e.target.value as PilotFeedbackDraft['paymentSignal'] }))}
+                className="mt-1 w-full rounded-xl border px-3 py-2"
+              >
+                <option value="">Choose</option>
+                <option value="yes">Yes</option>
+                <option value="maybe">Maybe</option>
+                <option value="no">No</option>
+              </select>
+            </label>
+            <button type="button" disabled={savingFeedback || feedbackSaved || !isPilotFeedbackComplete(pilotFeedback)} onClick={submitFeedback} className="btn-secondary disabled:opacity-60">{feedbackSaved ? 'Feedback saved' : savingFeedback ? 'Saving…' : 'Save tester feedback'}</button>
           </div>
         </div>
       )}
