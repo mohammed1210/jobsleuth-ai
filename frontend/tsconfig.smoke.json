@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "noEmit": false,
+    "outDir": ".test-dist",
+    "incremental": false,
+    "isolatedModules": false,
+    "types": ["node"]
+  },
+  "include": [
+    "lib/applicationInstructions.ts",
+    "tests/applicationInstructions.smoke.test.ts"
+  ]
+}
