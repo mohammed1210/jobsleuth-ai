@@ -338,7 +338,7 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
             )
         )
         credential_mandatory = has_credential and (
-            section == "essential"
+            section in {"essential", "eligibility"}
             or bool(
                 re.search(
                     r"\b(?:must\s+(?:have|hold|obtain)|required|mandatory|essential|need(?:ed)?\s+to\s+(?:have|hold|obtain))\b",
