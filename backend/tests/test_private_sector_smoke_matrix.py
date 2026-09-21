@@ -173,6 +173,7 @@ Customer Operations Manager
 About You
 - Experience coordinating a hybrid schedule across regional teams.
 - Experience managing hybrid working arrangements for distributed teams.
+- Hybrid working experience is essential for this role.
 """
 
     items = deterministic_extract(advert)
@@ -181,5 +182,7 @@ About You
 
     assert any("coordinating a hybrid schedule" in item["text"].lower() for item in essentials)
     assert any("managing hybrid working arrangements" in item["text"].lower() for item in essentials)
+    assert any("hybrid working experience is essential" in item["text"].lower() for item in essentials)
     assert not any("hybrid schedule" in item["text"].lower() for item in practical)
     assert not any("hybrid working arrangements" in item["text"].lower() for item in practical)
+    assert not any("hybrid working experience" in item["text"].lower() for item in practical)
