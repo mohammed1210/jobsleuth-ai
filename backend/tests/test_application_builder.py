@@ -190,3 +190,29 @@ def test_builder_does_not_generate_when_no_supported_evidence(monkeypatch):
     assert data["can_generate"] is False
     assert data["draft"] == ""
     assert data["coverage"][0]["status"] == "evidence-gap"
+
+
+def test_cover_letter_fallback_has_cover_letter_framing(monkeypatch):
+    monkeypatch.setattr("routes.application_builder.semantic_application_draft", lambda *args, **kwargs: (None, "no_api_key"))
+    card = evidence_card()
+    payload = {
+        "job": {"title": "Operations Manager", "organisation": "Example Security"},
+        "application_type": "cover_letter",
+        "word_limit": 500,
+        "requirements": [
+            {
+                "text": "Make evidence-based recommendations",
+                "category": "essential",
+                "match_strength": "strong",
+                "evidence_ids": [card.id],
+            }
+        ],
+        "evidence_cards": [card.model_dump()],
+    }
+    data = client.post("/application-builder", headers=HEADERS, json=payload).json()
+    assert data["application_type"] == "cover_letter"
+    assert data["provider"] == "deterministic-grounded-cover-letter-v1"
+    assert data["draft"].startswith("I am applying for the Operations Manager role at Example Security.")
+    assert data["draft"].endswith("Thank you for considering my application.")
+    assert card.actions[0] in data["draft"]
+    assert data["word_count"] <= 500

@@ -32,6 +32,7 @@ _SECTION_HEADINGS: dict[str, Category] = {
     "nationality requirements": "eligibility",
     "security clearance": "eligibility",
     "additional security checks": "eligibility",
+    "essential": "essential",
     "essential criteria": "essential",
     "essential requirements": "essential",
     "what you will need": "essential",
@@ -203,6 +204,22 @@ def _looks_like_person_spec_criterion(line: str, is_bullet: bool) -> bool:
     return any(lowered.startswith(prefix) for prefix in _PERSON_SPEC_CRITERION_PREFIXES)
 
 
+def _is_full_time_practical_metadata(lowered: str) -> bool:
+    """Match work-pattern metadata without stealing experience criteria.
+
+    Accept common job-board forms such as "Full-time", "Full-time, Permanent"
+    and "Job type: Full-time", but not "three years of full-time experience".
+    """
+    value = lowered.strip()
+    return bool(
+        re.fullmatch(
+            r"(?:job\s+type\s*:\s*)?full[- ]time(?:\s*,\s*(?:permanent|temporary|contract|fixed[- ]term))?",
+            value,
+            flags=re.IGNORECASE,
+        )
+    )
+
+
 def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
     """Extract grounded criteria from vacancy text without external services.
 
@@ -227,6 +244,12 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "mandatory qualification",
         "required driving licence",
         "required driving license",
+        "driving licence",
+        "driving license",
+        "sia licence",
+        "sia license",
+        "sc clearance",
+        "checkable employment history",
     )
     practical_cues = (
         "hours per week",
@@ -244,6 +267,11 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "travel will be required",
         "shift pattern",
         "weekend working",
+        "weekend availability",
+        "nights as needed",
+        "night work",
+        "work location: in person",
+        "work location",
         "full-time training",
         "full time training",
     )
@@ -267,6 +295,11 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "security check",
         "security vetting",
         "uk security vetting",
+        "sia licence",
+        "sia license",
+        "driving licence",
+        "driving license",
+        "sc clearance",
     )
 
     for raw in vacancy_text.splitlines():
@@ -290,10 +323,10 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         if any(cue in lowered for cue in trainable_cues):
             items.append(_item(line, "trainable", 0.96))
             continue
-        if any(cue in lowered for cue in eligibility_cues):
+        if section != "desirable" and any(cue in lowered for cue in eligibility_cues):
             items.append(_item(line, "eligibility", 0.9, explicit_blocker=explicit_blocker))
             continue
-        if any(cue in lowered for cue in practical_cues):
+        if _is_full_time_practical_metadata(lowered) or any(cue in lowered for cue in practical_cues):
             items.append(_item(line, "practical", 0.9, explicit_blocker=explicit_blocker))
             continue
 

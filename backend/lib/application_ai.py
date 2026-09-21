@@ -153,11 +153,21 @@ def semantic_application_draft(
 
     cards, fact_lookup = _fact_catalog(cards_by_id, used_card_ids)
     target_min, target_max = _word_target(word_limit)
-    style_instruction = (
-        "Write a UK public-sector statement of suitability in first person. Combine overlapping criteria supported by the same evidence into coherent paragraphs. Prioritise essential criteria and use decision rationale, actions, outcomes and reflection to add useful depth rather than repeating criteria."
-        if application_type == "statement_of_suitability"
-        else "Write first-person responses addressing supported criteria without repetition. Prioritise essential criteria and use grounded actions, outcomes and reflection to add useful depth."
-    )
+    if application_type == "cover_letter":
+        style_instruction = (
+            "Write a concise professional UK cover letter in first person. Open with a short role-focused introduction, "
+            "use grounded evidence to show fit against the strongest supported requirements, and end with a brief professional close. "
+            "Do not invent motivation, qualifications or experience."
+        )
+    elif application_type == "statement_of_suitability":
+        style_instruction = (
+            "Write a UK public-sector statement of suitability in first person. Combine overlapping criteria supported by the same evidence into coherent paragraphs. "
+            "Prioritise essential criteria and use decision rationale, actions, outcomes and reflection to add useful depth rather than repeating criteria."
+        )
+    else:
+        style_instruction = (
+            "Write first-person responses addressing supported criteria without repetition. Prioritise essential criteria and use grounded actions, outcomes and reflection to add useful depth."
+        )
 
     try:
         from openai import OpenAI

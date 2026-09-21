@@ -2,7 +2,7 @@ import type { ApplicationType } from '@/lib/applicationBuilderApi';
 
 export type ApplicationPart = {
   id: string;
-  kind: 'statement' | 'criteria' | 'behaviour';
+  kind: 'statement' | 'cover_letter' | 'criteria' | 'behaviour';
   label: string;
   wordLimit: number | null;
   behaviourName?: string;
@@ -137,14 +137,15 @@ export function detectApplicationInstructions(vacancyText: string): ApplicationI
   const explicitTitle = firstMatch(text, [
     /(?:^|\n)Job title\s*\n\s*([^\n]+)/i,
     /(?:^|\n)Role title\s*\n\s*([^\n]+)/i,
+    /\bis seeking (?:an?\s+)?(?:experienced\s+)?([^,.\n]{3,100}?)\s+to\s+join\b/i,
   ]);
 
-  const roleTitle = explicitTitle || lines.find((line) =>
-    !/^(skip to content|home office logo|details|reference number|salary|contents|location|about the job)$/i.test(line)
-  ) || '';
+  const genericLeadLine = /^(?:skip to content|job details|here['’]s how the job details align with your profile\.?|pay|job type|shift and schedule|location|estimated commute|job address|benefits|pulled from the full job description|full job description|about the role|home office logo|details|reference number|salary|contents|about the job)$/i;
+  const roleTitle = explicitTitle || lines.find((line) => !genericLeadLine.test(line)) || '';
 
   const explicitOrganisation = firstMatch(text, [
     /(?:^|\n)(?:Organisation|Employer|Department)\s*\n\s*([^\n]+)/i,
+    /(?:^|\n)([A-Z][^,\n]{2,100}),[^\n]{0,160}\bis seeking\b/i,
   ]);
   const organisation = explicitOrganisation
     || lines.find((line, index) => index > 0 && /home office|nhs|council|university|department|agency|service|company|limited|ltd\.?$/i.test(line))
@@ -154,12 +155,23 @@ export function detectApplicationInstructions(vacancyText: string): ApplicationI
   const personalStatementNegated = hasNegatedDocumentInstruction(text, 'personal\\s+statement');
   const personalStatement = personalStatementMentioned && !personalStatementNegated;
   const criteriaResponse = /essential criteria response|criteria response/i.test(text);
-  const applicationType: ApplicationType = criteriaResponse ? 'criteria_response' : 'statement_of_suitability';
+  const coverLetterMentioned = /cover(?:ing)? letter/i.test(text);
+  const coverLetterNegated = hasNegatedDocumentInstruction(text, 'cover(?:ing)?\\s+letter');
+  const coverLetter = coverLetterMentioned && !coverLetterNegated;
+  const applicationType: ApplicationType = criteriaResponse
+    ? 'criteria_response'
+    : personalStatement
+      ? 'statement_of_suitability'
+      : coverLetter
+        ? 'cover_letter'
+        : 'statement_of_suitability';
   const applicationTypeLabel = personalStatement
     ? 'Personal statement'
     : criteriaResponse
       ? 'Essential criteria response'
-      : 'Statement of suitability';
+      : coverLetter
+        ? 'Cover letter'
+        : 'Statement of suitability';
 
   const wordLimitText = firstMatch(text, [
     /personal statement[^\n]{0,120}?maximum\s+(\d{2,4})\s+words/i,
@@ -175,11 +187,30 @@ export function detectApplicationInstructions(vacancyText: string): ApplicationI
   const applicationParts: ApplicationPart[] = [];
 
   applicationParts.push({
-    id: applicationType === 'criteria_response' ? 'criteria-response' : 'main-statement',
-    kind: applicationType === 'criteria_response' ? 'criteria' : 'statement',
+    id: applicationType === 'criteria_response' ? 'criteria-response' : applicationType === 'cover_letter' ? 'cover-letter' : 'main-statement',
+    kind: applicationType === 'criteria_response' ? 'criteria' : applicationType === 'cover_letter' ? 'cover_letter' : 'statement',
     label: applicationTypeLabel,
     wordLimit,
   });
+
+  // Some adverts request more than one drafted document. Keep each as its own
+  // selectable component instead of only listing the second document as metadata.
+  if (personalStatement && applicationType !== 'statement_of_suitability') {
+    applicationParts.push({
+      id: 'main-statement',
+      kind: 'statement',
+      label: 'Personal statement',
+      wordLimit,
+    });
+  }
+  if (coverLetter && applicationType !== 'cover_letter') {
+    applicationParts.push({
+      id: 'cover-letter',
+      kind: 'cover_letter',
+      label: 'Cover letter',
+      wordLimit: null,
+    });
+  }
   const cvMentioned = /\b(?:a\s+)?CV\b/i.test(text);
   const cvNegated = hasNegatedDocumentInstruction(text, '(?:a\\s+)?CV');
   if (cvMentioned && !cvNegated && /application process|asked to complete|submit|sift|scored/i.test(text)) {
@@ -187,9 +218,7 @@ export function detectApplicationInstructions(vacancyText: string): ApplicationI
   }
   if (personalStatement) requiredDocuments.push('Personal Statement');
 
-  const coverLetterMentioned = /cover(?:ing)? letter/i.test(text);
-  const coverLetterNegated = hasNegatedDocumentInstruction(text, 'cover(?:ing)?\\s+letter');
-  if (coverLetterMentioned && !coverLetterNegated) requiredDocuments.push('Cover Letter');
+  if (coverLetter) requiredDocuments.push('Cover Letter');
 
   // Civil Service vacancies can require one or more separately-scored behaviour
   // examples in addition to the CV/personal statement. Preserve the behaviour

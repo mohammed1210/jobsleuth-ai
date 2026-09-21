@@ -7,7 +7,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Header
 from pydantic import BaseModel, Field
 
-from lib.evidence_matching import rank_evidence
+from lib.evidence_matching import has_personal_management_scope, rank_evidence, requires_personal_management_scope
 from lib.evidence_semantic_batch import semantic_assess_batch
 from routes.saved_jobs import verify_supabase_user
 
@@ -109,6 +109,22 @@ async def vacancy_analysis(request: AnalysisRequest, authorization: str | None =
         merged: list[tuple[Evidence, dict[str, Any]]] = []
         for card, deterministic in ranked:
             assessment = semantic.get(str(card.id), deterministic)
+            if (
+                requires_personal_management_scope(requirement.text)
+                and not has_personal_management_scope(card)
+                and assessment.get("strength") in {"strong", "partial"}
+            ):
+                assessment = dict(assessment)
+                assessment["strength"] = "weak"
+                assessment["score"] = min(float(assessment.get("score", 0.0)), 39.0)
+                gaps = list(assessment.get("gaps", []))
+                management_gap = "The evidence does not demonstrate management or supervisory responsibility at the required level."
+                if management_gap not in gaps:
+                    gaps.append(management_gap)
+                assessment["gaps"] = gaps[:3]
+                assessment["why"] = (
+                    "Related operational evidence is recorded, but the candidate's own management or supervisory responsibility is not demonstrated."
+                )
             merged.append((card, assessment))
         merged.sort(key=lambda item: item[1]["score"], reverse=True)
 

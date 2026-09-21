@@ -78,6 +78,57 @@ def test_public_service_operational_context_is_not_treated_as_wording_only():
     assert "public_service" in match["signals"]["concepts"]
 
 
+def test_management_level_requirement_needs_personal_management_scope():
+    card = Evidence(
+        id="ev-security-risk",
+        title="High-risk freight examination",
+        situation="A secure operational examination involved significant security risks.",
+        task="I assessed options and contributed a recommendation to senior management.",
+        actions=[
+            "I assessed security and transport risks.",
+            "I consulted colleagues and recommended a revised operational plan.",
+        ],
+        outcome="The operation progressed safely.",
+        skills=["risk assessment", "operational decision making"],
+    )
+    match = deterministic_match(
+        "Previous experience at management level within security operations",
+        card,
+    )
+    assert match["strength"] in {"weak", "missing"}
+    assert match["score"] < 48
+    assert any("management or supervisory responsibility" in gap for gap in match["gaps"])
+
+
+def test_management_scope_accepts_common_first_person_constructions():
+    variants = [
+        Evidence(
+            id="ev-managed",
+            title="Team management",
+            task="I have managed a team across several sites.",
+            actions=["I set priorities and reviewed performance."],
+            outcome="Service levels improved.",
+        ),
+        Evidence(
+            id="ev-supervised",
+            title="Team supervision",
+            task="I was responsible for supervising officers on shift.",
+            actions=["I allocated work and supported staff."],
+            outcome="Coverage was maintained.",
+        ),
+        Evidence(
+            id="ev-fragment",
+            title="Team leadership",
+            actions=["Managed a team of officers across multiple locations."],
+            outcome="Standards were maintained.",
+        ),
+    ]
+
+    for card in variants:
+        match = deterministic_match("Previous experience at management level within security operations", card)
+        assert "management or supervisory responsibility" not in " ".join(match["gaps"])
+
+
 def test_semantic_match_requires_grounded_supporting_facts():
     card = strong_card()
     cards = {card.id: card}
@@ -164,3 +215,44 @@ def test_route_batches_ambiguous_semantic_work_once(monkeypatch):
     client.post("/vacancy-analysis", headers=HEADERS, json=payload)
     assert len(calls) == 1
     assert len(calls[0]) >= 1
+
+
+def test_semantic_reassessment_cannot_restore_false_management_match(monkeypatch):
+    card = Evidence(
+        id="ev-security-risk",
+        title="High-risk freight examination",
+        situation="A secure operational examination involved significant security risks.",
+        task="I assessed options and contributed a recommendation to senior management.",
+        actions=["I assessed risks and recommended a revised operational plan."],
+        outcome="The operation progressed safely.",
+    )
+
+    def fake_batch(entries):
+        return {
+            entries[0][0]: {
+                card.id: {
+                    "strength": "strong",
+                    "score": 88,
+                    "confidence": 0.9,
+                    "why": "Operational security experience appears related.",
+                    "gaps": [],
+                    "supporting_facts": [],
+                    "signals": {"concepts": ["risk"], "matched_terms": ["security"], "evidence_quality": 1},
+                }
+            }
+        }
+
+    monkeypatch.setattr("routes.vacancy_analysis.semantic_assess_batch", fake_batch)
+    payload = {
+        "job": {"title": "Security Operations Manager"},
+        "requirements": [
+            {"text": "Previous experience at management level within security operations", "category": "essential"}
+        ],
+        "evidence_cards": [card.model_dump()],
+    }
+
+    data = client.post("/vacancy-analysis", headers=HEADERS, json=payload).json()
+    item = data["requirements"][0]
+    assert item["match_strength"] == "weak"
+    assert item["evidence"][0]["score"] <= 39
+    assert any("management or supervisory responsibility" in gap for gap in item["gaps"])

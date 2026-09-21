@@ -148,9 +148,53 @@ def _strength(score: float) -> str:
     return "missing"
 
 
+def requires_personal_management_scope(requirement: str) -> bool:
+    return bool(
+        re.search(
+            r"\b(?:management\s+level|management\s+experience|managerial|manager|supervisory|supervision|leadership)\b",
+            requirement,
+            flags=re.IGNORECASE,
+        )
+    )
+
+
+def has_personal_management_scope(card: Any) -> bool:
+    """Require evidence that the candidate personally managed/led/supervised.
+
+    References to "senior management" or somebody else's manager are not enough.
+    Accept common first-person constructions and action-field fragments such as
+    "Managed a team..." or "I was responsible for supervising...".
+    """
+    values = [
+        str(getattr(card, "task", "") or ""),
+        *[str(value) for value in (getattr(card, "actions", []) or [])],
+        str(getattr(card, "authority_context", "") or ""),
+    ]
+    pattern = re.compile(
+        r"(?:^|[.!?]\s+|\bI\s+)"
+        r"(?:(?:have|had)\s+|(?:was|am)\s+responsible\s+for\s+)?"
+        r"(?:managed?|managing|led|lead|leading|supervised?|supervising|coached?|coaching|delegated?|delegating)\b",
+        flags=re.IGNORECASE,
+    )
+    action_fragment = re.compile(
+        r"^\s*(?:managed?|managing|led|lead|leading|supervised?|supervising|coached?|coaching|delegated?|delegating)\b",
+        flags=re.IGNORECASE,
+    )
+    return any(pattern.search(value) or action_fragment.search(value) for value in values if value.strip())
+
+
 def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
     signals = _support_signals(requirement, card)
     score = signals["score"]
+
+    # Scope-sensitive management requirements must be supported by the candidate's
+    # own management/leadership actions, not merely by words such as "security",
+    # "operations" or references to senior management in the surrounding context.
+    management_requirement = requires_personal_management_scope(requirement)
+    has_management_scope = has_personal_management_scope(card)
+    if management_requirement and not has_management_scope:
+        score = min(score, 39.0)
+
     strength = _strength(score)
     has_actions = bool(getattr(card, "actions", []) and any(str(value).strip() for value in getattr(card, "actions", []) or []))
     has_outcome = bool(str(getattr(card, "outcome", "") or "").strip())
@@ -177,6 +221,8 @@ def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
         gaps.append("Personal actions are not recorded clearly enough.")
     if not has_outcome:
         gaps.append("Outcome or impact is not recorded.")
+    if management_requirement and not has_management_scope:
+        gaps.append("The evidence does not demonstrate management or supervisory responsibility at the required level.")
     if signals["concepts"] == [] and strength != "missing":
         gaps.append("The evidence does not clearly demonstrate the underlying capability, only related wording.")
     if strength == "missing":

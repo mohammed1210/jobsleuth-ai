@@ -44,7 +44,7 @@ class ApplicationEvidence(BaseModel):
 
 class ApplicationBuilderRequest(BaseModel):
     job: dict[str, Any] = Field(default_factory=dict)
-    application_type: Literal["statement_of_suitability", "criteria_response"] = "statement_of_suitability"
+    application_type: Literal["statement_of_suitability", "criteria_response", "cover_letter"] = "statement_of_suitability"
     word_limit: int = Field(default=500, ge=100, le=5000)
     requirements: list[ApplicationRequirement] = Field(default_factory=list)
     evidence_cards: list[ApplicationEvidence] = Field(default_factory=list)
@@ -104,18 +104,32 @@ async def build_application(
         fallback_reason = "semantic_over_word_limit"
         paragraphs = None
 
+    fallback_used = not paragraphs
     if not paragraphs:
+        fallback_budget = request.word_limit
+        if request.application_type == "cover_letter":
+            # Reserve a small amount of the user's word budget for safe formatting
+            # around the evidence-bearing body.
+            fallback_budget = max(100, request.word_limit - 30)
         paragraphs = deterministic_draft(
             request.requirements,
             cards_by_id,
             role_title,
-            word_limit=request.word_limit,
+            word_limit=fallback_budget,
         )
         paragraphs = _normalise_paragraphs(paragraphs)
         provider = "deterministic-grounded-v2"
 
     requirement_coverage = coverage(request.requirements, paragraphs)
     draft = _compose_draft(paragraphs)
+    if draft and fallback_used and request.application_type == "cover_letter":
+        organisation_phrase = f" at {organisation}" if organisation else ""
+        draft = (
+            f"I am applying for the {role_title} role{organisation_phrase}.\n\n"
+            f"{draft}\n\n"
+            "Thank you for considering my application."
+        )
+        provider = "deterministic-grounded-cover-letter-v1"
     total_words = len(draft.split()) if draft else 0
 
     warnings: list[str] = []

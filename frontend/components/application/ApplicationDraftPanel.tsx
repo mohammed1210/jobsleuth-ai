@@ -53,7 +53,7 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
     setOrganisation(instructions.organisation);
     const first = instructions.applicationParts[0];
     setSelectedPartId(first?.id ?? '');
-    setApplicationType(first?.kind === 'criteria' ? 'criteria_response' : 'statement_of_suitability');
+    setApplicationType(first?.kind === 'criteria' ? 'criteria_response' : first?.kind === 'cover_letter' ? 'cover_letter' : 'statement_of_suitability');
     setWordLimitInput(String(first?.wordLimit ?? instructions.wordLimit ?? 500));
     setDraftAnyway(false);
     setResult(null);
@@ -62,7 +62,13 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
 
   useEffect(() => {
     if (!selectedPart) return;
-    setApplicationType(selectedPart.kind === 'criteria' || selectedPart.kind === 'behaviour' ? 'criteria_response' : 'statement_of_suitability');
+    setApplicationType(
+      selectedPart.kind === 'criteria' || selectedPart.kind === 'behaviour'
+        ? 'criteria_response'
+        : selectedPart.kind === 'cover_letter'
+          ? 'cover_letter'
+          : 'statement_of_suitability',
+    );
     setWordLimitInput(String(selectedPart.wordLimit ?? (selectedPart.kind === 'behaviour' ? 250 : instructions.wordLimit ?? 500)));
     setDraftAnyway(false);
     setResult(null);
@@ -242,7 +248,7 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
       <div className="grid gap-4 md:grid-cols-2">
         <label className="text-sm font-medium text-gray-700">Role title<input value={roleTitle} onChange={(e) => setRoleTitle(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2" placeholder="e.g. Counter Fraud Officer" /></label>
         <label className="text-sm font-medium text-gray-700">Organisation<input value={organisation} onChange={(e) => setOrganisation(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2" placeholder="Optional" /></label>
-        <label className="text-sm font-medium text-gray-700">Draft format<select value={applicationType} onChange={(e) => setApplicationType(e.target.value as ApplicationType)} className="mt-1 w-full rounded-xl border px-3 py-2"><option value="statement_of_suitability">Personal statement / statement of suitability</option><option value="criteria_response">Criteria / behaviour response</option></select></label>
+        <label className="text-sm font-medium text-gray-700">Draft format<select value={applicationType} onChange={(e) => setApplicationType(e.target.value as ApplicationType)} className="mt-1 w-full rounded-xl border px-3 py-2"><option value="statement_of_suitability">Personal statement / statement of suitability</option><option value="cover_letter">Cover letter</option><option value="criteria_response">Criteria / behaviour response</option></select></label>
         <label className="text-sm font-medium text-gray-700">Word limit<input inputMode="numeric" value={wordLimitInput} onChange={(e) => setWordLimitInput(e.target.value.replace(/[^0-9]/g, ''))} onBlur={() => setWordLimitInput(String(wordLimit))} className="mt-1 w-full rounded-xl border px-3 py-2" placeholder="e.g. 750" /></label>
       </div>
 
