@@ -32,6 +32,7 @@ _SECTION_HEADINGS: dict[str, Category] = {
     "nationality requirements": "eligibility",
     "security clearance": "eligibility",
     "additional security checks": "eligibility",
+    "essential": "essential",
     "essential criteria": "essential",
     "essential requirements": "essential",
     "what you will need": "essential",
@@ -227,6 +228,12 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "mandatory qualification",
         "required driving licence",
         "required driving license",
+        "driving licence",
+        "driving license",
+        "sia licence",
+        "sia license",
+        "sc clearance",
+        "checkable employment history",
     )
     practical_cues = (
         "hours per week",
@@ -244,6 +251,13 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "travel will be required",
         "shift pattern",
         "weekend working",
+        "weekend availability",
+        "nights as needed",
+        "night work",
+        "work location: in person",
+        "work location",
+        "full-time",
+        "full time",
         "full-time training",
         "full time training",
     )
@@ -267,6 +281,11 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "security check",
         "security vetting",
         "uk security vetting",
+        "sia licence",
+        "sia license",
+        "driving licence",
+        "driving license",
+        "sc clearance",
     )
 
     for raw in vacancy_text.splitlines():
