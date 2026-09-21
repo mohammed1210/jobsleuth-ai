@@ -11,6 +11,9 @@
   },
   "include": [
     "lib/applicationInstructions.ts",
-    "tests/applicationInstructions.smoke.test.ts"
+    "lib/pilotFeedbackApi.ts",
+    "lib/pilotFeedbackForm.ts",
+    "tests/applicationInstructions.smoke.test.ts",
+    "tests/pilotFeedbackForm.smoke.test.ts"
   ]
 }
