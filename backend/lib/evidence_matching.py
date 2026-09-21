@@ -162,18 +162,31 @@ def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
             flags=re.IGNORECASE,
         )
     )
-    personal_scope_text = " ".join(
+    personal_action_text = " ".join(
         [
             str(getattr(card, "task", "") or ""),
             *[str(value) for value in (getattr(card, "actions", []) or [])],
-            *[str(value) for value in (getattr(card, "skills", []) or [])],
-            *[str(value) for value in (getattr(card, "tags", []) or [])],
-            *[str(value) for value in (getattr(card, "behaviours", []) or [])],
             str(getattr(card, "authority_context", "") or ""),
         ]
     )
+    management_label_text = " ".join(
+        [
+            *[str(value) for value in (getattr(card, "skills", []) or [])],
+            *[str(value) for value in (getattr(card, "tags", []) or [])],
+            *[str(value) for value in (getattr(card, "behaviours", []) or [])],
+        ]
+    )
     has_management_scope = bool(
-        re.search(r"\b(?:manag\w*|lead\w*|supervis\w*|coach\w*|delegat\w*)\b", personal_scope_text, flags=re.IGNORECASE)
+        re.search(
+            r"\bI\s+(?:(?:personally|directly|successfully)\s+)?(?:manag\w*|lead|led|supervis\w*|coach\w*|delegat\w*)\b",
+            personal_action_text,
+            flags=re.IGNORECASE,
+        )
+        or re.search(
+            r"\b(?:management|managerial|leadership|supervision|supervisory)\b",
+            management_label_text,
+            flags=re.IGNORECASE,
+        )
     )
     if management_requirement and not has_management_scope:
         score = min(score, 39.0)
