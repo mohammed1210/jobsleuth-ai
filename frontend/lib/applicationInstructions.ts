@@ -151,18 +151,22 @@ export function detectApplicationInstructions(vacancyText: string): ApplicationI
   const genericLeadLine = /^(?:skip to content|job details|here['’]s how the job details align with your profile\.?|pay|job type|shift and schedule|location|estimated commute|job address|benefits|pulled from the full job description|full job description|about the role|home office logo|details|reference number|salary|contents|about the job)$/i;
   const roleTitle = explicitTitle || lines.find((line) => !genericLeadLine.test(line)) || '';
 
-  const explicitOrganisation = firstMatch(text, [
+  const explicitOrganisationCandidate = firstMatch(text, [
     /(?:^|\n)(?:Organisation|Employer|Department)\s*\n\s*([^\n]+)/i,
     /(?:^|\n)([A-Z][^,\n]{2,100}),[^\n]{0,160}\bis seeking\b/i,
     /(?:^|\n)At\s+([A-Z][A-Za-z0-9&'’.,\- ]{1,80}),\s+(?:our|we)\b/i,
     /(?:^|\n)([A-Z][A-Za-z0-9&'’.,\- ]{1,80})\s+is\s+(?:the|a|an)\b/i,
   ]);
-  const organisationCandidate = explicitOrganisation
-    || lines.find((line, index) => index > 0 && /home office|nhs|council|university|department|agency|service|company|limited|ltd\.?$/i.test(line))
-    || '';
-  const organisation = /^(?:this|role|job|position|location|team|company)$/i.test(organisationCandidate.trim())
-    ? ''
-    : organisationCandidate.trim();
+  const genericOrganisationSubject = /^(?:(?:the|this|our|your)\s+)?(?:role|job|position|location|team|company)$/i;
+  const explicitOrganisation = explicitOrganisationCandidate && !genericOrganisationSubject.test(explicitOrganisationCandidate.trim())
+    ? explicitOrganisationCandidate.trim()
+    : '';
+  const fallbackOrganisation = lines.find(
+    (line, index) => index > 0
+      && !genericOrganisationSubject.test(line.trim())
+      && /home office|nhs|council|university|department|agency|service|company|limited|ltd\.?$/i.test(line),
+  ) || '';
+  const organisation = explicitOrganisation || fallbackOrganisation.trim();
 
   const personalStatementMentioned = /personal statement/i.test(text);
   const personalStatementNegated = hasNegatedDocumentInstruction(text, 'personal\\s+statement');
