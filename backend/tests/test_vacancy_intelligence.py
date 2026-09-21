@@ -132,6 +132,17 @@ Job type: Full-time
 """
 
 
+PRIVATE_DESIRABLE_LICENCE_VACANCY = """
+Facilities Coordinator
+
+Requirements
+- Strong organisational skills.
+
+Desirable
+- A full UK driving licence would be advantageous.
+"""
+
+
 MESSY_CIVIL_SERVICE_VACANCY = """
 Job summary
 We believe a positive, open and supportive culture is essential to help everyone deliver their best work.
@@ -324,6 +335,15 @@ def test_full_time_metadata_does_not_steal_full_time_experience_requirement():
 
     assert any("three years of full-time experience" in item["text"].lower() for item in essentials)
     assert any("job type: full-time" in item["text"].lower() for item in practical)
+
+
+def test_optional_desirable_licence_stays_desirable_not_eligibility():
+    items = deterministic_extract(PRIVATE_DESIRABLE_LICENCE_VACANCY)
+    licence_items = [item for item in items if "driving licence" in item["text"].lower()]
+
+    assert len(licence_items) == 1
+    assert licence_items[0]["category"] == "desirable"
+    assert licence_items[0]["explicit_blocker"] is False
 
 
 def test_ai_validation_rejects_ungrounded_source_text():
