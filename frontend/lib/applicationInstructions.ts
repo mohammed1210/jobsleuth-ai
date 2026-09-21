@@ -425,12 +425,14 @@ export function detectApplicationInstructions(vacancyText: string): ApplicationI
   const personalStatementMentioned = /personal statement/i.test(text);
   const personalStatementNegated = hasNegatedDocumentInstruction(text, 'personal\\s+statement');
   const personalStatementOptionalField = hasOptionalAtsDocumentField(text, 'personal\\s+statement');
-  const personalStatement = personalStatementMentioned && !personalStatementNegated && !personalStatementOptionalField;
+  const personalStatement = personalStatementMentioned && !personalStatementNegated;
+  const personalStatementRequired = personalStatement && !personalStatementOptionalField;
   const criteriaResponse = /essential criteria response|criteria response/i.test(text);
   const coverLetterMentioned = /cover(?:ing)? letter/i.test(text);
   const coverLetterNegated = hasNegatedDocumentInstruction(text, 'cover(?:ing)?\\s+letter');
   const coverLetterOptionalField = hasOptionalAtsDocumentField(text, 'cover(?:ing)?\\s+letter');
-  const coverLetter = coverLetterMentioned && !coverLetterNegated && !coverLetterOptionalField;
+  const coverLetter = coverLetterMentioned && !coverLetterNegated;
+  const coverLetterRequired = coverLetter && !coverLetterOptionalField;
   const applicationType: ApplicationType = criteriaResponse
     ? 'criteria_response'
     : personalStatement
@@ -439,11 +441,11 @@ export function detectApplicationInstructions(vacancyText: string): ApplicationI
         ? 'cover_letter'
         : 'statement_of_suitability';
   const applicationTypeLabel = personalStatement
-    ? 'Personal statement'
+    ? personalStatementOptionalField ? 'Personal statement (optional)' : 'Personal statement'
     : criteriaResponse
       ? 'Essential criteria response'
       : coverLetter
-        ? 'Cover letter'
+        ? coverLetterOptionalField ? 'Cover letter (optional)' : 'Cover letter'
         : 'Statement of suitability';
 
   const wordLimitText = firstMatch(text, [
@@ -491,9 +493,9 @@ export function detectApplicationInstructions(vacancyText: string): ApplicationI
   if (cvMentioned && !cvNegated && /application process|asked to complete|submit|sift|scored/i.test(text)) {
     requiredDocuments.push('CV');
   }
-  if (personalStatement) requiredDocuments.push('Personal Statement');
+  if (personalStatementRequired) requiredDocuments.push('Personal Statement');
 
-  if (coverLetter) requiredDocuments.push('Cover Letter');
+  if (coverLetterRequired) requiredDocuments.push('Cover Letter');
 
   // Civil Service vacancies can require one or more separately-scored behaviour
   // examples in addition to the CV/personal statement. Preserve the behaviour
