@@ -545,12 +545,13 @@ export default function VacancyApplyPage() {
                 <span className="rounded-full bg-gray-900 px-4 py-2 text-sm font-bold text-white">{analysis.decision}</span>
               </div>
 
-              <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
                 {([
                   ['Strong', analysis.requirements.filter((item) => item.match_strength === 'strong').length],
                   ['Partial', analysis.requirements.filter((item) => item.match_strength === 'partial').length],
                   ['Weak', analysis.requirements.filter((item) => item.match_strength === 'weak').length],
                   ['Missing', analysis.requirements.filter((item) => item.match_strength === 'missing').length],
+                  ['Trainable', analysis.requirements.filter((item) => item.match_strength === 'trainable').length],
                 ] as const).map(([label, count]) => (
                   <div key={label} className="rounded-xl bg-gray-50 px-4 py-3">
                     <p className="text-xl font-bold text-gray-900">{count}</p>
