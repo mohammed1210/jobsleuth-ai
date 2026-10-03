@@ -255,3 +255,21 @@ def test_cv_signal_cannot_clear_explicit_blocker():
     assert body["decision"] == "SKIP"
     assert body["requirements"][0]["match_strength"] in {"weak", "missing"}
     assert body["requirements"][0]["profile_support"] is not None
+
+
+def test_docx_extraction_includes_table_cells():
+    import io
+
+    from docx import Document
+
+    document = Document()
+    document.add_paragraph("Candidate profile")
+    table = document.add_table(rows=2, cols=1)
+    table.cell(0, 0).text = "SKILLS"
+    table.cell(1, 0).text = "Stakeholder management\nRisk assessment"
+    buffer = io.BytesIO()
+    document.save(buffer)
+
+    text = candidate_profile._extract_docx(buffer.getvalue())
+    assert "Stakeholder management" in text
+    assert "Risk assessment" in text
