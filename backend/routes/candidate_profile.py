@@ -83,7 +83,16 @@ def _extract_docx(data: bytes) -> str:
     from docx import Document
 
     document = Document(io.BytesIO(data))
-    return "\n".join(paragraph.text for paragraph in document.paragraphs)
+    parts = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
+    for table in document.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                parts.extend(
+                    paragraph.text
+                    for paragraph in cell.paragraphs
+                    if paragraph.text.strip()
+                )
+    return "\n".join(parts)
 
 
 def _extract_text(filename: str, data: bytes) -> str:
