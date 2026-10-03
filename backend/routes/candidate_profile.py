@@ -88,14 +88,19 @@ def _extract_docx(data: bytes) -> str:
 
 def _extract_text(filename: str, data: bytes) -> str:
     suffix = Path(filename).suffix.lower()
-    if suffix == ".pdf":
-        text = _extract_pdf(data)
-    elif suffix == ".docx":
-        text = _extract_docx(data)
-    elif suffix == ".txt":
-        text = data.decode("utf-8", errors="replace")
-    else:
-        raise HTTPException(status_code=415, detail="Upload a PDF, DOCX or TXT CV.")
+    try:
+        if suffix == ".pdf":
+            text = _extract_pdf(data)
+        elif suffix == ".docx":
+            text = _extract_docx(data)
+        elif suffix == ".txt":
+            text = data.decode("utf-8", errors="replace")
+        else:
+            raise HTTPException(status_code=415, detail="Upload a PDF, DOCX or TXT CV.")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail="Could not read this CV file. Try a standard PDF, DOCX or TXT file.") from exc
 
     text = text.replace("\x00", "")
     text = re.sub(r"[ \t]+", " ", text)
