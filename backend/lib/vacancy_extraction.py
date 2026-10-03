@@ -237,7 +237,7 @@ def _is_full_time_practical_metadata(lowered: str) -> bool:
     value = lowered.strip()
     return bool(
         re.fullmatch(
-            r"(?:job\s+type\s*:\s*)?full[- ]time(?:\s*,\s*(?:permanent|temporary|contract|fixed[- ]term))?",
+            r"(?:job\s+types?\s*:\s*)?full[- ]time(?:\s*,\s*(?:permanent|temporary|contract|fixed[- ]term))?",
             value,
             flags=re.IGNORECASE,
         )
@@ -350,6 +350,7 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "weekend availability",
         "nights as needed",
         "night work",
+        "unsocial hours",
         "work location: in person",
         "work location",
         "full-time training",
