@@ -38,6 +38,9 @@ _SECTION_HEADINGS: dict[str, Category] = {
     "what you will need": "essential",
     "what you'll need": "essential",
     "requirements": "essential",
+    "role requirements": "essential",
+    "job requirements": "essential",
+    "candidate requirements": "essential",
     "required qualifications": "essential",
     "minimum qualifications": "essential",
     "what you'll bring": "essential",
@@ -55,6 +58,12 @@ _SECTION_HEADINGS: dict[str, Category] = {
     "nice if you have": "desirable",
     "preferred": "desirable",
     "preferred qualifications": "desirable",
+    "preferred experience": "desirable",
+    "ideal candidate": "desirable",
+    "ideal candidates": "desirable",
+    "ideal candidate experience": "desirable",
+    "ideal candidates & experience": "desirable",
+    "ideal candidates and experience": "desirable",
     "bonus points": "desirable",
     "training": "trainable",
     "learning and development": "trainable",
@@ -319,6 +328,8 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "sia licence",
         "sia license",
         "sc clearance",
+        "police vetting",
+        "full police vetting",
         "checkable employment history",
     )
     practical_cues = (
@@ -343,6 +354,10 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "work location",
         "full-time training",
         "full time training",
+        "working days",
+        "priority days",
+        "shifts:",
+        "contracted hours",
     )
     trainable_cues = (
         "training will be provided",
@@ -369,6 +384,8 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "driving licence",
         "driving license",
         "sc clearance",
+        "police vetting",
+        "full police vetting",
     )
 
     for raw in vacancy_text.splitlines():
@@ -426,6 +443,10 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
             continue
         if _is_private_sector_practical_metadata(lowered) or any(cue in lowered for cue in practical_cues):
             items.append(_item(line, "practical", 0.9, explicit_blocker=explicit_blocker))
+            continue
+
+        if re.match(r"^(?:salary|pay|benefits?)\s*:", lowered):
+            section = None
             continue
 
         if section == "essential" and re.search(
