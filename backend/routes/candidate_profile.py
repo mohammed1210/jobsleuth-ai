@@ -212,14 +212,75 @@ def extract_candidate_profile(text: str) -> tuple[CandidateProfileData, str]:
     return _fallback_profile(text), "fallback"
 
 
+def _profile_row_to_response(row: dict[str, Any]) -> CandidateProfileResponse:
+    metadata: dict[str, Any] = {}
+    try:
+        metadata = json.loads(str(row.get("reflection") or "{}"))
+    except Exception:
+        metadata = {}
+    experience = metadata.get("experience") if isinstance(metadata.get("experience"), list) else []
+    qualifications = metadata.get("qualifications") if isinstance(metadata.get("qualifications"), list) else []
+    return CandidateProfileResponse(
+        user_id=str(row.get("user_id") or ""),
+        source_filename=str(metadata.get("source_filename") or row.get("task") or ""),
+        summary=str(row.get("situation") or ""),
+        skills=[str(item) for item in (row.get("skills") or []) if item],
+        experience=experience,
+        qualifications=qualifications,
+        extraction_provider=str(metadata.get("extraction_provider") or "fallback"),
+        updated_at=row.get("updated_at") or row.get("created_at"),
+    )
+
+
+def _profile_payload(
+    *,
+    user_id: str,
+    filename: str,
+    profile: CandidateProfileData,
+    provider: str,
+) -> dict[str, Any]:
+    metadata = {
+        "source_filename": filename[:255],
+        "extraction_provider": provider,
+        "experience": [item.model_dump() for item in profile.experience],
+        "qualifications": [item.model_dump() for item in profile.qualifications],
+    }
+    return {
+        "user_id": user_id,
+        "title": "CV profile",
+        "situation": profile.summary,
+        "task": filename[:255],
+        "actions": [],
+        "outcome": "",
+        "reflection": json.dumps(metadata, ensure_ascii=False),
+        "tags": [item.name for item in profile.qualifications][:30],
+        "behaviours": [],
+        "skills": profile.skills,
+        "authority_context": None,
+        "source": "cv_profile",
+        "confidence": 50,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @router.get("", response_model=CandidateProfileResponse | None)
 async def get_candidate_profile(
     authorization: str | None = Header(None),
 ) -> CandidateProfileResponse | None:
     user = await verify_supabase_user(authorization)
-    result = _db().table("candidate_profiles").select("*").eq("user_id", user["id"]).execute()
+    result = (
+        _db()
+        .table("evidence_cards")
+        .select("*")
+        .eq("user_id", user["id"])
+        .eq("source", "cv_profile")
+        .execute()
+    )
     rows = getattr(result, "data", None) or []
-    return CandidateProfileResponse(**rows[0]) if rows else None
+    if not rows:
+        return None
+    rows = sorted(rows, key=lambda row: str(row.get("updated_at") or ""), reverse=True)
+    return _profile_row_to_response(rows[0])
 
 
 @router.post("/cv-upload", response_model=CandidateProfileResponse)
@@ -239,21 +300,38 @@ async def upload_candidate_cv(
 
     text = _extract_text(filename, data)
     profile, provider = extract_candidate_profile(text)
-    payload = {
-        "user_id": user["id"],
-        "source_filename": filename[:255],
-        "summary": profile.summary,
-        "skills": profile.skills,
-        "experience": [item.model_dump() for item in profile.experience],
-        "qualifications": [item.model_dump() for item in profile.qualifications],
-        "extraction_provider": provider,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
-    result = _db().table("candidate_profiles").upsert(payload, on_conflict="user_id").execute()
-    rows = getattr(result, "data", None) or []
-    if not rows:
+    payload = _profile_payload(
+        user_id=user["id"],
+        filename=filename,
+        profile=profile,
+        provider=provider,
+    )
+
+    current = (
+        _db()
+        .table("evidence_cards")
+        .select("id")
+        .eq("user_id", user["id"])
+        .eq("source", "cv_profile")
+        .execute()
+    )
+    rows = getattr(current, "data", None) or []
+    if rows:
+        result = (
+            _db()
+            .table("evidence_cards")
+            .update({key: value for key, value in payload.items() if key != "user_id"})
+            .eq("id", rows[0]["id"])
+            .eq("user_id", user["id"])
+            .execute()
+        )
+    else:
+        result = _db().table("evidence_cards").insert(payload).execute()
+
+    saved = getattr(result, "data", None) or []
+    if not saved:
         raise HTTPException(status_code=503, detail="Could not save the extracted CV profile.")
-    return CandidateProfileResponse(**rows[0])
+    return _profile_row_to_response(saved[0])
 
 
 @router.delete("")
@@ -261,5 +339,12 @@ async def delete_candidate_profile(
     authorization: str | None = Header(None),
 ) -> dict[str, bool]:
     user = await verify_supabase_user(authorization)
-    _db().table("candidate_profiles").delete().eq("user_id", user["id"]).execute()
+    (
+        _db()
+        .table("evidence_cards")
+        .delete()
+        .eq("user_id", user["id"])
+        .eq("source", "cv_profile")
+        .execute()
+    )
     return {"ok": True}
