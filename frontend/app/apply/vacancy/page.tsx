@@ -10,6 +10,7 @@ import HeaderClient from '@/components/HeaderClient';
 import ExtractionAudit from '@/components/vacancy/ExtractionAudit';
 import RequirementMatchCard from '@/components/vacancy/RequirementMatchCard';
 import { analyseVacancy, fetchEvidence, type EvidenceCard, type Requirement, type VacancyAnalysis } from '@/lib/applyApi';
+import { fetchCandidateProfile, type CandidateProfile } from '@/lib/candidateProfileApi';
 import { getFreshSession, getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { extractVacancyIntelligence, type IntelligenceItem } from '@/lib/vacancyIntelligenceApi';
 import { parseVacancyText } from '@/lib/vacancyParser';
@@ -19,6 +20,7 @@ const VACANCY_DRAFT_KEY = 'jobsleuth.apply.vacancyDraft.v2';
 const EVIDENCE_TARGET_KEY = 'jobsleuth.evidence.target.v1';
 
 const evidenceFingerprint = (cards: EvidenceCard[]) => JSON.stringify(cards);
+const candidateProfileFingerprint = (profile: CandidateProfile | null) => JSON.stringify(profile ? { summary: profile.summary, skills: profile.skills, experience: profile.experience, qualifications: profile.qualifications, updated_at: profile.updated_at } : null);
 const analysisInputFingerprint = (essential: string, desirable: string, trainable: string, practical: string) => JSON.stringify({
   essential: lines(essential),
   desirable: lines(desirable),
@@ -39,12 +41,14 @@ type VacancyDraftState = {
   analysis: VacancyAnalysis | null;
   analysisEvidenceFingerprint: string | null;
   analysisInputFingerprint: string | null;
+  analysisProfileFingerprint: string | null;
 };
 
 export default function VacancyApplyPage() {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [evidence, setEvidence] = useState<EvidenceCard[]>([]);
+  const [candidateProfile, setCandidateProfile] = useState<CandidateProfile | null>(null);
   const [vacancyText, setVacancyText] = useState('');
   const [eligibility, setEligibility] = useState('');
   const [essential, setEssential] = useState('');
@@ -58,6 +62,7 @@ export default function VacancyApplyPage() {
   const [analysis, setAnalysis] = useState<VacancyAnalysis | null>(null);
   const [analysisEvidenceFingerprint, setAnalysisEvidenceFingerprint] = useState<string | null>(null);
   const [analysisInputFingerprintValue, setAnalysisInputFingerprintValue] = useState<string | null>(null);
+  const [analysisProfileFingerprintValue, setAnalysisProfileFingerprintValue] = useState<string | null>(null);
   const [analysisValidated, setAnalysisValidated] = useState(false);
   const sessionUserIdRef = useRef<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -77,6 +82,7 @@ export default function VacancyApplyPage() {
     setAnalysis(null);
     setAnalysisEvidenceFingerprint(null);
     setAnalysisInputFingerprintValue(null);
+    setAnalysisProfileFingerprintValue(null);
     setAnalysisValidated(false);
     setShowManualDetails(false);
   };
@@ -109,6 +115,9 @@ export default function VacancyApplyPage() {
         setAnalysisInputFingerprintValue(
           typeof saved.analysisInputFingerprint === 'string' ? saved.analysisInputFingerprint : null,
         );
+        setAnalysisProfileFingerprintValue(
+          typeof saved.analysisProfileFingerprint === 'string' ? saved.analysisProfileFingerprint : null,
+        );
         setAnalysisValidated(false);
       }
     } catch {
@@ -132,6 +141,7 @@ export default function VacancyApplyPage() {
       analysis,
       analysisEvidenceFingerprint,
       analysisInputFingerprint: analysisInputFingerprintValue,
+      analysisProfileFingerprint: analysisProfileFingerprintValue,
     };
     const hasWork = vacancyText.trim() || eligibility.trim() || essential.trim() || desirable.trim() || trainable.trim() || practical.trim() || extractedItems.length > 0 || analysis;
     if (!hasWork) {
@@ -139,7 +149,7 @@ export default function VacancyApplyPage() {
       return;
     }
     window.sessionStorage.setItem(VACANCY_DRAFT_KEY, JSON.stringify(snapshot));
-  }, [draftStateReady, session, vacancyText, eligibility, essential, desirable, trainable, practical, extractedItems, extractionProvider, analysis, analysisEvidenceFingerprint, analysisInputFingerprintValue]);
+  }, [draftStateReady, session, vacancyText, eligibility, essential, desirable, trainable, practical, extractedItems, extractionProvider, analysis, analysisEvidenceFingerprint, analysisInputFingerprintValue, analysisProfileFingerprintValue]);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
@@ -155,10 +165,14 @@ export default function VacancyApplyPage() {
     const loadEvidenceForSession = async (nextSession: Session) => {
       const requestedUserId = nextSession.user.id;
       try {
-        const nextEvidence = await fetchEvidence(nextSession);
+        const [nextEvidence, nextProfile] = await Promise.all([
+          fetchEvidence(nextSession),
+          fetchCandidateProfile(nextSession),
+        ]);
         if (!active || sessionUserIdRef.current !== requestedUserId) return;
 
         setEvidence(nextEvidence);
+        setCandidateProfile(nextProfile);
 
         try {
           const raw = window.sessionStorage.getItem(VACANCY_DRAFT_KEY);
@@ -173,10 +187,12 @@ export default function VacancyApplyPage() {
               );
               const evidenceStillMatches = saved.analysisEvidenceFingerprint === evidenceFingerprint(nextEvidence);
               const inputsStillMatch = saved.analysisInputFingerprint === savedInputsFingerprint;
-              if (!evidenceStillMatches || !inputsStillMatch) {
+              const profileStillMatches = saved.analysisProfileFingerprint === candidateProfileFingerprint(nextProfile);
+              if (!evidenceStillMatches || !inputsStillMatch || !profileStillMatches) {
                 setAnalysis(null);
                 setAnalysisEvidenceFingerprint(null);
                 setAnalysisInputFingerprintValue(null);
+                setAnalysisProfileFingerprintValue(null);
                 setAnalysisValidated(false);
               } else {
                 setAnalysisValidated(true);
@@ -195,8 +211,10 @@ export default function VacancyApplyPage() {
           setAnalysis(null);
           setAnalysisEvidenceFingerprint(null);
           setAnalysisInputFingerprintValue(null);
+          setAnalysisProfileFingerprintValue(null);
+          setCandidateProfile(null);
           setAnalysisValidated(false);
-          setMessage(error instanceof Error ? error.message : 'Could not load your Evidence Bank.');
+          setMessage(error instanceof Error ? error.message : 'Could not load your Evidence Bank or CV profile.');
         }
       }
     };
@@ -213,6 +231,7 @@ export default function VacancyApplyPage() {
         window.sessionStorage.removeItem(VACANCY_DRAFT_KEY);
         clearDraftFields();
         setEvidence([]);
+        setCandidateProfile(null);
       }
       if (!active) return;
       setDraftStateReady(true);
@@ -231,6 +250,7 @@ export default function VacancyApplyPage() {
         window.sessionStorage.removeItem(VACANCY_DRAFT_KEY);
         clearDraftFields();
         setEvidence([]);
+        setCandidateProfile(null);
         setDraftStateReady(true);
         return;
       }
@@ -374,14 +394,16 @@ export default function VacancyApplyPage() {
     setAnalysis(null);
     setAnalysisEvidenceFingerprint(null);
     setAnalysisInputFingerprintValue(null);
+    setAnalysisProfileFingerprintValue(null);
     setAnalysisValidated(false);
-    setMessage('Analysing your evidence against the vacancy…');
+    setMessage('Analysing your evidence and CV profile against the vacancy…');
     try {
-      const result = await analyseVacancy(activeSession, requirements, evidence, lines(practical));
+      const result = await analyseVacancy(activeSession, requirements, evidence, lines(practical), candidateProfile);
       if (sessionUserIdRef.current !== activeSession.user.id) return;
       setAnalysis(result);
       setAnalysisEvidenceFingerprint(evidenceFingerprint(evidence));
       setAnalysisInputFingerprintValue(analysisInputFingerprint(essential, desirable, trainable, practical));
+      setAnalysisProfileFingerprintValue(candidateProfileFingerprint(candidateProfile));
       setAnalysisValidated(true);
       setMessage(null);
     } catch (error) {
@@ -397,9 +419,21 @@ export default function VacancyApplyPage() {
       setAnalysis(null);
       setAnalysisEvidenceFingerprint(null);
       setAnalysisInputFingerprintValue(null);
+      setAnalysisProfileFingerprintValue(null);
       setAnalysisValidated(false);
     }
   }, [analysis, analysisInputFingerprintValue, essential, desirable, trainable, practical]);
+
+  useEffect(() => {
+    if (!analysis || analysisProfileFingerprintValue === null) return;
+    if (analysisProfileFingerprintValue !== candidateProfileFingerprint(candidateProfile)) {
+      setAnalysis(null);
+      setAnalysisEvidenceFingerprint(null);
+      setAnalysisInputFingerprintValue(null);
+      setAnalysisProfileFingerprintValue(null);
+      setAnalysisValidated(false);
+    }
+  }, [analysis, analysisProfileFingerprintValue, candidateProfile]);
 
   if (!loading && !session) {
     return (
@@ -524,7 +558,10 @@ export default function VacancyApplyPage() {
                       Practical fit
                       <textarea className="mt-2 min-h-32 w-full rounded-xl border px-4 py-3 font-normal" value={practical} onChange={(e) => setPractical(e.target.value)} placeholder="Working pattern, travel, location, training or other practical constraints" />
                     </label>
-                    <p className="text-sm text-gray-500">{evidence.length} Evidence Bank {evidence.length === 1 ? 'card' : 'cards'} available for matching.</p>
+                    <p className="text-sm text-gray-500">
+                      {evidence.length} Evidence Bank {evidence.length === 1 ? 'card' : 'cards'} available for matching
+                      {candidateProfile ? ` · CV profile active (${candidateProfile.skills.length} skills)` : ' · no CV profile uploaded'}.
+                    </p>
                   </div>
                 </div>
               </div>
