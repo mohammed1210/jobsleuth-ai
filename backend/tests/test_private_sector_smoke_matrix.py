@@ -189,3 +189,65 @@ Working arrangements: Hybrid
     assert not any("hybrid working arrangements" in item["text"].lower() for item in practical)
     assert not any("hybrid working experience" in item["text"].lower() for item in practical)
     assert any("working arrangements: hybrid" in item["text"].lower() for item in practical)
+
+
+PARKGUARD_PATROL_SMOKE = """
+Patrol Officer
+
+Role Requirements:
+Valid SIA Door Supervisor or Close Protection Licence
+A Valid UK Driver’s Licence & own means of transport
+Able and willing to work unsocial hours (between 11:30am-03:00am dependent on shift)
+Excellent spoken & written English language skills – Ability to communicate effectively with the public and external organisations. Computer Literacy is essential for writing accurate reports and communicating via Email both internally and externally.
+A good level of understanding of Criminal Law and an ability to learn policy, process and required, specific legislation
+Be physically fit and able to patrol on foot and work from a vehicle for the duration of each shift, with ability to deal with confrontational, volatile and physical incidents as and when required
+Be compassionate and motivated to support and help the public.
+Excellent personal presentation.
+Be able to self-task and take responsibility for service delivery and development.
+All successful candidates will be required to undergo Full Police Vetting.
+
+Full, comprehensive and in-depth training will be provided to all successful candidates.
+
+Ideal Candidates & Experience:
+Police/Law Enforcement
+Security (SIA)
+Bailiff
+Close Protection
+Military
+Enforcement
+Community Safety / Community Safety Accreditation (CSAS)
+
+Salary: £15+/PH
+Working Days: 5 day week variable (Friday, Saturday & Sundays priority days with longer shifts)
+Shifts: Predominantly late turn between 11:30am - 02:30am
+Total hours per week: Contracted hours are 45hrs per week with overtime available
+Job Types: Full-time, Permanent
+Pay: From £15.00 per hour
+Work Location: In person
+"""
+
+
+def test_parkguard_pattern_extracts_role_requirements_without_leaking_metadata():
+    items = deterministic_extract(PARKGUARD_PATROL_SMOKE)
+    essentials = [item for item in items if item["category"] == "essential"]
+    desirables = [item for item in items if item["category"] == "desirable"]
+    eligibility = [item for item in items if item["category"] == "eligibility"]
+    practical = [item for item in items if item["category"] == "practical"]
+    trainable = [item for item in items if item["category"] == "trainable"]
+    combined = "\n".join(item["text"].lower() for item in items)
+
+    assert len(essentials) >= 6
+    assert any("criminal law" in item["text"].lower() for item in essentials)
+    assert any("self-task" in item["text"].lower() for item in essentials)
+    assert any("compassionate" in item["text"].lower() for item in essentials)
+    assert any("sia" in item["text"].lower() for item in eligibility)
+    assert any("driver" in item["text"].lower() for item in eligibility)
+    assert any("police vetting" in item["text"].lower() for item in eligibility)
+    assert len(desirables) >= 5
+    assert any("community safety" in item["text"].lower() for item in desirables)
+    assert any("working days" in item["text"].lower() for item in practical)
+    assert any("shifts:" in item["text"].lower() for item in practical)
+    assert any("45hrs" in item["text"].lower() for item in practical)
+    assert any("training will be provided" in item["text"].lower() for item in trainable)
+    assert "salary: £15+/ph" not in combined
+    assert "pay: from £15.00 per hour" not in combined

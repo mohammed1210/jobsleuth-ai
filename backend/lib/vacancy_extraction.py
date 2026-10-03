@@ -38,6 +38,9 @@ _SECTION_HEADINGS: dict[str, Category] = {
     "what you will need": "essential",
     "what you'll need": "essential",
     "requirements": "essential",
+    "role requirements": "essential",
+    "job requirements": "essential",
+    "candidate requirements": "essential",
     "required qualifications": "essential",
     "minimum qualifications": "essential",
     "what you'll bring": "essential",
@@ -55,6 +58,12 @@ _SECTION_HEADINGS: dict[str, Category] = {
     "nice if you have": "desirable",
     "preferred": "desirable",
     "preferred qualifications": "desirable",
+    "preferred experience": "desirable",
+    "ideal candidate": "desirable",
+    "ideal candidates": "desirable",
+    "ideal candidate experience": "desirable",
+    "ideal candidates & experience": "desirable",
+    "ideal candidates and experience": "desirable",
     "bonus points": "desirable",
     "training": "trainable",
     "learning and development": "trainable",
@@ -228,7 +237,7 @@ def _is_full_time_practical_metadata(lowered: str) -> bool:
     value = lowered.strip()
     return bool(
         re.fullmatch(
-            r"(?:job\s+type\s*:\s*)?full[- ]time(?:\s*,\s*(?:permanent|temporary|contract|fixed[- ]term))?",
+            r"(?:job\s+types?\s*:\s*)?full[- ]time(?:\s*,\s*(?:permanent|temporary|contract|fixed[- ]term))?",
             value,
             flags=re.IGNORECASE,
         )
@@ -316,9 +325,22 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "mandatory qualification",
         "driving licence",
         "driving license",
+        "driver's licence",
+        "driver’s licence",
+        "driver licence",
+        "driver's license",
+        "driver’s license",
+        "driver license",
         "sia licence",
         "sia license",
+        "sia door supervisor",
+        "door supervisor licence",
+        "door supervisor license",
+        "close protection licence",
+        "close protection license",
         "sc clearance",
+        "police vetting",
+        "full police vetting",
         "checkable employment history",
     )
     practical_cues = (
@@ -339,10 +361,15 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "weekend availability",
         "nights as needed",
         "night work",
+        "unsocial hours",
         "work location: in person",
         "work location",
         "full-time training",
         "full time training",
+        "working days",
+        "priority days",
+        "shifts:",
+        "contracted hours",
     )
     trainable_cues = (
         "training will be provided",
@@ -366,9 +393,22 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "uk security vetting",
         "sia licence",
         "sia license",
+        "sia door supervisor",
+        "door supervisor licence",
+        "door supervisor license",
+        "close protection licence",
+        "close protection license",
         "driving licence",
         "driving license",
+        "driver's licence",
+        "driver’s licence",
+        "driver licence",
+        "driver's license",
+        "driver’s license",
+        "driver license",
         "sc clearance",
+        "police vetting",
+        "full police vetting",
     )
 
     for raw in vacancy_text.splitlines():
@@ -426,6 +466,10 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
             continue
         if _is_private_sector_practical_metadata(lowered) or any(cue in lowered for cue in practical_cues):
             items.append(_item(line, "practical", 0.9, explicit_blocker=explicit_blocker))
+            continue
+
+        if re.match(r"^(?:salary|pay|benefits?)\s*:", lowered):
+            section = None
             continue
 
         if section == "essential" and re.search(
