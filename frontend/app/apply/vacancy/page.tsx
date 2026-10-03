@@ -49,6 +49,7 @@ export default function VacancyApplyPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [evidence, setEvidence] = useState<EvidenceCard[]>([]);
   const [candidateProfile, setCandidateProfile] = useState<CandidateProfile | null>(null);
+  const [candidateProfileLoaded, setCandidateProfileLoaded] = useState(false);
   const [vacancyText, setVacancyText] = useState('');
   const [eligibility, setEligibility] = useState('');
   const [essential, setEssential] = useState('');
@@ -164,58 +165,75 @@ export default function VacancyApplyPage() {
 
     const loadEvidenceForSession = async (nextSession: Session) => {
       const requestedUserId = nextSession.user.id;
+      setCandidateProfileLoaded(false);
+
+      let nextEvidence: EvidenceCard[];
       try {
-        const [nextEvidence, nextProfile] = await Promise.all([
-          fetchEvidence(nextSession),
-          fetchCandidateProfile(nextSession),
-        ]);
-        if (!active || sessionUserIdRef.current !== requestedUserId) return;
-
-        setEvidence(nextEvidence);
-        setCandidateProfile(nextProfile);
-
-        try {
-          const raw = window.sessionStorage.getItem(VACANCY_DRAFT_KEY);
-          if (raw) {
-            const saved = JSON.parse(raw) as Partial<VacancyDraftState>;
-            if (saved.userId === requestedUserId && saved.analysis) {
-              const savedInputsFingerprint = analysisInputFingerprint(
-                typeof saved.essential === 'string' ? saved.essential : '',
-                typeof saved.desirable === 'string' ? saved.desirable : '',
-                typeof saved.trainable === 'string' ? saved.trainable : '',
-                typeof saved.practical === 'string' ? saved.practical : '',
-              );
-              const evidenceStillMatches = saved.analysisEvidenceFingerprint === evidenceFingerprint(nextEvidence);
-              const inputsStillMatch = saved.analysisInputFingerprint === savedInputsFingerprint;
-              const profileStillMatches = saved.analysisProfileFingerprint === candidateProfileFingerprint(nextProfile);
-              if (!evidenceStillMatches || !inputsStillMatch || !profileStillMatches) {
-                setAnalysis(null);
-                setAnalysisEvidenceFingerprint(null);
-                setAnalysisInputFingerprintValue(null);
-                setAnalysisProfileFingerprintValue(null);
-                setAnalysisValidated(false);
-              } else {
-                setAnalysisValidated(true);
-              }
-            } else {
-              setAnalysisValidated(false);
-            }
-          }
-        } catch {
-          setAnalysis(null);
-          setAnalysisEvidenceFingerprint(null);
-        }
+        nextEvidence = await fetchEvidence(nextSession);
       } catch (error) {
         if (active && sessionUserIdRef.current === requestedUserId) {
           setEvidence([]);
+          setCandidateProfile(null);
+          setCandidateProfileLoaded(true);
           setAnalysis(null);
           setAnalysisEvidenceFingerprint(null);
           setAnalysisInputFingerprintValue(null);
           setAnalysisProfileFingerprintValue(null);
-          setCandidateProfile(null);
           setAnalysisValidated(false);
-          setMessage(error instanceof Error ? error.message : 'Could not load your Evidence Bank or CV profile.');
+          setMessage(error instanceof Error ? error.message : 'Could not load your Evidence Bank.');
         }
+        return;
+      }
+
+      let nextProfile: CandidateProfile | null = null;
+      let profileAvailable = true;
+      try {
+        nextProfile = await fetchCandidateProfile(nextSession);
+      } catch {
+        profileAvailable = false;
+      }
+
+      if (!active || sessionUserIdRef.current !== requestedUserId) return;
+
+      setEvidence(nextEvidence);
+      setCandidateProfile(nextProfile);
+      setCandidateProfileLoaded(true);
+      if (!profileAvailable) {
+        setMessage('Evidence Bank loaded, but your CV profile could not be loaded. Vacancy matching will continue without CV signals.');
+      }
+
+      try {
+        const raw = window.sessionStorage.getItem(VACANCY_DRAFT_KEY);
+        if (raw) {
+          const saved = JSON.parse(raw) as Partial<VacancyDraftState>;
+          if (saved.userId === requestedUserId && saved.analysis) {
+            const savedInputsFingerprint = analysisInputFingerprint(
+              typeof saved.essential === 'string' ? saved.essential : '',
+              typeof saved.desirable === 'string' ? saved.desirable : '',
+              typeof saved.trainable === 'string' ? saved.trainable : '',
+              typeof saved.practical === 'string' ? saved.practical : '',
+            );
+            const evidenceStillMatches = saved.analysisEvidenceFingerprint === evidenceFingerprint(nextEvidence);
+            const inputsStillMatch = saved.analysisInputFingerprint === savedInputsFingerprint;
+            const profileStillMatches = profileAvailable
+              && saved.analysisProfileFingerprint === candidateProfileFingerprint(nextProfile);
+            if (!evidenceStillMatches || !inputsStillMatch || !profileStillMatches) {
+              setAnalysis(null);
+              setAnalysisEvidenceFingerprint(null);
+              setAnalysisInputFingerprintValue(null);
+              setAnalysisProfileFingerprintValue(null);
+              setAnalysisValidated(false);
+            } else {
+              setAnalysisValidated(true);
+            }
+          } else {
+            setAnalysisValidated(false);
+          }
+        }
+      } catch {
+        setAnalysis(null);
+        setAnalysisEvidenceFingerprint(null);
+        setAnalysisValidated(false);
       }
     };
 
@@ -232,6 +250,7 @@ export default function VacancyApplyPage() {
         clearDraftFields();
         setEvidence([]);
         setCandidateProfile(null);
+        setCandidateProfileLoaded(true);
       }
       if (!active) return;
       setDraftStateReady(true);
@@ -245,12 +264,14 @@ export default function VacancyApplyPage() {
       sessionUserIdRef.current = nextSession?.user.id ?? null;
       setSession(nextSession);
       setDraftStateReady(false);
+      setCandidateProfileLoaded(false);
 
       if (!nextSession) {
         window.sessionStorage.removeItem(VACANCY_DRAFT_KEY);
         clearDraftFields();
         setEvidence([]);
         setCandidateProfile(null);
+        setCandidateProfileLoaded(true);
         setDraftStateReady(true);
         return;
       }
@@ -425,7 +446,7 @@ export default function VacancyApplyPage() {
   }, [analysis, analysisInputFingerprintValue, essential, desirable, trainable, practical]);
 
   useEffect(() => {
-    if (!analysis || analysisProfileFingerprintValue === null) return;
+    if (!analysis || analysisProfileFingerprintValue === null || !candidateProfileLoaded) return;
     if (analysisProfileFingerprintValue !== candidateProfileFingerprint(candidateProfile)) {
       setAnalysis(null);
       setAnalysisEvidenceFingerprint(null);
@@ -433,7 +454,7 @@ export default function VacancyApplyPage() {
       setAnalysisProfileFingerprintValue(null);
       setAnalysisValidated(false);
     }
-  }, [analysis, analysisProfileFingerprintValue, candidateProfile]);
+  }, [analysis, analysisProfileFingerprintValue, candidateProfile, candidateProfileLoaded]);
 
   if (!loading && !session) {
     return (
