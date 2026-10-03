@@ -72,6 +72,7 @@ def _evidence_payload(card: Evidence, assessment: dict[str, Any]) -> dict[str, A
 
 def _profile_evidence(profile: CandidateProfileData) -> list[Evidence]:
     cards: list[Evidence] = []
+    qualification_names = [item.name for item in profile.qualifications if item.name]
     for index, item in enumerate(profile.experience):
         title = item.role or "CV experience"
         if item.organisation:
@@ -83,17 +84,19 @@ def _profile_evidence(profile: CandidateProfileData) -> list[Evidence]:
                 situation=item.dates,
                 task=item.role,
                 actions=item.highlights,
+                tags=qualification_names,
                 skills=list(dict.fromkeys([*item.skills, *profile.skills])),
                 confidence=55,
             )
         )
-    if not cards and (profile.skills or profile.qualifications or profile.summary):
+    if profile.skills or profile.qualifications or profile.summary:
         cards.append(
             Evidence(
-                id="cv-profile",
-                title="CV profile",
+                id="cv-profile-overview",
+                title="CV qualifications and skills",
                 situation=profile.summary,
-                actions=[item.name for item in profile.qualifications],
+                actions=qualification_names,
+                tags=qualification_names,
                 skills=profile.skills,
                 confidence=50,
             )
@@ -211,6 +214,7 @@ async def vacancy_analysis(request: AnalysisRequest, authorization: str | None =
 
         if (
             profile_support
+            and not requirement.blocker
             and profile_support["strength"] == "partial"
             and strength in {"weak", "missing"}
         ):
