@@ -201,3 +201,57 @@ def test_profile_does_not_fake_people_management_scope():
         profile,
     )
     assert support is None or support["strength"] != "partial"
+
+
+def test_cv_profile_can_support_qualification_without_becoming_strong():
+    profile = CandidateProfileData(
+        summary="Operations professional.",
+        skills=[],
+        experience=[],
+        qualifications=[
+            {"name": "BSc Business Management", "institution": "Example University", "date": "2020"}
+        ],
+    )
+    support = _profile_support("BSc Business Management qualification", profile)
+    assert support is not None
+    assert support["strength"] == "partial"
+
+
+def test_cv_signal_cannot_clear_explicit_blocker():
+    response = client.post(
+        "/vacancy-analysis",
+        headers={"Authorization": "Bearer valid_token"},
+        json={
+            "job": {"title": "Security Manager"},
+            "requirements": [
+                {
+                    "text": "Strong stakeholder management and risk assessment experience",
+                    "category": "essential",
+                    "blocker": True,
+                }
+            ],
+            "evidence_cards": [],
+            "candidate_profile": {
+                "summary": "Operational professional.",
+                "skills": ["stakeholder management", "risk assessment"],
+                "experience": [
+                    {
+                        "role": "Operations Officer",
+                        "organisation": "Example",
+                        "dates": "",
+                        "highlights": [
+                            "Worked with stakeholders and completed risk assessments."
+                        ],
+                        "skills": ["stakeholder management", "risk assessment"],
+                    }
+                ],
+                "qualifications": [],
+            },
+            "practical_issues": [],
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["decision"] == "SKIP"
+    assert body["requirements"][0]["match_strength"] in {"weak", "missing"}
+    assert body["requirements"][0]["profile_support"] is not None
