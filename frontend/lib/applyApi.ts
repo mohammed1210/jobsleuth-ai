@@ -1,6 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 
 import { apiError, getBackendUrl } from '@/lib/backendConfig';
+import type { CandidateProfile } from '@/lib/candidateProfileApi';
 
 export type EvidenceCard = {
   id: string;
@@ -46,6 +47,14 @@ export type RequirementAnalysis = {
   why: string;
   gaps: string[];
   evidence: EvidenceMatch[];
+  profile_support?: {
+    strength: 'partial' | 'weak' | 'missing';
+    score: number;
+    confidence: number;
+    title: string;
+    why: string;
+    matched_terms: string[];
+  } | null;
 };
 
 export type VacancyAnalysis = {
@@ -91,6 +100,7 @@ export async function analyseVacancy(
   requirements: Requirement[],
   evidenceCards: EvidenceCard[],
   practicalIssues: string[],
+  candidateProfile: CandidateProfile | null = null,
 ): Promise<VacancyAnalysis> {
   const response = await fetch(`${getBackendUrl()}/vacancy-analysis`, {
     method: 'POST',
@@ -99,6 +109,14 @@ export async function analyseVacancy(
       job: { title: 'User supplied vacancy' },
       requirements,
       evidence_cards: evidenceCards,
+      candidate_profile: candidateProfile
+        ? {
+            summary: candidateProfile.summary,
+            skills: candidateProfile.skills,
+            experience: candidateProfile.experience,
+            qualifications: candidateProfile.qualifications,
+          }
+        : null,
       practical_issues: practicalIssues,
     }),
   });
