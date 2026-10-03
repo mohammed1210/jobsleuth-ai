@@ -145,6 +145,7 @@ async def list_evidence(authorization: str | None = Header(None)) -> list[Eviden
     user = await verify_supabase_user(authorization)
     result = _db().table("evidence_cards").select("*").eq("user_id", user["id"]).execute()
     rows = getattr(result, "data", None) or []
+    rows = [row for row in rows if row.get("source") != "cv_profile"]
     rows = sorted(rows, key=lambda row: str(row.get("updated_at") or ""), reverse=True)
     return [EvidenceResponse(**row) for row in rows]
 

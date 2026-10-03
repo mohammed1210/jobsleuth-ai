@@ -127,6 +127,13 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
     const essential = activeRequirements.filter((item) => item.category === 'essential');
     const counts = { strong: 0, partial: 0, weak: 0, missing: 0 };
     for (const item of essential) {
+      const hasDraftableEvidence = item.evidence.some(
+        (match) => match.id && (match.strength === 'strong' || match.strength === 'partial'),
+      );
+      if (item.profile_support && !hasDraftableEvidence && item.match_strength === 'partial') {
+        counts.missing += 1;
+        continue;
+      }
       if (item.match_strength === 'strong') counts.strong += 1;
       if (item.match_strength === 'partial') counts.partial += 1;
       if (item.match_strength === 'weak') counts.weak += 1;
@@ -260,7 +267,7 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
       {readiness.needsStrengthening ? (
         <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
           <p className="font-semibold text-amber-950">Some essential evidence needs strengthening</p>
-          <p className="mt-1 text-sm text-amber-900">JobSleuth will leave unsupported points uncovered rather than inventing them.</p>
+          <p className="mt-1 text-sm text-amber-900">JobSleuth will leave unsupported points uncovered rather than inventing them. CV-only signals still need a verified Evidence Bank example before drafting.</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Link href="/apply" onClick={prepareEvidenceTarget} className="btn-secondary px-4 py-2 text-sm">Strengthen evidence</Link>
             {!draftAnyway ? (

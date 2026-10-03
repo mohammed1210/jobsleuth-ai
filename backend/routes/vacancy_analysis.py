@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from lib.evidence_matching import has_personal_management_scope, rank_evidence, requires_personal_management_scope
 from lib.evidence_semantic_batch import semantic_assess_batch
+from routes.candidate_profile import CandidateProfileData
 from routes.saved_jobs import verify_supabase_user
 
 router = APIRouter(prefix="/vacancy-analysis", tags=["vacancy_analysis"])
@@ -39,6 +40,7 @@ class AnalysisRequest(BaseModel):
     job: dict[str, Any]
     requirements: list[Requirement] = Field(default_factory=list)
     evidence_cards: list[Evidence] = Field(default_factory=list)
+    candidate_profile: CandidateProfileData | None = None
     practical_issues: list[str] = Field(default_factory=list)
 
 
@@ -64,6 +66,72 @@ def _evidence_payload(card: Evidence, assessment: dict[str, Any]) -> dict[str, A
         "gaps": assessment.get("gaps", []),
         "supporting_facts": assessment.get("supporting_facts", []),
         "signals": signals,
+        "matched_terms": signals.get("matched_terms", []),
+    }
+
+
+def _profile_evidence(profile: CandidateProfileData) -> list[Evidence]:
+    cards: list[Evidence] = []
+    qualification_names = [item.name for item in profile.qualifications if item.name]
+    for index, item in enumerate(profile.experience):
+        title = item.role or "CV experience"
+        if item.organisation:
+            title = f"{title} at {item.organisation}"
+        cards.append(
+            Evidence(
+                id=f"cv-profile-{index}",
+                title=title,
+                situation=item.dates,
+                task=item.role,
+                actions=item.highlights,
+                tags=qualification_names,
+                skills=list(dict.fromkeys([*item.skills, *profile.skills])),
+                confidence=55,
+            )
+        )
+    if profile.skills or profile.qualifications or profile.summary:
+        cards.append(
+            Evidence(
+                id="cv-profile-overview",
+                title="CV qualifications and skills",
+                situation=profile.summary,
+                actions=qualification_names,
+                tags=qualification_names,
+                skills=profile.skills,
+                confidence=50,
+            )
+        )
+    return cards
+
+
+def _profile_support(requirement: str, profile: CandidateProfileData | None) -> dict[str, Any] | None:
+    if profile is None:
+        return None
+    cards = _profile_evidence(profile)
+    if not cards:
+        return None
+    ranked = rank_evidence(requirement, cards)
+    if not ranked:
+        return None
+    card, assessment = ranked[0]
+    strength = assessment.get("strength", "missing")
+    if requires_personal_management_scope(requirement) and not has_personal_management_scope(card):
+        strength = "weak" if strength in {"strong", "partial"} else strength
+    elif strength == "strong":
+        strength = "partial"
+
+    if strength == "missing":
+        return None
+
+    signals = assessment.get("signals", {})
+    return {
+        "strength": strength,
+        "score": min(float(assessment.get("score", 0.0)), 69.0 if strength == "partial" else 39.0),
+        "confidence": min(float(assessment.get("confidence", 0.0)), 0.7),
+        "title": card.title,
+        "why": (
+            "The CV profile contains related experience or skills, but CV shorthand is treated as a signal rather than verified Evidence Bank proof."
+        ),
         "matched_terms": signals.get("matched_terms", []),
     }
 
@@ -138,7 +206,26 @@ async def vacancy_analysis(request: AnalysisRequest, authorization: str | None =
             "gaps": ["No relevant evidence is recorded for this requirement."],
         }
 
+        profile_support = _profile_support(requirement.text, request.candidate_profile)
         strength = top_assessment["strength"]
+        why = top_assessment["why"]
+        confidence = top_assessment["confidence"]
+        gaps = list(top_assessment.get("gaps", []))
+
+        if (
+            profile_support
+            and not requirement.blocker
+            and profile_support["strength"] == "partial"
+            and strength in {"weak", "missing"}
+        ):
+            strength = "partial"
+            why = profile_support["why"]
+            confidence = profile_support["confidence"]
+            cv_gap = "Add or strengthen an Evidence Bank example to verify the CV signal before drafting against this criterion."
+            if cv_gap not in gaps:
+                gaps.insert(0, cv_gap)
+            gaps = gaps[:3]
+
         analysed.append(
             {
                 "requirement": requirement.text,
@@ -146,10 +233,11 @@ async def vacancy_analysis(request: AnalysisRequest, authorization: str | None =
                 "blocker": requirement.blocker,
                 "status": _status_for_strength(strength, requirement.category),
                 "match_strength": strength,
-                "confidence": top_assessment["confidence"],
-                "why": top_assessment["why"],
-                "gaps": top_assessment.get("gaps", []),
+                "confidence": confidence,
+                "why": why,
+                "gaps": gaps,
                 "evidence": evidence,
+                "profile_support": profile_support,
             }
         )
 

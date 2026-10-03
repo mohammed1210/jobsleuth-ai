@@ -40,6 +40,7 @@ export default function RequirementMatchCard({ item, onStrengthen }: Props) {
             <p className="font-semibold text-gray-900">{item.requirement}</p>
             <p className="mt-1 text-xs uppercase tracking-wide text-gray-500">
               {item.category}{item.blocker ? ' · explicit blocker' : ''}
+              {item.profile_support ? ' · CV signal' : ''}
               {gaps.length > 0 ? ` · ${gaps.length} gap${gaps.length === 1 ? '' : 's'}` : ''}
             </p>
           </div>
@@ -56,6 +57,26 @@ export default function RequirementMatchCard({ item, onStrengthen }: Props) {
             <p className="text-xs text-gray-500">Confidence {confidence}%</p>
           )}
         </div>
+
+        {item.profile_support && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">CV profile signal</p>
+                <p className="mt-1 font-semibold text-blue-950">{item.profile_support.title}</p>
+              </div>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-800">
+                {item.profile_support.strength === 'partial' ? 'Related' : 'Weak signal'}
+              </span>
+            </div>
+            <p className="mt-2 text-sm text-blue-900">{item.profile_support.why}</p>
+            {item.profile_support.matched_terms.length > 0 && (
+              <p className="mt-2 text-xs text-blue-800">
+                Matched: {item.profile_support.matched_terms.slice(0, 6).join(', ')}
+              </p>
+            )}
+          </div>
+        )}
 
         {top && (
           <div className="rounded-xl bg-gray-50 p-4 space-y-3">

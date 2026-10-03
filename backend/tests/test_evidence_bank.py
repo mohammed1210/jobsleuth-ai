@@ -126,3 +126,32 @@ def test_evidence_crud_is_scoped_to_authenticated_user(monkeypatch):
     removed = client.delete("/evidence/ev-1", headers=headers)
     assert removed.status_code == 200
     assert removed.json() == {"ok": True}
+
+
+def test_internal_cv_profile_is_hidden_from_evidence_bank(monkeypatch):
+    fake = FakeClient()
+    now = datetime.now(timezone.utc).isoformat()
+    base = {
+        "situation": "",
+        "task": "",
+        "actions": [],
+        "outcome": "",
+        "reflection": "",
+        "tags": [],
+        "behaviours": [],
+        "skills": [],
+        "authority_context": None,
+        "confidence": 70,
+        "user_id": "user_123",
+        "created_at": now,
+        "updated_at": now,
+    }
+    fake.evidence.rows = [
+        {"id": "manual-1", "title": "Real example", "source": "manual", **base},
+        {"id": "cv-1", "title": "CV profile", "source": "cv_profile", **base},
+    ]
+    monkeypatch.setattr(evidence_bank, "get_supabase_client", lambda: fake)
+
+    response = client.get("/evidence", headers={"Authorization": "Bearer valid_token"})
+    assert response.status_code == 200
+    assert [row["id"] for row in response.json()] == ["manual-1"]

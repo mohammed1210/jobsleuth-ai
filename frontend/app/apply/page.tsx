@@ -5,8 +5,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { Session } from '@supabase/supabase-js';
 import HeaderClient from '@/components/HeaderClient';
+import CandidateProfilePanel from '@/components/profile/CandidateProfilePanel';
 import RecordForm from '@/components/RecordForm';
 import EvidenceCardView from '@/components/evidence/EvidenceCardView';
+import { fetchCandidateProfile, type CandidateProfile } from '@/lib/candidateProfileApi';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { removeRecord } from '@/lib/removeRecord';
 import { useRecords } from '@/lib/useRecords';
@@ -29,6 +31,7 @@ export default function ApplyPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [target, setTarget] = useState<EvidenceTarget | null>(null);
+  const [candidateProfile, setCandidateProfile] = useState<CandidateProfile | null>(null);
   const bank = useRecords(session);
 
   useEffect(() => {
@@ -42,6 +45,11 @@ export default function ApplyPage() {
       const { data } = await supabase.auth.getSession();
       setSession(data.session);
       if (data.session) {
+        try {
+          setCandidateProfile(await fetchCandidateProfile(data.session));
+        } catch {
+          setCandidateProfile(null);
+        }
         try {
           const raw = window.sessionStorage.getItem(EVIDENCE_TARGET_KEY);
           if (raw) {
@@ -116,6 +124,14 @@ export default function ApplyPage() {
           <p className="text-gray-600 mt-3">Capture reusable proof from any role or sector. JobSleuth matches the same evidence to different vacancies without inventing experience.</p>
         </div>
         {(error || bank.recordError) && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">{error || bank.recordError}</div>}
+
+        {session && (
+          <CandidateProfilePanel
+            session={session}
+            profile={candidateProfile}
+            onProfileChange={setCandidateProfile}
+          />
+        )}
 
         {target && !bank.editing && (
           <section className="rounded-2xl border border-brand-200 bg-brand-50 p-5">
