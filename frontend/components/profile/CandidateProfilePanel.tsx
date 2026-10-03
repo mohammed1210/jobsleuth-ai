@@ -84,7 +84,7 @@ export default function CandidateProfilePanel({ session, profile, onProfileChang
         </div>
       </div>
 
-      <p className="mt-3 text-xs text-gray-500">PDF, DOCX or TXT · maximum 5 MB · raw CV file is not retained.</p>
+      <p className="mt-3 text-xs text-gray-500">PDF, DOCX or TXT · maximum 5 MB · raw CV file is not retained. Extraction may use JobSleuth&apos;s configured AI provider.</p>
 
       {message && <div className="mt-4 rounded-xl border bg-white px-4 py-3 text-sm text-gray-700">{message}</div>}
 
