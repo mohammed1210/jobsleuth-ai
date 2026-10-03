@@ -105,7 +105,7 @@ export default function CandidateProfilePanel({ session, profile, onProfileChang
             </div>
           </div>
 
-          {profile.skills.length > 0 && (
+          {(Boolean(profile.summary) || profile.skills.length > 0 || profile.experience.length > 0 || profile.qualifications.length > 0) && (
             <details className="rounded-xl border bg-white">
               <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-gray-800">
                 Review extracted CV profile
