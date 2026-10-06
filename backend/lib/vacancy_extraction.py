@@ -299,6 +299,18 @@ def _is_private_sector_practical_metadata(lowered: str) -> bool:
     return False
 
 
+def _is_schedule_practical_metadata(lowered: str) -> bool:
+    """Recognise labelled schedule metadata without stealing experience criteria."""
+    value = lowered.strip()
+    return bool(
+        re.match(
+            r"^(?:working\s+days|shifts?|total\s+hours\s+per\s+week|contracted\s+hours|priority\s+days)\s*[:|–—-]",
+            value,
+            flags=re.IGNORECASE,
+        )
+    )
+
+
 def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
     """Extract grounded criteria from vacancy text without external services.
 
@@ -366,10 +378,6 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "work location",
         "full-time training",
         "full time training",
-        "working days",
-        "priority days",
-        "shifts:",
-        "contracted hours",
     )
     trainable_cues = (
         "training will be provided",
@@ -464,7 +472,7 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         if section != "desirable" and (any(cue in lowered for cue in eligibility_cues) or credential_mandatory):
             items.append(_item(line, "eligibility", 0.9, explicit_blocker=explicit_blocker))
             continue
-        if _is_private_sector_practical_metadata(lowered) or any(cue in lowered for cue in practical_cues):
+        if _is_private_sector_practical_metadata(lowered) or _is_schedule_practical_metadata(lowered) or any(cue in lowered for cue in practical_cues):
             items.append(_item(line, "practical", 0.9, explicit_blocker=explicit_blocker))
             continue
 

@@ -251,3 +251,25 @@ def test_parkguard_pattern_extracts_role_requirements_without_leaking_metadata()
     assert any("training will be provided" in item["text"].lower() for item in trainable)
     assert "salary: £15+/ph" not in combined
     assert "pay: from £15.00 per hour" not in combined
+
+
+def test_schedule_words_inside_experience_criteria_stay_essential():
+    advert = """
+Operations Manager
+
+Role Requirements:
+Experience scheduling staff across working days and changing priorities
+Experience calculating contracted hours for payroll reporting
+
+Working Days: Monday to Friday
+Shifts: 08:00-16:00
+"""
+
+    items = deterministic_extract(advert)
+    essentials = [item["text"].lower() for item in items if item["category"] == "essential"]
+    practical = [item["text"].lower() for item in items if item["category"] == "practical"]
+
+    assert any("scheduling staff across working days" in item for item in essentials)
+    assert any("calculating contracted hours" in item for item in essentials)
+    assert any(item.startswith("working days:") for item in practical)
+    assert any(item.startswith("shifts:") for item in practical)
