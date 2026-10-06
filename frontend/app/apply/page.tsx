@@ -123,8 +123,8 @@ export default function ApplyPage() {
     ? {
         id: 'cv-prefill',
         title: target.cvDraft.title || 'CV experience',
-        situation: target.cvDraft.situation,
-        task: target.cvDraft.task,
+        situation: '',
+        task: '',
         actions: target.cvDraft.actions,
         outcome: '',
         reflection: '',
@@ -161,7 +161,7 @@ export default function ApplyPage() {
         </div>
         {(error || bank.recordError) && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">{error || bank.recordError}</div>}
 
-        {session && (
+        {session && !target?.cvDraft && (
           <CandidateProfilePanel
             session={session}
             profile={candidateProfile}
@@ -177,9 +177,24 @@ export default function ApplyPage() {
                 <h2 className="mt-2 text-xl font-bold text-gray-900">{target.requirement}</h2>
                 <p className="mt-2 text-sm text-gray-700">
                   {target.cvDraft
-                    ? 'JobSleuth has prefilled grounded facts from your CV. Review them carefully, then add the context, your personal responsibility, outcome and learning before saving.'
+                    ? 'JobSleuth has prefilled only grounded CV facts that are relevant to this criterion. Add the real situation, your personal responsibility, outcome and learning before saving.'
                     : 'Add a real example from your own experience that proves this criterion. Do not copy the vacancy wording or invent details.'}
                 </p>
+                {target.cvDraft && (
+                  <div className="mt-3 rounded-xl border border-brand-100 bg-white/80 p-4 text-sm text-gray-700">
+                    <p className="font-semibold text-gray-900">CV source</p>
+                    <p className="mt-1">{target.cvDraft.title}</p>
+                    {target.cvDraft.situation && <p className="mt-1 text-gray-500">{target.cvDraft.situation}</p>}
+                    {target.cvDraft.actions.length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Relevant CV highlights prefilled below</p>
+                        <ul className="mt-1 list-disc space-y-1 pl-5">
+                          {target.cvDraft.actions.map((action, index) => <li key={`${action}-${index}`}>{action}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {target.gaps.length > 0 && (
                   <div className="mt-3">
                     <p className="text-sm font-semibold text-gray-800">Focus on what JobSleuth could not yet prove:</p>
@@ -208,7 +223,7 @@ export default function ApplyPage() {
           </section>
         )}
 
-        <div className="grid gap-8 lg:grid-cols-[420px_1fr]">
+        <div className={target?.cvDraft ? 'mx-auto max-w-3xl' : 'grid gap-8 lg:grid-cols-[420px_1fr]'}>
           <RecordForm
             key={bank.editing?.id ?? `new-${bank.records.length}-${target?.requirement ?? 'general'}-${target?.cvDraft ? 'cv' : 'blank'}`}
             initial={bank.editing ?? cvPrefill}
@@ -219,11 +234,13 @@ export default function ApplyPage() {
               if (target?.cvDraft) dismissTarget();
             }}
           />
-          <div className="space-y-4">
-            {bank.loadingRecords && <div className="card p-8 text-center text-gray-600">Loading…</div>}
-            {!bank.loadingRecords && bank.records.length === 0 && <div className="card p-8 text-center text-gray-600">No saved examples yet.</div>}
-            {bank.records.map((card) => <EvidenceCardView key={card.id} card={card} onEdit={bank.setEditing} onRemove={() => remove(card.id)} />)}
-          </div>
+          {!target?.cvDraft && (
+            <div className="space-y-4">
+              {bank.loadingRecords && <div className="card p-8 text-center text-gray-600">Loading…</div>}
+              {!bank.loadingRecords && bank.records.length === 0 && <div className="card p-8 text-center text-gray-600">No saved examples yet.</div>}
+              {bank.records.map((card) => <EvidenceCardView key={card.id} card={card} onEdit={bank.setEditing} onRemove={() => remove(card.id)} />)}
+            </div>
+          )}
         </div>
       </main>
     </div>
