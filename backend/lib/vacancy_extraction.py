@@ -383,11 +383,7 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "checkable employment history",
         "enhanced dbs",
         "dbs clearance",
-        "disclosure and barring service",
         "valid cpc",
-        "employment references",
-        "occupational health checks",
-        "occupational health check",
     )
     practical_cues = (
         "hours per week",
@@ -427,7 +423,6 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "will be trained",
         "will be taught",
         "receive full training",
-        "paid training",
         "taught during training",
         "taught as part of training",
     )
@@ -460,10 +455,6 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "full police vetting",
         "enhanced dbs",
         "dbs clearance",
-        "disclosure and barring service",
-        "employment references",
-        "occupational health checks",
-        "occupational health check",
     )
 
     for raw in vacancy_text.splitlines():
@@ -483,6 +474,17 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
             continue
 
         explicit_blocker = any(token in lowered for token in hard_blocker_cues)
+
+        applicant_check_cues = (
+            "disclosure and barring service",
+            "dbs clearance",
+            "employment references",
+            "occupational health checks",
+            "occupational health check",
+        )
+        if section == "eligibility" and any(cue in lowered for cue in applicant_check_cues):
+            items.append(_item(line, "eligibility", 0.96, explicit_blocker=True))
+            continue
 
         if any(cue in lowered for cue in trainable_cues):
             items.append(_item(line, "trainable", 0.96))
@@ -518,10 +520,8 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
             and any(
                 cue in lowered
                 for cue in (
-                    "disclosure and barring service",
-                    "dbs",
-                    "employment references",
-                    "occupational health",
+                                "dbs",
+                                "occupational health",
                     "vetting",
                 )
             )
