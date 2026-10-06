@@ -55,6 +55,13 @@ export type RequirementAnalysis = {
     title: string;
     why: string;
     matched_terms: string[];
+    source?: {
+      title: string;
+      situation: string;
+      task: string;
+      actions: string[];
+      skills: string[];
+    };
   } | null;
 };
 
