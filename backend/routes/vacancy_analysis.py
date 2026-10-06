@@ -7,7 +7,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Header
 from pydantic import BaseModel, Field
 
-from lib.evidence_matching import has_personal_management_scope, rank_evidence, requires_personal_management_scope
+from lib.evidence_matching import deterministic_match, has_personal_management_scope, rank_evidence, requires_personal_management_scope
 from lib.evidence_semantic_batch import semantic_assess_batch
 from routes.candidate_profile import CandidateProfileData
 from routes.saved_jobs import verify_supabase_user
@@ -85,8 +85,8 @@ def _profile_evidence(profile: CandidateProfileData) -> list[Evidence]:
                 situation=item.dates,
                 task=item.role,
                 actions=item.highlights,
-                tags=qualification_names,
-                skills=list(dict.fromkeys([*item.skills, *profile.skills])),
+                tags=[],
+                skills=[],
                 confidence=55,
             )
         )
@@ -103,6 +103,53 @@ def _profile_evidence(profile: CandidateProfileData) -> list[Evidence]:
             )
         )
     return cards
+
+
+def _criterion_specific_cv_source(requirement: str, card: Evidence) -> dict[str, Any] | None:
+    if not str(card.id).startswith("cv-profile-") or str(card.id) == "cv-profile-overview":
+        return None
+
+    ranked_actions: list[tuple[float, str]] = []
+    for action in card.actions or []:
+        action_card = Evidence(
+            id="cv-action",
+            title="",
+            situation="",
+            task="",
+            actions=[action],
+            skills=[],
+            tags=[],
+            confidence=50,
+        )
+        assessment = deterministic_match(requirement, action_card)
+        if assessment.get("strength") != "missing":
+            ranked_actions.append((float(assessment.get("score", 0.0)), action))
+
+    ranked_actions.sort(key=lambda item: item[0], reverse=True)
+    actions = [action for _score, action in ranked_actions[:4]]
+    if not actions:
+        return None
+
+    action_probe = Evidence(
+        id="cv-action-probe",
+        title="",
+        situation="",
+        task="",
+        actions=actions,
+        skills=[],
+        tags=[],
+        confidence=50,
+    )
+    probe = deterministic_match(requirement, action_probe)
+    matched_terms = list(probe.get("signals", {}).get("matched_terms", []))
+
+    return {
+        "title": card.title,
+        "situation": card.situation,
+        "task": card.task,
+        "actions": actions,
+        "skills": matched_terms[:8],
+    }
 
 
 def _profile_support(requirement: str, profile: CandidateProfileData | None) -> dict[str, Any] | None:
@@ -134,13 +181,7 @@ def _profile_support(requirement: str, profile: CandidateProfileData | None) -> 
             "The CV profile contains related experience or skills, but CV shorthand is treated as a signal rather than verified Evidence Bank proof."
         ),
         "matched_terms": signals.get("matched_terms", []),
-        "source": {
-            "title": card.title,
-            "situation": card.situation,
-            "task": card.task,
-            "actions": card.actions,
-            "skills": card.skills,
-        },
+        "source": _criterion_specific_cv_source(requirement, card),
     }
 
 
