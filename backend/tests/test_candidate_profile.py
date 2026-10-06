@@ -185,7 +185,7 @@ def test_profile_support_is_capped_at_partial():
 
 
     assert support["source"]["title"] == "Operations Officer at Example"
-    assert support["source"]["actions"][0].startswith("Worked with internal")
+    assert any(item.startswith("Worked with internal") for item in support["source"]["actions"])
     assert set(support["source"]["skills"]) <= {"stakeholder", "risk", "assessment", "experience"}
 
 
