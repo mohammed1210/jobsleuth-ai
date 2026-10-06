@@ -383,6 +383,8 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "checkable employment history",
         "enhanced dbs",
         "dbs clearance",
+        "disclosure and barring service",
+        "valid cpc",
         "employment references",
         "occupational health checks",
         "occupational health check",
@@ -458,6 +460,7 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "full police vetting",
         "enhanced dbs",
         "dbs clearance",
+        "disclosure and barring service",
         "employment references",
         "occupational health checks",
         "occupational health check",
@@ -494,7 +497,7 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         )
         credential_optional = has_credential and bool(
             re.search(
-                r"\b(?:advantageous|desirable|preferred|optional|nice\s+to\s+have)\b",
+                r"\b(?:advantageous|desirable|preferred|optional|ideally|nice\s+to\s+have)\b",
                 lowered,
             )
         )
@@ -510,6 +513,22 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
 
         if credential_negated:
             continue
+        if (
+            re.search(r"\bjob offers? are subject to\b", lowered)
+            and any(
+                cue in lowered
+                for cue in (
+                    "disclosure and barring service",
+                    "dbs",
+                    "employment references",
+                    "occupational health",
+                    "vetting",
+                )
+            )
+        ):
+            items.append(_item(line, "eligibility", 0.96, explicit_blocker=True))
+            continue
+
         if credential_optional:
             items.append(_item(line, "desirable", 0.88, explicit_blocker=False))
             continue
