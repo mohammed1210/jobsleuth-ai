@@ -186,7 +186,7 @@ def test_profile_support_is_capped_at_partial():
 
     assert support["source"]["title"] == "Operations Officer at Example"
     assert support["source"]["actions"][0].startswith("Worked with internal")
-    assert "stakeholder management" in support["source"]["skills"]
+    assert set(support["source"]["skills"]) <= {"stakeholder", "risk", "assessment", "experience"}
 
 
 def test_profile_does_not_fake_people_management_scope():
@@ -470,3 +470,58 @@ BSc Example Degree
         "Custody Operations Manager",
         "Custody Officer",
     ]
+
+
+def test_global_cv_skill_does_not_masquerade_as_role_specific_evidence():
+    profile = CandidateProfileData(
+        summary="Operational professional.",
+        skills=["communication", "presentation"],
+        experience=[
+            CandidateExperience(
+                role="Custody Officer",
+                organisation="Example",
+                dates="2020 - 2022",
+                highlights=[
+                    "Escorted detainees safely and securely.",
+                    "Completed searches and custody paperwork.",
+                ],
+                skills=["communication", "presentation"],
+            )
+        ],
+        qualifications=[],
+    )
+
+    support = _profile_support("Strong communication skills (written and verbal)", profile)
+
+    assert support is not None
+    assert support["title"] == "CV qualifications and skills"
+    assert support["source"] is None
+
+
+def test_cv_conversion_source_only_contains_requirement_relevant_actions():
+    profile = CandidateProfileData(
+        summary="Operational professional.",
+        skills=["communication", "risk assessment"],
+        experience=[
+            CandidateExperience(
+                role="Operations Officer",
+                organisation="Example",
+                dates="2021 - Present",
+                highlights=[
+                    "Briefed partner agencies clearly before the operation and explained changes as risks developed.",
+                    "Completed stock checks at the end of each shift.",
+                    "Wrote an incident report and communicated the outcome to colleagues.",
+                ],
+                skills=["communication", "risk assessment"],
+            )
+        ],
+        qualifications=[],
+    )
+
+    support = _profile_support("Strong communication skills (written and verbal)", profile)
+
+    assert support is not None
+    assert support["source"] is not None
+    assert any("Briefed partner agencies" in item for item in support["source"]["actions"])
+    assert any("incident report" in item for item in support["source"]["actions"])
+    assert all("stock checks" not in item for item in support["source"]["actions"])
