@@ -15,7 +15,7 @@ _CONCEPTS: dict[str, set[str]] = {
     "analysis": {"analyse", "analyze", "analysis", "assess", "evaluate", "evidence", "information", "data"},
     "decision": {"decision", "decide", "judgement", "judgment", "recommend", "option", "risk", "tradeoff"},
     "stakeholder": {"stakeholder", "partner", "liaise", "consult", "engage", "relationship", "collaborate"},
-    "communication": {"communicate", "communicated", "communicating", "communication", "brief", "explain", "present", "written", "verbal"},
+    "communication": {"communicate", "communicated", "communicating", "communication", "brief", "explain", "present", "write", "wrote", "writing", "written", "report", "verbal"},
     "teamwork": {"team", "teamwork", "colleague", "collaborate", "cooperate", "support"},
     "leadership": {"lead", "leader", "leadership", "manage", "supervise", "coach", "delegate"},
     "improvement": {"improve", "improvement", "change", "streamline", "process", "efficiency", "innovation"},
