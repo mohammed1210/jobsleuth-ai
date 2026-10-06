@@ -21,7 +21,18 @@ const EVIDENCE_TARGET_KEY = 'jobsleuth.evidence.target.v1';
 
 const evidenceFingerprint = (cards: EvidenceCard[]) => JSON.stringify(cards);
 const candidateProfileFingerprint = (profile: CandidateProfile | null) => JSON.stringify(profile ? { summary: profile.summary, skills: profile.skills, experience: profile.experience, qualifications: profile.qualifications, updated_at: profile.updated_at } : null);
-const analysisInputFingerprint = (essential: string, desirable: string, trainable: string, practical: string) => JSON.stringify({
+type EligibilityAnswer = 'yes' | 'no' | 'unsure';
+
+const analysisInputFingerprint = (
+  eligibility: string,
+  eligibilityAnswers: Record<string, EligibilityAnswer>,
+  essential: string,
+  desirable: string,
+  trainable: string,
+  practical: string,
+) => JSON.stringify({
+  eligibility: lines(eligibility),
+  eligibilityAnswers,
   essential: lines(essential),
   desirable: lines(desirable),
   trainable: lines(trainable),
@@ -42,6 +53,7 @@ type VacancyDraftState = {
   analysisEvidenceFingerprint: string | null;
   analysisInputFingerprint: string | null;
   analysisProfileFingerprint: string | null;
+  eligibilityAnswers: Record<string, EligibilityAnswer>;
 };
 
 export default function VacancyApplyPage() {
@@ -52,6 +64,7 @@ export default function VacancyApplyPage() {
   const [candidateProfileLoaded, setCandidateProfileLoaded] = useState(false);
   const [vacancyText, setVacancyText] = useState('');
   const [eligibility, setEligibility] = useState('');
+  const [eligibilityAnswers, setEligibilityAnswers] = useState<Record<string, EligibilityAnswer>>({});
   const [essential, setEssential] = useState('');
   const [desirable, setDesirable] = useState('');
   const [trainable, setTrainable] = useState('');
@@ -74,6 +87,7 @@ export default function VacancyApplyPage() {
   const clearDraftFields = () => {
     setVacancyText('');
     setEligibility('');
+    setEligibilityAnswers({});
     setEssential('');
     setDesirable('');
     setTrainable('');
@@ -100,6 +114,9 @@ export default function VacancyApplyPage() {
       }
       if (typeof saved.vacancyText === 'string') setVacancyText(saved.vacancyText);
       if (typeof saved.eligibility === 'string') setEligibility(saved.eligibility);
+      if (saved.eligibilityAnswers && typeof saved.eligibilityAnswers === 'object') {
+        setEligibilityAnswers(saved.eligibilityAnswers as Record<string, EligibilityAnswer>);
+      }
       if (typeof saved.essential === 'string') setEssential(saved.essential);
       if (typeof saved.desirable === 'string') setDesirable(saved.desirable);
       if (typeof saved.trainable === 'string') setTrainable(saved.trainable);
@@ -133,6 +150,7 @@ export default function VacancyApplyPage() {
       userId: session.user.id,
       vacancyText,
       eligibility,
+      eligibilityAnswers,
       essential,
       desirable,
       trainable,
@@ -150,7 +168,7 @@ export default function VacancyApplyPage() {
       return;
     }
     window.sessionStorage.setItem(VACANCY_DRAFT_KEY, JSON.stringify(snapshot));
-  }, [draftStateReady, session, vacancyText, eligibility, essential, desirable, trainable, practical, extractedItems, extractionProvider, analysis, analysisEvidenceFingerprint, analysisInputFingerprintValue, analysisProfileFingerprintValue]);
+  }, [draftStateReady, session, vacancyText, eligibility, eligibilityAnswers, essential, desirable, trainable, practical, extractedItems, extractionProvider, analysis, analysisEvidenceFingerprint, analysisInputFingerprintValue, analysisProfileFingerprintValue]);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
@@ -314,6 +332,7 @@ export default function VacancyApplyPage() {
   };
 
   const applyRequirements = (items: IntelligenceItem[]) => {
+    setEligibilityAnswers({});
     const list = (category: Requirement['category']) => items
       .filter((item) => item.category === category)
       .map((item) => item.text)
@@ -402,6 +421,12 @@ export default function VacancyApplyPage() {
     if (!activeSession) return;
 
     const requirements: Requirement[] = [
+      ...lines(eligibility).map((text) => ({
+        text,
+        category: 'eligibility' as const,
+        blocker: true,
+        eligibility_answer: eligibilityAnswers[text] ?? 'unsure',
+      })),
       ...lines(essential).map((text) => ({ text, category: 'essential' as const })),
       ...lines(desirable).map((text) => ({ text, category: 'desirable' as const })),
       ...lines(trainable).map((text) => ({ text, category: 'trainable' as const })),
@@ -423,7 +448,7 @@ export default function VacancyApplyPage() {
       if (sessionUserIdRef.current !== activeSession.user.id) return;
       setAnalysis(result);
       setAnalysisEvidenceFingerprint(evidenceFingerprint(evidence));
-      setAnalysisInputFingerprintValue(analysisInputFingerprint(essential, desirable, trainable, practical));
+      setAnalysisInputFingerprintValue(analysisInputFingerprint(eligibility, eligibilityAnswers, essential, desirable, trainable, practical));
       setAnalysisProfileFingerprintValue(candidateProfileFingerprint(candidateProfile));
       setAnalysisValidated(true);
       setMessage(null);
@@ -436,14 +461,14 @@ export default function VacancyApplyPage() {
 
   useEffect(() => {
     if (!analysis || !analysisInputFingerprintValue) return;
-    if (analysisInputFingerprintValue !== analysisInputFingerprint(essential, desirable, trainable, practical)) {
+    if (analysisInputFingerprintValue !== analysisInputFingerprint(eligibility, eligibilityAnswers, essential, desirable, trainable, practical)) {
       setAnalysis(null);
       setAnalysisEvidenceFingerprint(null);
       setAnalysisInputFingerprintValue(null);
       setAnalysisProfileFingerprintValue(null);
       setAnalysisValidated(false);
     }
-  }, [analysis, analysisInputFingerprintValue, essential, desirable, trainable, practical]);
+  }, [analysis, analysisInputFingerprintValue, eligibility, eligibilityAnswers, essential, desirable, trainable, practical]);
 
   useEffect(() => {
     if (!analysis || analysisProfileFingerprintValue === null || !candidateProfileLoaded) return;
@@ -549,6 +574,39 @@ export default function VacancyApplyPage() {
               </div>
             </div>
 
+            {lines(eligibility).length > 0 && (
+              <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-gray-900">Confirm mandatory eligibility</p>
+                    <p className="mt-1 text-sm text-gray-600">These checks affect the Apply / Consider / Skip recommendation. JobSleuth will not assume you hold a licence or clearance just because it is absent from your CV.</p>
+                  </div>
+                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-amber-800">
+                    {lines(eligibility).filter((item) => eligibilityAnswers[item] === 'yes').length} / {lines(eligibility).length} confirmed
+                  </span>
+                </div>
+                <div className="mt-4 space-y-3">
+                  {lines(eligibility).map((item) => (
+                    <div key={item} className="rounded-lg bg-white p-3">
+                      <p className="text-sm font-medium text-gray-900">{item}</p>
+                      <select
+                        value={eligibilityAnswers[item] ?? 'unsure'}
+                        onChange={(event) => setEligibilityAnswers((current) => ({
+                          ...current,
+                          [item]: event.target.value as EligibilityAnswer,
+                        }))}
+                        className="mt-2 w-full rounded-lg border px-3 py-2 text-sm sm:max-w-xs"
+                      >
+                        <option value="unsure">Not confirmed yet</option>
+                        <option value="yes">Yes — I meet this</option>
+                        <option value="no">No — I do not meet this</option>
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <details className="mt-5 rounded-xl border bg-white">
               <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-gray-800">
                 Review or edit extracted vacancy details
@@ -605,11 +663,11 @@ export default function VacancyApplyPage() {
 
               <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
                 {([
-                  ['Strong', analysis.requirements.filter((item) => item.match_strength === 'strong').length],
-                  ['Partial', analysis.requirements.filter((item) => item.match_strength === 'partial').length],
-                  ['Weak', analysis.requirements.filter((item) => item.match_strength === 'weak').length],
-                  ['Missing', analysis.requirements.filter((item) => item.match_strength === 'missing').length],
-                  ['Trainable', analysis.requirements.filter((item) => item.match_strength === 'trainable').length],
+                  ['Strong', analysis.requirements.filter((item) => item.category !== 'eligibility' && item.match_strength === 'strong').length],
+                  ['Partial', analysis.requirements.filter((item) => item.category !== 'eligibility' && item.match_strength === 'partial').length],
+                  ['Weak', analysis.requirements.filter((item) => item.category !== 'eligibility' && item.match_strength === 'weak').length],
+                  ['Missing', analysis.requirements.filter((item) => item.category !== 'eligibility' && item.match_strength === 'missing').length],
+                  ['Trainable', analysis.requirements.filter((item) => item.category !== 'eligibility' && item.match_strength === 'trainable').length],
                 ] as const).map(([label, count]) => (
                   <div key={label} className="rounded-xl bg-gray-50 px-4 py-3">
                     <p className="text-xl font-bold text-gray-900">{count}</p>
@@ -624,6 +682,33 @@ export default function VacancyApplyPage() {
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-700">
                     {analysis.decision_reasons.map((reason) => <li key={reason}>{reason}</li>)}
                   </ul>
+                </div>
+              )}
+
+              {analysis.requirements.some((item) => item.category === 'eligibility') && (
+                <div className="mt-4 rounded-xl border p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-semibold text-gray-900">Eligibility</p>
+                    <span className="text-xs font-medium text-gray-500">
+                      {analysis.requirements.filter((item) => item.category === 'eligibility' && item.status === 'met').length} / {analysis.requirements.filter((item) => item.category === 'eligibility').length} confirmed
+                    </span>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {analysis.requirements.filter((item) => item.category === 'eligibility').map((item) => (
+                      <div key={item.requirement} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                        <span className="text-gray-800">{item.requirement}</span>
+                        <span className={
+                          item.status === 'met'
+                            ? 'font-semibold text-emerald-700'
+                            : item.status === 'not-met'
+                              ? 'font-semibold text-red-700'
+                              : 'font-semibold text-amber-700'
+                        }>
+                          {item.status === 'met' ? 'Confirmed' : item.status === 'not-met' ? 'Not met' : 'Needs confirmation'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -649,7 +734,7 @@ export default function VacancyApplyPage() {
                   <span className="text-xs text-gray-400">{analysis.analysis_provider}</span>
                 </div>
                 <div className="space-y-2">
-                  {analysis.requirements.map((item, index) => (
+                  {analysis.requirements.filter((item) => item.category !== 'eligibility').map((item, index) => (
                     <RequirementMatchCard key={`${item.requirement}-${index}`} item={item} onStrengthen={strengthenEvidence} />
                   ))}
                 </div>
