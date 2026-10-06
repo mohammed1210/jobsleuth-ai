@@ -18,6 +18,7 @@ import { parseVacancyText } from '@/lib/vacancyParser';
 const lines = (value: string) => value.split('\n').map((item) => item.trim()).filter(Boolean);
 const VACANCY_DRAFT_KEY = 'jobsleuth.apply.vacancyDraft.v2';
 const EVIDENCE_TARGET_KEY = 'jobsleuth.evidence.target.v1';
+const ANALYSIS_SCHEMA_VERSION = 3;
 
 const evidenceFingerprint = (cards: EvidenceCard[]) => JSON.stringify(cards);
 const candidateProfileFingerprint = (profile: CandidateProfile | null) => JSON.stringify(profile ? { summary: profile.summary, skills: profile.skills, experience: profile.experience, qualifications: profile.qualifications, updated_at: profile.updated_at } : null);
@@ -54,6 +55,7 @@ type VacancyDraftState = {
   analysisInputFingerprint: string | null;
   analysisProfileFingerprint: string | null;
   eligibilityAnswers: Record<string, EligibilityAnswer>;
+  analysisSchemaVersion: number;
 };
 
 export default function VacancyApplyPage() {
@@ -125,7 +127,11 @@ export default function VacancyApplyPage() {
       if (typeof saved.extractionProvider === 'string' || saved.extractionProvider === null) {
         setExtractionProvider(saved.extractionProvider ?? null);
       }
-      if (saved.analysis && typeof saved.analysis === 'object') {
+      if (
+        saved.analysis
+        && typeof saved.analysis === 'object'
+        && saved.analysisSchemaVersion === ANALYSIS_SCHEMA_VERSION
+      ) {
         setAnalysis(saved.analysis as VacancyAnalysis);
         setAnalysisEvidenceFingerprint(
           typeof saved.analysisEvidenceFingerprint === 'string' ? saved.analysisEvidenceFingerprint : null,
@@ -136,6 +142,12 @@ export default function VacancyApplyPage() {
         setAnalysisProfileFingerprintValue(
           typeof saved.analysisProfileFingerprint === 'string' ? saved.analysisProfileFingerprint : null,
         );
+        setAnalysisValidated(false);
+      } else if (saved.analysis) {
+        setAnalysis(null);
+        setAnalysisEvidenceFingerprint(null);
+        setAnalysisInputFingerprintValue(null);
+        setAnalysisProfileFingerprintValue(null);
         setAnalysisValidated(false);
       }
     } catch {
@@ -161,6 +173,7 @@ export default function VacancyApplyPage() {
       analysisEvidenceFingerprint,
       analysisInputFingerprint: analysisInputFingerprintValue,
       analysisProfileFingerprint: analysisProfileFingerprintValue,
+      analysisSchemaVersion: ANALYSIS_SCHEMA_VERSION,
     };
     const hasWork = vacancyText.trim() || eligibility.trim() || essential.trim() || desirable.trim() || trainable.trim() || practical.trim() || extractedItems.length > 0 || analysis;
     if (!hasWork) {
