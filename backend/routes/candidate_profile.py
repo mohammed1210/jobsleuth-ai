@@ -451,16 +451,25 @@ def _has_structured_profile(profile: CandidateProfileData) -> bool:
 
 
 def extract_candidate_profile(text: str) -> tuple[CandidateProfileData, str]:
+    fallback = _fallback_profile(text)
     ai_profile = _openai_profile(text)
     if ai_profile is not None:
-        ai_profile.skills = _dedupe(ai_profile.skills, limit=40)
+        ai_profile.skills = _dedupe([*ai_profile.skills, *fallback.skills], limit=40)
         for item in ai_profile.experience:
             item.highlights = _dedupe(item.highlights, limit=20)
             item.skills = _dedupe(item.skills, limit=20)
+
+        # A CV can mention mentoring, teaching, clinics or projects as background
+        # without those being employment-history entries. When the source has
+        # explicit role + date ranges, use those grounded dated roles as the
+        # canonical employment list and keep other experience as skills/signals.
+        dated_roles = [item for item in fallback.experience if item.dates]
+        if dated_roles:
+            ai_profile.experience = dated_roles
+
         if _has_structured_profile(ai_profile):
             return ai_profile, "openai"
 
-    fallback = _fallback_profile(text)
     return fallback, "fallback"
 
 
