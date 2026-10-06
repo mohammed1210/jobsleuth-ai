@@ -9,6 +9,8 @@ from __future__ import annotations
 import io
 import json
 import re
+import zipfile
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -80,19 +82,49 @@ def _extract_pdf(data: bytes) -> str:
 
 
 def _extract_docx(data: bytes) -> str:
+    """Extract readable DOCX text, including text boxes and shape content.
+
+    python-docx exposes normal paragraphs and tables but not all DrawingML/text-box
+    content. Many CV templates use those shapes heavily, so also walk WordprocessingML
+    paragraph nodes from the DOCX archive and prefer that richer representation.
+    """
     from docx import Document
 
     document = Document(io.BytesIO(data))
-    parts = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
+    standard_parts = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
     for table in document.tables:
         for row in table.rows:
             for cell in row.cells:
-                parts.extend(
+                standard_parts.extend(
                     paragraph.text
                     for paragraph in cell.paragraphs
                     if paragraph.text.strip()
                 )
-    return "\n".join(parts)
+
+    xml_parts: list[str] = []
+    namespace = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        xml_names = [
+            name
+            for name in archive.namelist()
+            if name == "word/document.xml"
+            or re.fullmatch(r"word/(?:header|footer)\d+\.xml", name)
+        ]
+        for name in xml_names:
+            root = ET.fromstring(archive.read(name))
+            for paragraph in root.iter(f"{namespace}p"):
+                pieces = [
+                    node.text or ""
+                    for node in paragraph.iter(f"{namespace}t")
+                    if (node.text or "").strip()
+                ]
+                line = "".join(pieces).strip()
+                if line:
+                    xml_parts.append(line)
+
+    standard_text = "\n".join(standard_parts)
+    xml_text = "\n".join(xml_parts)
+    return xml_text if len(xml_text) > len(standard_text) else standard_text
 
 
 def _extract_text(filename: str, data: bytes) -> str:
@@ -120,8 +152,10 @@ def _extract_text(filename: str, data: bytes) -> str:
 
 
 _SECTION_RE = re.compile(
-    r"(?im)^\s*(skills|key skills|technical skills|core skills|experience|employment history|work experience|"
-    r"qualifications|education|certifications|professional qualifications|profile|summary)\s*:?\s*$"
+    r"(?im)^\s*(skills|key skills|technical skills|core skills|key competencies|core competencies|skills & competencies|"
+    r"experience|employment|employment history|work history|career history|work experience|professional experience|career experience|"
+    r"qualifications|education|education & qualifications|qualifications & education|certifications|professional qualifications|"
+    r"profile|personal profile|professional profile|summary|professional summary|about me)\s*:?\s*$"
 )
 
 
@@ -140,12 +174,38 @@ def _sections(text: str) -> dict[str, str]:
 
 def _fallback_profile(text: str) -> CandidateProfileData:
     sections = _sections(text)
-    skills_text = next((sections[key] for key in ("skills", "key skills", "technical skills", "core skills") if key in sections), "")
+    skills_text = next(
+        (
+            sections[key]
+            for key in (
+                "skills",
+                "key skills",
+                "technical skills",
+                "core skills",
+                "key competencies",
+                "core competencies",
+                "skills & competencies",
+            )
+            if key in sections
+        ),
+        "",
+    )
     skill_parts = re.split(r"[,|;\n•·]+", skills_text)
     skills = _dedupe([part for part in skill_parts if 1 < len(part.strip()) < 80], limit=30)
 
     qualification_text = next(
-        (sections[key] for key in ("qualifications", "education", "certifications", "professional qualifications") if key in sections),
+        (
+            sections[key]
+            for key in (
+                "qualifications",
+                "education",
+                "education & qualifications",
+                "qualifications & education",
+                "certifications",
+                "professional qualifications",
+            )
+            if key in sections
+        ),
         "",
     )
     qualifications = [
@@ -155,7 +215,20 @@ def _fallback_profile(text: str) -> CandidateProfileData:
     ]
 
     experience_text = next(
-        (sections[key] for key in ("experience", "employment history", "work experience") if key in sections),
+        (
+            sections[key]
+            for key in (
+                "experience",
+                "employment",
+                "employment history",
+                "work history",
+                "career history",
+                "work experience",
+                "professional experience",
+                "career experience",
+            )
+            if key in sections
+        ),
         "",
     )
     experience_lines = _dedupe(experience_text.splitlines(), limit=30)
@@ -169,7 +242,21 @@ def _fallback_profile(text: str) -> CandidateProfileData:
             )
         )
 
-    summary_text = next((sections[key] for key in ("profile", "summary") if key in sections), "")
+    summary_text = next(
+        (
+            sections[key]
+            for key in (
+                "profile",
+                "personal profile",
+                "professional profile",
+                "summary",
+                "professional summary",
+                "about me",
+            )
+            if key in sections
+        ),
+        "",
+    )
     summary = " ".join(summary_text.split())[:1200]
     if not summary:
         summary = " ".join(text.split())[:700]
@@ -215,6 +302,10 @@ def _openai_profile(text: str) -> CandidateProfileData | None:
         return None
 
 
+def _has_structured_profile(profile: CandidateProfileData) -> bool:
+    return bool(profile.skills or profile.experience or profile.qualifications)
+
+
 def extract_candidate_profile(text: str) -> tuple[CandidateProfileData, str]:
     ai_profile = _openai_profile(text)
     if ai_profile is not None:
@@ -222,8 +313,11 @@ def extract_candidate_profile(text: str) -> tuple[CandidateProfileData, str]:
         for item in ai_profile.experience:
             item.highlights = _dedupe(item.highlights, limit=20)
             item.skills = _dedupe(item.skills, limit=20)
-        return ai_profile, "openai"
-    return _fallback_profile(text), "fallback"
+        if _has_structured_profile(ai_profile):
+            return ai_profile, "openai"
+
+    fallback = _fallback_profile(text)
+    return fallback, "fallback"
 
 
 def _profile_row_to_response(row: dict[str, Any]) -> CandidateProfileResponse:
@@ -314,6 +408,14 @@ async def upload_candidate_cv(
 
     text = _extract_text(filename, data)
     profile, provider = extract_candidate_profile(text)
+    if not _has_structured_profile(profile):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "We could read this CV, but could not reliably identify skills, employment history "
+                "or qualifications. Try exporting it as a simpler DOCX/PDF or TXT file."
+            ),
+        )
     payload = _profile_payload(
         user_id=user["id"],
         filename=filename,
