@@ -152,10 +152,10 @@ def _extract_text(filename: str, data: bytes) -> str:
 
 
 _SECTION_RE = re.compile(
-    r"(?im)^\s*(skills|key skills|technical skills|core skills|key competencies|core competencies|skills & competencies|"
+    r"(?im)^\s*(skills|skills profile|key skills|technical skills|core skills|key competencies|core competencies|skills & competencies|"
     r"experience|employment|employment history|work history|career history|work experience|professional experience|career experience|"
-    r"qualifications|education|education & qualifications|qualifications & education|certifications|professional qualifications|"
-    r"profile|personal profile|professional profile|summary|professional summary|about me)\s*:?\s*$"
+    r"qualifications|education|education/training|education & training|education & qualifications|qualifications & education|certifications|professional qualifications|"
+    r"profile|personal profile|professional profile|objective|career objective|summary|professional summary|about me)\s*:?\s*$"
 )
 
 
@@ -172,13 +172,107 @@ def _sections(text: str) -> dict[str, str]:
     return output
 
 
+_MONTH = r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
+_DATE_RANGE_RE = re.compile(
+    rf"(?i)^\s*{_MONTH}\s+\d{{4}}\s*[–—-]\s*(?:present|current|{_MONTH}\s+\d{{4}})\s*$"
+)
+_STOP_HEADINGS = {
+    "education",
+    "education/training",
+    "education & training",
+    "education & qualifications",
+    "qualifications",
+    "qualifications & education",
+    "certifications",
+    "professional qualifications",
+    "interests",
+    "references",
+}
+
+
+def _clean_cv_lines(text: str) -> list[str]:
+    lines: list[str] = []
+    for raw in text.splitlines():
+        line = re.sub(r"\s+", " ", raw).strip(" \t•·-")
+        if not line:
+            continue
+        lowered = line.casefold()
+        if re.match(r"^(?:d\.?\s*o\.?\s*b\.?|date of birth)\s*:", lowered):
+            continue
+        if "@" in line and re.search(r"\b(?:tel|phone|mobile|email|e-mail)\b", lowered):
+            continue
+        lines.append(line)
+    return lines
+
+
+def _is_job_date_line(value: str) -> bool:
+    return bool(_DATE_RANGE_RE.fullmatch(value.strip()))
+
+
+def _split_role_organisation(value: str) -> tuple[str, str]:
+    if ":" not in value:
+        return value.strip(), ""
+    role, organisation = value.split(":", 1)
+    return role.strip(), organisation.strip()
+
+
+def _experience_from_role_date_pairs(lines: list[str], skills: list[str]) -> list[CandidateExperience]:
+    experience: list[CandidateExperience] = []
+    index = 0
+    while index + 1 < len(lines):
+        role_line = lines[index]
+        lowered = role_line.casefold().rstrip(":")
+        if lowered in _STOP_HEADINGS:
+            if lowered.startswith("education") or "qualification" in lowered:
+                break
+            index += 1
+            continue
+
+        date_line = lines[index + 1]
+        if not _is_job_date_line(date_line):
+            index += 1
+            continue
+
+        role, organisation = _split_role_organisation(role_line)
+        if len(role) < 3 or len(role) > 120:
+            index += 1
+            continue
+
+        highlights: list[str] = []
+        cursor = index + 2
+        while cursor < len(lines):
+            current = lines[cursor]
+            current_lower = current.casefold().rstrip(":")
+            if current_lower in _STOP_HEADINGS:
+                break
+            if cursor + 1 < len(lines) and _is_job_date_line(lines[cursor + 1]):
+                break
+            highlights.append(current)
+            cursor += 1
+
+        experience.append(
+            CandidateExperience(
+                role=role,
+                organisation=organisation,
+                dates=date_line,
+                highlights=_dedupe(highlights, limit=20),
+                skills=skills[:12],
+            )
+        )
+        index = max(cursor, index + 2)
+    return experience
+
+
 def _fallback_profile(text: str) -> CandidateProfileData:
     sections = _sections(text)
+    lines = _clean_cv_lines(text)
+
     skills_text = next(
         (
             sections[key]
             for key in (
                 "skills",
+                "skills profile",
                 "key skills",
                 "technical skills",
                 "core skills",
@@ -190,8 +284,23 @@ def _fallback_profile(text: str) -> CandidateProfileData:
         ),
         "",
     )
-    skill_parts = re.split(r"[,|;\n•·]+", skills_text)
-    skills = _dedupe([part for part in skill_parts if 1 < len(part.strip()) < 80], limit=30)
+    skill_lines = _clean_cv_lines(skills_text)
+    trimmed_skill_lines: list[str] = []
+    for index, line in enumerate(skill_lines):
+        if index + 1 < len(skill_lines) and _is_job_date_line(skill_lines[index + 1]):
+            break
+        if line.casefold().rstrip(":") in _STOP_HEADINGS:
+            break
+        trimmed_skill_lines.append(line)
+    skills = _dedupe(
+        [
+            part
+            for line in trimmed_skill_lines
+            for part in re.split(r"[,|;•·]+", line)
+            if 1 < len(part.strip()) < 100
+        ],
+        limit=30,
+    )
 
     qualification_text = next(
         (
@@ -199,6 +308,8 @@ def _fallback_profile(text: str) -> CandidateProfileData:
             for key in (
                 "qualifications",
                 "education",
+                "education/training",
+                "education & training",
                 "education & qualifications",
                 "qualifications & education",
                 "certifications",
@@ -208,11 +319,33 @@ def _fallback_profile(text: str) -> CandidateProfileData:
         ),
         "",
     )
-    qualifications = [
-        CandidateQualification(name=line)
-        for line in _dedupe(qualification_text.splitlines(), limit=12)
-        if len(line) >= 3
-    ]
+    qualification_lines = _clean_cv_lines(qualification_text)
+    qualifications: list[CandidateQualification] = []
+    pending_institution = ""
+    pending_date = ""
+    for line in qualification_lines:
+        lowered = line.casefold().rstrip(":")
+        if lowered in {"interests", "references"}:
+            break
+        if re.match(rf"(?i)^\s*{_MONTH}\s+\d{{4}}\s*[–—-]", line):
+            pending_date = line
+            if ":" in line:
+                date_part, institution = line.split(":", 1)
+                pending_date = date_part.strip()
+                pending_institution = institution.strip()
+            continue
+        if len(line) >= 3:
+            qualifications.append(
+                CandidateQualification(
+                    name=line,
+                    institution=pending_institution,
+                    date=pending_date,
+                )
+            )
+            pending_institution = ""
+            pending_date = ""
+        if len(qualifications) >= 12:
+            break
 
     experience_text = next(
         (
@@ -231,16 +364,10 @@ def _fallback_profile(text: str) -> CandidateProfileData:
         ),
         "",
     )
-    experience_lines = _dedupe(experience_text.splitlines(), limit=30)
-    experience: list[CandidateExperience] = []
-    if experience_lines:
-        experience.append(
-            CandidateExperience(
-                role="CV experience",
-                highlights=experience_lines[:20],
-                skills=skills[:12],
-            )
-        )
+    experience = _experience_from_role_date_pairs(
+        _clean_cv_lines(experience_text) if experience_text else lines,
+        skills,
+    )
 
     summary_text = next(
         (
@@ -249,6 +376,8 @@ def _fallback_profile(text: str) -> CandidateProfileData:
                 "profile",
                 "personal profile",
                 "professional profile",
+                "objective",
+                "career objective",
                 "summary",
                 "professional summary",
                 "about me",
@@ -257,9 +386,15 @@ def _fallback_profile(text: str) -> CandidateProfileData:
         ),
         "",
     )
-    summary = " ".join(summary_text.split())[:1200]
+    summary = " ".join(_clean_cv_lines(summary_text))[:1200]
     if not summary:
-        summary = " ".join(text.split())[:700]
+        safe_lines = [
+            line
+            for line in lines
+            if not re.search(r"\b(?:tel|phone|mobile|email|e-mail)\b", line, re.IGNORECASE)
+            and "@" not in line
+        ]
+        summary = " ".join(safe_lines[:8])[:700]
 
     return CandidateProfileData(
         summary=summary,
@@ -272,6 +407,7 @@ def _fallback_profile(text: str) -> CandidateProfileData:
 def _openai_profile(text: str) -> CandidateProfileData | None:
     if not settings.OPENAI_API_KEY:
         return None
+    text = "\n".join(_clean_cv_lines(text))
     try:
         from openai import OpenAI
 
