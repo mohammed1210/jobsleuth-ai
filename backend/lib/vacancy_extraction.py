@@ -76,6 +76,8 @@ _SECTION_HEADINGS: dict[str, Category] = {
     "working arrangements": "practical",
     "hybrid working": "practical",
     "location preferences": "practical",
+    "travel": "practical",
+    "travel requirements": "practical",
 }
 
 # These headings deliberately terminate any criteria section. Civil Service adverts
