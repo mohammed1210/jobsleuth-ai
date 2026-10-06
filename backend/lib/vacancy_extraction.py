@@ -457,6 +457,12 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "dbs clearance",
     )
 
+    vacancy_text = re.sub(
+        r"(?i)(?<=[.!?])\s+(requirements?\s+of\s+the\s+role\s*:)",
+        r"\n\1",
+        vacancy_text,
+    )
+
     for raw in vacancy_text.splitlines():
         line = _clean_line(raw)
         if not line:
