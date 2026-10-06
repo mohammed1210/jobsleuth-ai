@@ -378,3 +378,35 @@ def test_serco_pco_pattern_extracts_real_requirements_and_practical_fit():
 
     assert "receive full training" in trainable_text
     assert not any("24/6 across early and late shifts" in item["text"].lower() for item in essentials)
+
+
+def test_hr_experience_with_employment_references_stays_essential():
+    advert = """
+HR Advisor
+
+Requirements of the role:
+Experience preparing employment references for candidates
+Experience supporting recruitment campaigns
+"""
+    items = deterministic_extract(advert)
+    essentials = [item["text"].lower() for item in items if item["category"] == "essential"]
+    eligibility = [item["text"].lower() for item in items if item["category"] == "eligibility"]
+
+    assert any("preparing employment references" in item for item in essentials)
+    assert not any("preparing employment references" in item for item in eligibility)
+
+
+def test_paid_training_delivery_experience_stays_essential():
+    advert = """
+Learning and Development Officer
+
+Requirements of the role:
+Experience delivering paid training programmes to employees
+Strong written communication skills
+"""
+    items = deterministic_extract(advert)
+    essentials = [item["text"].lower() for item in items if item["category"] == "essential"]
+    trainable = [item["text"].lower() for item in items if item["category"] == "trainable"]
+
+    assert any("delivering paid training programmes" in item for item in essentials)
+    assert not any("delivering paid training programmes" in item for item in trainable)
