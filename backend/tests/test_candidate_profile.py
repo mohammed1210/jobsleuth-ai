@@ -423,3 +423,45 @@ BSc Example Degree
         "Custody Officer",
     ]
     assert "Teaching assistant experience" in profile.skills
+
+
+def test_repeated_docx_layout_blocks_do_not_duplicate_employment(monkeypatch):
+    monkeypatch.setattr(candidate_profile, "_openai_profile", lambda text: None)
+    block = """
+Border Operations Officer: Example Agency
+January 2021 – Present
+Worked with partner agencies.
+
+Custody Operations Manager: Example Employer
+June 2019 – January 2020
+Managed operational activity and staff.
+
+Custody Officer: Example Contractor
+February 2016 – June 2019
+Maintained secure operational workflows.
+"""
+    text = f"""
+OBJECTIVE
+Operational professional.
+
+SKILLS PROFILE
+Stakeholder management
+Risk assessment
+
+{block}
+{block}
+{block}
+
+EDUCATION/TRAINING
+October 2012 – April 2015: Example University
+BSc Example Degree
+"""
+
+    profile, provider = candidate_profile.extract_candidate_profile(text)
+
+    assert provider == "fallback"
+    assert [item.role for item in profile.experience] == [
+        "Border Operations Officer",
+        "Custody Operations Manager",
+        "Custody Officer",
+    ]
