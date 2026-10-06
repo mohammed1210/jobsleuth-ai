@@ -410,3 +410,23 @@ Strong written communication skills
 
     assert any("delivering paid training programmes" in item for item in essentials)
     assert not any("delivering paid training programmes" in item for item in trainable)
+
+
+def test_inline_requirements_heading_is_split_from_trainable_sentence():
+    advert = """
+Prisoner Escort Officer
+
+What you need to do the job!
+You will receive full training through a paid induction, plus ongoing support. Requirements of the role:
+Strong communication skills
+Ability to stay calm under pressure
+"""
+
+    items = deterministic_extract(advert)
+    trainable = [item["text"] for item in items if item["category"] == "trainable"]
+    essentials = [item["text"] for item in items if item["category"] == "essential"]
+
+    assert any("receive full training" in item.lower() for item in trainable)
+    assert all("requirements of the role" not in item.lower() for item in trainable)
+    assert "Strong communication skills" in essentials
+    assert "Ability to stay calm under pressure" in essentials

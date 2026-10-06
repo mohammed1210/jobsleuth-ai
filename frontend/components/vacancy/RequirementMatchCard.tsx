@@ -25,9 +25,10 @@ function normaliseGaps(value: RequirementAnalysis['gaps'] | string | null | unde
 type Props = {
   item: RequirementAnalysis;
   onStrengthen?: (item: RequirementAnalysis) => void;
+  onUseCvSignal?: (item: RequirementAnalysis) => void;
 };
 
-export default function RequirementMatchCard({ item, onStrengthen }: Props) {
+export default function RequirementMatchCard({ item, onStrengthen, onUseCvSignal }: Props) {
   const top = item.evidence[0];
   const confidence = Math.round((item.confidence ?? 0) * 100);
   const gaps = normaliseGaps(item.gaps);
@@ -75,6 +76,18 @@ export default function RequirementMatchCard({ item, onStrengthen }: Props) {
                 Matched: {item.profile_support.matched_terms.slice(0, 6).join(', ')}
               </p>
             )}
+          </div>
+        )}
+
+        {item.profile_support?.source && onUseCvSignal && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+            <p className="text-sm font-semibold text-blue-950">Turn this CV experience into verified evidence</p>
+            <p className="mt-1 text-sm text-blue-900">
+              JobSleuth can prefill the role, dates, CV highlights and skills. Review the facts and add the missing context, ownership, outcome and learning before saving it to your Evidence Bank.
+            </p>
+            <button type="button" className="btn-secondary mt-3 px-4 py-2 text-sm" onClick={() => onUseCvSignal(item)}>
+              Turn this CV experience into evidence
+            </button>
           </div>
         )}
 
