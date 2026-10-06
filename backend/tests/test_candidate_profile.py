@@ -316,3 +316,62 @@ def test_upload_rejects_empty_structured_profile(monkeypatch):
     assert response.status_code == 422
     assert "could not reliably identify" in response.json()["detail"].lower()
     assert fake.evidence.rows == []
+
+
+def test_fallback_extracts_role_date_cv_without_experience_heading(monkeypatch):
+    monkeypatch.setattr(candidate_profile, "_openai_profile", lambda text: None)
+    text = """
+CANDIDATE NAME
+D.O.B: 01/01/1990
+London | Tel: 07000000000 | candidate@example.com
+
+OBJECTIVE
+Operational professional with strong communication and customer service skills.
+
+SKILLS PROFILE
+Degree qualification
+Level 3 professional training
+First aid at work
+Multi-agency working
+
+Border Operations Officer: Public Sector Employer
+January 2021 – Present
+Perform duties in a regulated operational environment.
+Collaborate with multi-agency partners to manage high-pressure situations.
+Provide customer service while maintaining security standards.
+
+Custody Operations Manager: Example Employer
+June 2019 – January 2020
+Managed custody operations and oversaw a team of officers.
+Conducted planning and risk assessments.
+Delivered training and guidance to staff.
+
+Custody Officer: Example Contractor
+February 2016 – June 2019
+Escorted individuals safely and securely.
+Worked with police and operational partners.
+
+EDUCATION/TRAINING
+October 2012 – April 2015: Example University
+BSc Example Degree
+July 2012 – August 2012: Example Provider
+NVQ Level 2 Example Qualification
+
+INTERESTS
+Sport and volunteering.
+"""
+    profile, provider = candidate_profile.extract_candidate_profile(text)
+
+    assert provider == "fallback"
+    assert "Multi-agency working" in profile.skills
+    assert [item.role for item in profile.experience] == [
+        "Border Operations Officer",
+        "Custody Operations Manager",
+        "Custody Officer",
+    ]
+    assert profile.experience[1].organisation == "Example Employer"
+    assert any("Managed custody operations" in item for item in profile.experience[1].highlights)
+    assert any(item.name == "BSc Example Degree" for item in profile.qualifications)
+    assert any(item.name == "NVQ Level 2 Example Qualification" for item in profile.qualifications)
+    assert "D.O.B" not in profile.summary
+    assert "candidate@example.com" not in profile.summary
