@@ -125,7 +125,7 @@ export default function RequirementMatchCard({ item, onStrengthen, onUseCvSignal
           </div>
         )}
 
-        {onStrengthen && item.match_strength !== 'strong' && item.match_strength !== 'trainable' && (
+        {onStrengthen && !item.profile_support?.source && item.match_strength !== 'strong' && item.match_strength !== 'trainable' && (
           <div className="border-t pt-4">
             <button type="button" className="btn-secondary px-4 py-2 text-sm" onClick={() => onStrengthen(item)}>
               {item.match_strength === 'missing' ? 'Add evidence for this criterion' : 'Strengthen evidence for this criterion'}
