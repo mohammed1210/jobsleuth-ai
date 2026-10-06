@@ -85,7 +85,9 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
   }, [wordLimitInput]);
 
   const activeRequirements = useMemo<RequirementAnalysis[]>(() => {
-    if (selectedPart?.kind !== 'behaviour' || !selectedPart.behaviourName) return analysis.requirements;
+    if (selectedPart?.kind !== 'behaviour' || !selectedPart.behaviourName) {
+      return analysis.requirements.filter((item) => item.category !== 'eligibility');
+    }
 
     const behaviourKey = normalise(selectedPart.behaviourName);
     const matchedCards = evidence.filter((card) =>

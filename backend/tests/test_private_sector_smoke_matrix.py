@@ -243,6 +243,7 @@ def test_parkguard_pattern_extracts_role_requirements_without_leaking_metadata()
     assert any("sia" in item["text"].lower() for item in eligibility)
     assert any("driver" in item["text"].lower() for item in eligibility)
     assert any("police vetting" in item["text"].lower() for item in eligibility)
+    assert len(eligibility) == 3
     assert len(desirables) >= 5
     assert any("community safety" in item["text"].lower() for item in desirables)
     assert any("working days" in item["text"].lower() for item in practical)

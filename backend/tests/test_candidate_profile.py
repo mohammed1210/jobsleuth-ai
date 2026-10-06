@@ -375,3 +375,51 @@ Sport and volunteering.
     assert any(item.name == "NVQ Level 2 Example Qualification" for item in profile.qualifications)
     assert "D.O.B" not in profile.summary
     assert "candidate@example.com" not in profile.summary
+
+
+def test_ai_profile_uses_dated_source_roles_as_canonical_employment(monkeypatch):
+    text = """
+OBJECTIVE
+Operational professional.
+
+SKILLS PROFILE
+Stakeholder management
+Teaching assistant experience
+Mentoring experience
+
+Operations Officer: Example Agency
+January 2021 – Present
+Worked with partner agencies and assessed operational risk.
+
+Custody Manager: Example Employer
+June 2019 – January 2020
+Managed a team and coordinated with police.
+
+Custody Officer: Example Contractor
+February 2016 – June 2019
+Maintained secure operational workflows.
+
+EDUCATION/TRAINING
+October 2012 – April 2015: Example University
+BSc Example Degree
+"""
+    inflated = CandidateProfileData(
+        summary="Operational professional.",
+        skills=["Stakeholder management", "Teaching assistant experience", "Mentoring experience"],
+        experience=[
+            CandidateExperience(role=f"AI inferred experience {index}", highlights=["Background item"])
+            for index in range(9)
+        ],
+        qualifications=[],
+    )
+    monkeypatch.setattr(candidate_profile, "_openai_profile", lambda _text: inflated)
+
+    profile, provider = candidate_profile.extract_candidate_profile(text)
+
+    assert provider == "openai"
+    assert [item.role for item in profile.experience] == [
+        "Operations Officer",
+        "Custody Manager",
+        "Custody Officer",
+    ]
+    assert "Teaching assistant experience" in profile.skills

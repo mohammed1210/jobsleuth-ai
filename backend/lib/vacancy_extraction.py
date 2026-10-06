@@ -321,6 +321,19 @@ def _is_schedule_practical_metadata(lowered: str) -> bool:
     )
 
 
+def _eligibility_identity(text: str) -> str | None:
+    lowered = text.casefold()
+    if "driving licence" in lowered or "driving license" in lowered or "driver's licence" in lowered or "driver’s licence" in lowered or "driver licence" in lowered or "driver's license" in lowered or "driver’s license" in lowered or "driver license" in lowered:
+        return "driving-licence"
+    if "sia " in lowered or "door supervisor" in lowered or "close protection licence" in lowered or "close protection license" in lowered:
+        return "sia-security-licence"
+    if "police vetting" in lowered:
+        return "police-vetting"
+    if "security clearance" in lowered or "sc clearance" in lowered:
+        return "security-clearance"
+    return None
+
+
 def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
     """Extract grounded criteria from vacancy text without external services.
 
@@ -521,7 +534,14 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
 
     unique: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
+    seen_eligibility: set[str] = set()
     for item in items:
+        if item["category"] == "eligibility":
+            identity = _eligibility_identity(item["text"])
+            if identity and identity in seen_eligibility:
+                continue
+            if identity:
+                seen_eligibility.add(identity)
         key = (item["category"], item["text"].lower())
         if key in seen:
             continue
