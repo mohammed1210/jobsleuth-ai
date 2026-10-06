@@ -16,6 +16,9 @@ type Props = {
 };
 
 export default function CandidateProfilePanel({ session, profile, onProfileChange }: Props) {
+  const hasUsefulProfile = Boolean(
+    profile && (profile.skills.length > 0 || profile.experience.length > 0 || profile.qualifications.length > 0),
+  );
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -58,7 +61,11 @@ export default function CandidateProfilePanel({ session, profile, onProfileChang
         <div className="max-w-3xl">
           <p className="text-sm font-semibold text-brand-700">CV profile</p>
           <h2 className="mt-1 text-2xl font-bold text-gray-900">
-            {profile ? 'Your CV is helping JobSleuth match roles' : 'Upload your CV to improve matching'}
+            {hasUsefulProfile
+              ? 'Your CV is helping JobSleuth match roles'
+              : profile
+                ? 'Your CV needs to be reprocessed'
+                : 'Upload your CV to improve matching'}
           </h2>
           <p className="mt-2 text-sm text-gray-600">
             JobSleuth extracts skills, employment history and qualifications. CV-only matches are treated as signals, not verified Evidence Bank proof.
@@ -87,6 +94,12 @@ export default function CandidateProfilePanel({ session, profile, onProfileChang
       <p className="mt-3 text-xs text-gray-500">PDF, DOCX or TXT · maximum 5 MB · raw CV file is not retained. Extraction may use JobSleuth&apos;s configured AI provider.</p>
 
       {message && <div className="mt-4 rounded-xl border bg-white px-4 py-3 text-sm text-gray-700">{message}</div>}
+
+      {profile && !hasUsefulProfile && (
+        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          This saved CV profile contains no extracted skills, experience or qualifications, so JobSleuth is not using it for matching. Replace the CV to reprocess it with the improved extractor.
+        </div>
+      )}
 
       {profile && (
         <div className="mt-5 space-y-4">
