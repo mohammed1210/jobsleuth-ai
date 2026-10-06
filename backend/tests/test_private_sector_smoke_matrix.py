@@ -346,11 +346,13 @@ This role is not eligible for Skilled Worker visa sponsorship under current UK H
 def test_serco_pco_pattern_extracts_real_requirements_and_practical_fit():
     items = deterministic_extract(SERCO_PCO_SMOKE)
     essentials = [item for item in items if item["category"] == "essential"]
+    desirables = [item for item in items if item["category"] == "desirable"]
     eligibility = [item for item in items if item["category"] == "eligibility"]
     practical = [item for item in items if item["category"] == "practical"]
     trainable = [item for item in items if item["category"] == "trainable"]
 
     essential_text = "\n".join(item["text"].lower() for item in essentials)
+    desirable_text = "\n".join(item["text"].lower() for item in desirables)
     eligibility_text = "\n".join(item["text"].lower() for item in eligibility)
     practical_text = "\n".join(item["text"].lower() for item in practical)
     trainable_text = "\n".join(item["text"].lower() for item in trainable)
@@ -361,6 +363,8 @@ def test_serco_pco_pattern_extracts_real_requirements_and_practical_fit():
     assert "de-escalating conflict" in essential_text
     assert "teamwork" in essential_text
     assert "respect for confidentiality" in essential_text
+    assert "valid cpc" in desirable_text
+    assert "valid cpc" not in essential_text
 
     assert "full uk driving licence essential" in eligibility_text
     assert "dbs clearance" in eligibility_text
