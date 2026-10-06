@@ -364,10 +364,18 @@ def _fallback_profile(text: str) -> CandidateProfileData:
         ),
         "",
     )
-    experience = _experience_from_role_date_pairs(
-        _clean_cv_lines(experience_text) if experience_text else lines,
-        skills,
-    )
+    experience_source = _clean_cv_lines(experience_text) if experience_text else lines
+    experience = _experience_from_role_date_pairs(experience_source, skills)
+    if not experience and experience_text:
+        experience_lines = _dedupe(_clean_cv_lines(experience_text), limit=30)
+        if experience_lines:
+            experience.append(
+                CandidateExperience(
+                    role="CV experience",
+                    highlights=experience_lines[:20],
+                    skills=skills[:12],
+                )
+            )
 
     summary_text = next(
         (
