@@ -15,6 +15,7 @@ import { removeRecord } from '@/lib/removeRecord';
 import { useRecords } from '@/lib/useRecords';
 
 const EVIDENCE_TARGET_KEY = 'jobsleuth.evidence.target.v1';
+const EVIDENCE_REANALYSE_KEY = 'jobsleuth.evidence.reanalyse.v1';
 
 type EvidenceTarget = {
   userId: string;
@@ -99,6 +100,14 @@ export default function ApplyPage() {
   const saveEvidence = async (input: Parameters<typeof bank.saveRecord>[0]) => {
     const saved = await bank.saveRecord(input);
     if (!saved || !target) return;
+    window.sessionStorage.setItem(
+      EVIDENCE_REANALYSE_KEY,
+      JSON.stringify({
+        userId: target.userId,
+        requirement: target.requirement,
+        createdAt: new Date().toISOString(),
+      }),
+    );
     window.sessionStorage.removeItem(EVIDENCE_TARGET_KEY);
     setTarget(null);
     router.push(target.returnTo || '/apply/vacancy');

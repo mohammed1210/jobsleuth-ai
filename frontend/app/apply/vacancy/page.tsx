@@ -18,6 +18,7 @@ import { parseVacancyText } from '@/lib/vacancyParser';
 const lines = (value: string) => value.split('\n').map((item) => item.trim()).filter(Boolean);
 const VACANCY_DRAFT_KEY = 'jobsleuth.apply.vacancyDraft.v2';
 const EVIDENCE_TARGET_KEY = 'jobsleuth.evidence.target.v1';
+const EVIDENCE_REANALYSE_KEY = 'jobsleuth.evidence.reanalyse.v1';
 const ANALYSIS_SCHEMA_VERSION = 3;
 
 const evidenceFingerprint = (cards: EvidenceCard[]) => JSON.stringify(cards);
@@ -464,7 +465,7 @@ export default function VacancyApplyPage() {
     ];
     if (!requirements.length) {
       setMessage('No vacancy criteria are available to analyse. Extract or enter criteria first.');
-      return;
+      return false;
     }
 
     setAnalysing(true);
@@ -483,12 +484,44 @@ export default function VacancyApplyPage() {
       setAnalysisProfileFingerprintValue(candidateProfileFingerprint(candidateProfile));
       setAnalysisValidated(true);
       setMessage(null);
+      return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Vacancy analysis failed.');
+      return false;
     } finally {
       setAnalysing(false);
     }
   };
+
+  useEffect(() => {
+    if (!session || !draftStateReady || !candidateProfileLoaded || analysing) return;
+
+    let pending: { userId?: string; requirement?: string } | null = null;
+    try {
+      const raw = window.sessionStorage.getItem(EVIDENCE_REANALYSE_KEY);
+      if (!raw) return;
+      pending = JSON.parse(raw) as { userId?: string; requirement?: string };
+    } catch {
+      window.sessionStorage.removeItem(EVIDENCE_REANALYSE_KEY);
+      return;
+    }
+
+    if (pending?.userId !== session.user.id) {
+      window.sessionStorage.removeItem(EVIDENCE_REANALYSE_KEY);
+      return;
+    }
+
+    window.sessionStorage.removeItem(EVIDENCE_REANALYSE_KEY);
+    const requirement = pending.requirement || 'the strengthened criterion';
+    setMessage(`Evidence saved. Re-analysing your fit for “${requirement}”…`);
+
+    void (async () => {
+      const ok = await analyse();
+      if (ok) {
+        setMessage(`Evidence saved and fit re-analysed for “${requirement}”.`);
+      }
+    })();
+  }, [session, draftStateReady, candidateProfileLoaded, analysing, evidence, candidateProfile, eligibility, eligibilityAnswers, essential, desirable, trainable, practical]);
 
   useEffect(() => {
     if (!analysis || !analysisInputFingerprintValue) return;
