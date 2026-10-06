@@ -310,3 +310,103 @@ Security (SIA)
     assert "employee wellness program" not in combined
     assert "full uniform & kit" not in combined
     assert "one to one & online training courses" not in combined
+
+
+SERCO_PCO_SMOKE = """
+Prisoner Escort & Custody Driver
+
+We operate 24/6 across early and late shifts, so flexibility is essential. Finishing times can be unpredictable, and you may need to work beyond your contracted hours to meet operational demands. Shifts are set on a rota provided 12 weeks in advance. Part-time working may be considered, but this must be across full working days, as reduced daily hours are not available.
+
+What you need to do the job!
+
+Our PCOs come from a range of backgrounds. In return you'll receive full training through a 5½-week paid training.
+
+Requirements of the role:
+Full UK driving licence essential - B1/C1 (subject to requirements)
+C1 Licenses holders should ideally hold a valid CPC
+Reasonable fitness for the physical demands of the role
+Strong communication skills (written and verbal)
+Ability to stay calm and make decisions under pressure
+Confidence managing behaviour and de-escalating conflict
+Teamwork and the ability to follow processes accurately
+Professionalism, integrity, and respect for confidentiality
+
+What we offer
+Holidays and pension
+
+Our recruitment process
+Initial right to work and vetting documentation checks
+
+Eligibility checks and further information
+Job offers are subject to Ministry of Justice Enhanced Level 2 checks with Enhanced Disclosure and Barring Service (DBS) clearance, satisfactory employment references and occupational health checks.
+This role is not eligible for Skilled Worker visa sponsorship under current UK Home Office regulations. You must have the right to work in the UK.
+"""
+
+
+def test_serco_pco_pattern_extracts_real_requirements_and_practical_fit():
+    items = deterministic_extract(SERCO_PCO_SMOKE)
+    essentials = [item for item in items if item["category"] == "essential"]
+    desirables = [item for item in items if item["category"] == "desirable"]
+    eligibility = [item for item in items if item["category"] == "eligibility"]
+    practical = [item for item in items if item["category"] == "practical"]
+    trainable = [item for item in items if item["category"] == "trainable"]
+
+    essential_text = "\n".join(item["text"].lower() for item in essentials)
+    desirable_text = "\n".join(item["text"].lower() for item in desirables)
+    eligibility_text = "\n".join(item["text"].lower() for item in eligibility)
+    practical_text = "\n".join(item["text"].lower() for item in practical)
+    trainable_text = "\n".join(item["text"].lower() for item in trainable)
+
+    assert len(essentials) >= 6
+    assert "strong communication skills" in essential_text
+    assert "stay calm and make decisions under pressure" in essential_text
+    assert "de-escalating conflict" in essential_text
+    assert "teamwork" in essential_text
+    assert "respect for confidentiality" in essential_text
+    assert "valid cpc" in desirable_text
+    assert "valid cpc" not in essential_text
+
+    assert "full uk driving licence essential" in eligibility_text
+    assert "disclosure and barring service" in eligibility_text
+    assert "employment references" in eligibility_text
+    assert "occupational health checks" in eligibility_text
+    assert "right to work in the uk" in eligibility_text
+
+    assert "24/6 across early and late shifts" in practical_text
+    assert "work beyond your contracted hours" in practical_text
+    assert "rota provided 12 weeks in advance" in practical_text
+
+    assert "receive full training" in trainable_text
+    assert not any("24/6 across early and late shifts" in item["text"].lower() for item in essentials)
+
+
+def test_hr_experience_with_employment_references_stays_essential():
+    advert = """
+HR Advisor
+
+Requirements of the role:
+Experience preparing employment references for candidates
+Experience supporting recruitment campaigns
+"""
+    items = deterministic_extract(advert)
+    essentials = [item["text"].lower() for item in items if item["category"] == "essential"]
+    eligibility = [item["text"].lower() for item in items if item["category"] == "eligibility"]
+
+    assert any("preparing employment references" in item for item in essentials)
+    assert not any("preparing employment references" in item for item in eligibility)
+
+
+def test_paid_training_delivery_experience_stays_essential():
+    advert = """
+Learning and Development Officer
+
+Requirements of the role:
+Experience delivering paid training programmes to employees
+Strong written communication skills
+"""
+    items = deterministic_extract(advert)
+    essentials = [item["text"].lower() for item in items if item["category"] == "essential"]
+    trainable = [item["text"].lower() for item in items if item["category"] == "trainable"]
+
+    assert any("delivering paid training programmes" in item for item in essentials)
+    assert not any("delivering paid training programmes" in item for item in trainable)

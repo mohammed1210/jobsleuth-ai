@@ -32,11 +32,15 @@ _SECTION_HEADINGS: dict[str, Category] = {
     "nationality requirements": "eligibility",
     "security clearance": "eligibility",
     "additional security checks": "eligibility",
+    "eligibility checks and further information": "eligibility",
     "essential": "essential",
     "essential criteria": "essential",
     "essential requirements": "essential",
     "what you will need": "essential",
     "what you'll need": "essential",
+    "what you need to do the job": "essential",
+    "what you need to do the job!": "essential",
+    "requirements of the role": "essential",
     "requirements": "essential",
     "role requirements": "essential",
     "job requirements": "essential",
@@ -377,6 +381,9 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "police vetting",
         "full police vetting",
         "checkable employment history",
+        "enhanced dbs",
+        "dbs clearance",
+        "valid cpc",
     )
     practical_cues = (
         "hours per week",
@@ -401,6 +408,11 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "work location",
         "full-time training",
         "full time training",
+        "early and late shifts",
+        "work beyond your contracted hours",
+        "rota provided",
+        "full working days",
+        "reduced daily hours",
     )
     trainable_cues = (
         "training will be provided",
@@ -410,6 +422,7 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "will receive training",
         "will be trained",
         "will be taught",
+        "receive full training",
         "taught during training",
         "taught as part of training",
     )
@@ -440,6 +453,8 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "sc clearance",
         "police vetting",
         "full police vetting",
+        "enhanced dbs",
+        "dbs clearance",
     )
 
     for raw in vacancy_text.splitlines():
@@ -460,6 +475,17 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
 
         explicit_blocker = any(token in lowered for token in hard_blocker_cues)
 
+        applicant_check_cues = (
+            "disclosure and barring service",
+            "dbs clearance",
+            "employment references",
+            "occupational health checks",
+            "occupational health check",
+        )
+        if section == "eligibility" and any(cue in lowered for cue in applicant_check_cues):
+            items.append(_item(line, "eligibility", 0.96, explicit_blocker=True))
+            continue
+
         if any(cue in lowered for cue in trainable_cues):
             items.append(_item(line, "trainable", 0.96))
             continue
@@ -473,7 +499,7 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         )
         credential_optional = has_credential and bool(
             re.search(
-                r"\b(?:advantageous|desirable|preferred|optional|nice\s+to\s+have)\b",
+                r"\b(?:advantageous|desirable|preferred|optional|ideally|nice\s+to\s+have)\b",
                 lowered,
             )
         )
@@ -481,7 +507,7 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
             section in {"essential", "eligibility"}
             or bool(
                 re.search(
-                    r"\b(?:must\s+(?:have|hold|obtain)|required|mandatory|essential|need(?:ed)?\s+to\s+(?:have|hold|obtain))\b",
+                    r"\b(?:must\s+(?:have|hold|obtain)|required|mandatory|essential|subject\s+to|need(?:ed)?\s+to\s+(?:have|hold|obtain))\b",
                     lowered,
                 )
             )
@@ -489,6 +515,20 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
 
         if credential_negated:
             continue
+        if (
+            re.search(r"\bjob offers? are subject to\b", lowered)
+            and any(
+                cue in lowered
+                for cue in (
+                                "dbs",
+                                "occupational health",
+                    "vetting",
+                )
+            )
+        ):
+            items.append(_item(line, "eligibility", 0.96, explicit_blocker=True))
+            continue
+
         if credential_optional:
             items.append(_item(line, "desirable", 0.88, explicit_blocker=False))
             continue
