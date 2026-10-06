@@ -17,8 +17,9 @@ router = APIRouter(prefix="/vacancy-analysis", tags=["vacancy_analysis"])
 
 class Requirement(BaseModel):
     text: str
-    category: Literal["essential", "desirable", "trainable"] = "essential"
+    category: Literal["eligibility", "essential", "desirable", "trainable"] = "essential"
     blocker: bool = False
+    eligibility_answer: Literal["yes", "no", "unsure"] | None = None
 
 
 class Evidence(BaseModel):
@@ -143,7 +144,7 @@ async def vacancy_analysis(request: AnalysisRequest, authorization: str | None =
     ranked_by_index: dict[int, list[tuple[Evidence, dict[str, Any]]]] = {}
     ambiguous_entries: list[tuple[int, str, list[Evidence]]] = []
     for index, requirement in enumerate(request.requirements):
-        if requirement.category == "trainable":
+        if requirement.category in {"eligibility", "trainable"}:
             continue
         ranked = rank_evidence(requirement.text, request.evidence_cards)
         ranked_by_index[index] = ranked
@@ -156,6 +157,55 @@ async def vacancy_analysis(request: AnalysisRequest, authorization: str | None =
     analysed: list[dict[str, Any]] = []
 
     for index, requirement in enumerate(request.requirements):
+        if requirement.category == "eligibility":
+            answer = requirement.eligibility_answer
+            if answer == "yes":
+                analysed.append(
+                    {
+                        "requirement": requirement.text,
+                        "category": "eligibility",
+                        "blocker": True,
+                        "status": "met",
+                        "match_strength": "strong",
+                        "confidence": 1.0,
+                        "why": "You confirmed that you meet this mandatory eligibility requirement.",
+                        "gaps": [],
+                        "evidence": [],
+                        "profile_support": None,
+                    }
+                )
+            elif answer == "no":
+                analysed.append(
+                    {
+                        "requirement": requirement.text,
+                        "category": "eligibility",
+                        "blocker": True,
+                        "status": "not-met",
+                        "match_strength": "missing",
+                        "confidence": 1.0,
+                        "why": "You confirmed that you do not currently meet this mandatory eligibility requirement.",
+                        "gaps": ["This mandatory eligibility requirement is not met."],
+                        "evidence": [],
+                        "profile_support": None,
+                    }
+                )
+            else:
+                analysed.append(
+                    {
+                        "requirement": requirement.text,
+                        "category": "eligibility",
+                        "blocker": True,
+                        "status": "unconfirmed",
+                        "match_strength": "missing",
+                        "confidence": 1.0,
+                        "why": "Confirm whether you meet this mandatory eligibility requirement before relying on the recommendation.",
+                        "gaps": ["Eligibility has not been confirmed."],
+                        "evidence": [],
+                        "profile_support": None,
+                    }
+                )
+            continue
+
         if requirement.category == "trainable":
             analysed.append(
                 {
@@ -241,24 +291,36 @@ async def vacancy_analysis(request: AnalysisRequest, authorization: str | None =
             }
         )
 
+    eligibility_not_met = any(
+        item["category"] == "eligibility" and item["status"] == "not-met"
+        for item in analysed
+    )
+    eligibility_unconfirmed = any(
+        item["category"] == "eligibility" and item["status"] == "unconfirmed"
+        for item in analysed
+    )
     hard_gap = any(
         item["blocker"] and item["match_strength"] in {"weak", "missing"}
         for item in analysed
-        if item["category"] != "trainable"
+        if item["category"] not in {"trainable", "eligibility"}
     )
     essential_uncertainty = any(
         item["category"] == "essential" and item["match_strength"] in {"partial", "weak", "missing"}
         for item in analysed
     )
 
-    if hard_gap:
+    if eligibility_not_met or hard_gap:
         decision = "SKIP"
-    elif essential_uncertainty or request.practical_issues:
+    elif eligibility_unconfirmed or essential_uncertainty or request.practical_issues:
         decision = "CONSIDER"
     else:
         decision = "APPLY"
 
     decision_reasons: list[str] = []
+    if eligibility_not_met:
+        decision_reasons.append("At least one mandatory eligibility requirement is not met.")
+    if eligibility_unconfirmed:
+        decision_reasons.append("Mandatory eligibility still needs to be confirmed.")
     if hard_gap:
         decision_reasons.append("At least one explicit blocker lacks sufficient supporting evidence.")
     if essential_uncertainty:
