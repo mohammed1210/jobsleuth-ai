@@ -88,6 +88,11 @@ _IGNORED_SECTION_HEADINGS = {
     "behaviours",
     "technical skills",
     "benefits",
+    "benefits of working for parkguard ltd",
+    "benefits of working for parkguard ltd.",
+    "employee benefits",
+    "benefits of working with us",
+    "benefits of working here",
     "things you need to know",
     "artificial intelligence",
     "selection process details",
@@ -190,6 +195,8 @@ def is_non_requirement_text(value: str) -> bool:
     lowered = text.lower().rstrip(":")
     if lowered in _IGNORED_SECTION_HEADINGS or lowered in _SECTION_HEADINGS or lowered in _LEAD_INS:
         return True
+    if re.fullmatch(r"benefits(?:\s+of\s+working(?:\s+(?:for|with)\s+.+|\s+here)?)?", lowered):
+        return True
     if any(lowered.startswith(prefix) for prefix in _NON_REQUIREMENT_PREFIXES):
         return True
     if "@" in lowered and ("contact" in lowered or "email" in lowered or "problems" in lowered):
@@ -208,7 +215,10 @@ def _heading_section(line: str, raw: str, is_bullet: bool) -> Category | Literal
         return None
     if lowered in _SECTION_HEADINGS:
         return _SECTION_HEADINGS[lowered]
-    if lowered in _IGNORED_SECTION_HEADINGS:
+    if lowered in _IGNORED_SECTION_HEADINGS or re.fullmatch(
+        r"benefits(?:\s+of\s+working(?:\s+(?:for|with)\s+.+|\s+here)?)?",
+        lowered,
+    ):
         return "ignore"
     return None
 
