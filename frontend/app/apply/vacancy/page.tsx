@@ -586,7 +586,7 @@ export default function VacancyApplyPage() {
                     <p className="mt-1 text-sm text-gray-600">These checks affect the Apply / Consider / Skip recommendation. JobSleuth will not assume you hold a licence or clearance just because it is absent from your CV.</p>
                   </div>
                   <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-amber-800">
-                    {lines(eligibility).filter((item) => eligibilityAnswers[item] === 'yes').length} / {lines(eligibility).length} confirmed
+                    {lines(eligibility).filter((item) => eligibilityAnswers[item] && eligibilityAnswers[item] !== 'unsure').length} / {lines(eligibility).length} answered · {lines(eligibility).filter((item) => eligibilityAnswers[item] === 'yes').length} met
                   </span>
                 </div>
                 <div className="mt-4 space-y-3">
@@ -694,7 +694,7 @@ export default function VacancyApplyPage() {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="font-semibold text-gray-900">Eligibility</p>
                     <span className="text-xs font-medium text-gray-500">
-                      {analysis.requirements.filter((item) => item.category === 'eligibility' && item.status === 'met').length} / {analysis.requirements.filter((item) => item.category === 'eligibility').length} confirmed
+                      {analysis.requirements.filter((item) => item.category === 'eligibility' && item.status === 'met').length} met · {analysis.requirements.filter((item) => item.category === 'eligibility' && item.status !== 'unconfirmed').length} answered
                     </span>
                   </div>
                   <div className="mt-3 space-y-2">
@@ -745,7 +745,20 @@ export default function VacancyApplyPage() {
               </div>
             </section>
 
-            {session && <ApplicationDraftPanel session={session} analysis={analysis} evidence={evidence} vacancyText={vacancyText} />}
+            {analysis.decision === 'SKIP' ? (
+              <section className="card p-6">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Step 4</p>
+                <h2 className="mt-1 text-xl font-bold text-gray-900">Application builder paused</h2>
+                <p className="mt-2 max-w-2xl text-sm text-gray-600">
+                  JobSleuth has identified a mandatory requirement that is not currently met. Drafting is paused so the app does not encourage an application that is blocked on eligibility.
+                </p>
+                <p className="mt-3 text-sm font-medium text-gray-800">
+                  Update the eligibility answer if your circumstances change, then analyse the vacancy again.
+                </p>
+              </section>
+            ) : (
+              session && <ApplicationDraftPanel session={session} analysis={analysis} evidence={evidence} vacancyText={vacancyText} />
+            )}
           </>
         )}
       </main>
