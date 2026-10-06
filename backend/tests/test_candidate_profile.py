@@ -184,6 +184,11 @@ def test_profile_support_is_capped_at_partial():
     assert support["strength"] != "strong"
 
 
+    assert support["source"]["title"] == "Operations Officer at Example"
+    assert support["source"]["actions"][0].startswith("Worked with internal")
+    assert "stakeholder management" in support["source"]["skills"]
+
+
 def test_profile_does_not_fake_people_management_scope():
     profile = CandidateProfileData(
         skills=["security operations", "risk management"],
