@@ -405,8 +405,12 @@ export default function VacancyApplyPage() {
     }
   };
 
-  const strengthenEvidence = (item: import('@/lib/applyApi').RequirementAnalysis) => {
+  const strengthenEvidence = (
+    item: import('@/lib/applyApi').RequirementAnalysis,
+    useCvSignal = false,
+  ) => {
     if (!session) return;
+    const source = useCvSignal ? item.profile_support?.source : undefined;
     const target = {
       userId: session.user.id,
       requirement: item.requirement,
@@ -415,6 +419,16 @@ export default function VacancyApplyPage() {
       gaps: Array.isArray(item.gaps) ? item.gaps.filter(Boolean) : [],
       returnTo: '/apply/vacancy',
       createdAt: new Date().toISOString(),
+      cvDraft: source
+        ? {
+            title: source.title,
+            situation: source.situation,
+            task: source.task,
+            actions: source.actions,
+            skills: source.skills,
+            confidence: 55,
+          }
+        : null,
     };
     window.sessionStorage.setItem(EVIDENCE_TARGET_KEY, JSON.stringify(target));
     router.push('/apply');
@@ -739,7 +753,12 @@ export default function VacancyApplyPage() {
                 </div>
                 <div className="space-y-2">
                   {analysis.requirements.filter((item) => item.category !== 'eligibility').map((item, index) => (
-                    <RequirementMatchCard key={`${item.requirement}-${index}`} item={item} onStrengthen={strengthenEvidence} />
+                    <RequirementMatchCard
+                      key={`${item.requirement}-${index}`}
+                      item={item}
+                      onStrengthen={strengthenEvidence}
+                      onUseCvSignal={(requirement) => strengthenEvidence(requirement, true)}
+                    />
                   ))}
                 </div>
               </div>
