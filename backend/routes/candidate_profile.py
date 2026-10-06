@@ -260,7 +260,19 @@ def _experience_from_role_date_pairs(lines: list[str], skills: list[str]) -> lis
             )
         )
         index = max(cursor, index + 2)
-    return experience
+    deduped: list[CandidateExperience] = []
+    seen_roles: set[tuple[str, str, str]] = set()
+    for item in experience:
+        key = (
+            item.role.casefold().strip(),
+            item.organisation.casefold().strip(),
+            item.dates.casefold().strip(),
+        )
+        if key in seen_roles:
+            continue
+        seen_roles.add(key)
+        deduped.append(item)
+    return deduped
 
 
 def _fallback_profile(text: str) -> CandidateProfileData:
