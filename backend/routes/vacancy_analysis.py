@@ -134,6 +134,13 @@ def _profile_support(requirement: str, profile: CandidateProfileData | None) -> 
             "The CV profile contains related experience or skills, but CV shorthand is treated as a signal rather than verified Evidence Bank proof."
         ),
         "matched_terms": signals.get("matched_terms", []),
+        "source": {
+            "title": card.title,
+            "situation": card.situation,
+            "task": card.task,
+            "actions": card.actions,
+            "skills": card.skills,
+        },
     }
 
 
