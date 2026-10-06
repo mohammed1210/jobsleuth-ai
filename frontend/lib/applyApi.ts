@@ -20,8 +20,9 @@ export type EvidenceCard = {
 
 export type Requirement = {
   text: string;
-  category: 'essential' | 'desirable' | 'trainable';
+  category: 'eligibility' | 'essential' | 'desirable' | 'trainable';
   blocker?: boolean;
+  eligibility_answer?: 'yes' | 'no' | 'unsure';
 };
 
 export type EvidenceMatch = {
