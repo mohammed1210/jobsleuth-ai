@@ -162,6 +162,20 @@ def _profile_support(requirement: str, profile: CandidateProfileData | None) -> 
     if not ranked:
         return None
     card, assessment = ranked[0]
+    conversion_source = _criterion_specific_cv_source(requirement, card)
+
+    # Prefer a role-specific CV card when its own action bullets independently
+    # support the criterion. Generic profile skills remain a signal, but they
+    # should not hide a stronger grounded role example or masquerade as one.
+    if conversion_source is None:
+        for candidate, candidate_assessment in ranked[1:]:
+            candidate_source = _criterion_specific_cv_source(requirement, candidate)
+            if candidate_source is not None:
+                card = candidate
+                assessment = candidate_assessment
+                conversion_source = candidate_source
+                break
+
     strength = assessment.get("strength", "missing")
     if requires_personal_management_scope(requirement) and not has_personal_management_scope(card):
         strength = "weak" if strength in {"strong", "partial"} else strength
@@ -181,7 +195,7 @@ def _profile_support(requirement: str, profile: CandidateProfileData | None) -> 
             "The CV profile contains related experience or skills, but CV shorthand is treated as a signal rather than verified Evidence Bank proof."
         ),
         "matched_terms": signals.get("matched_terms", []),
-        "source": _criterion_specific_cv_source(requirement, card),
+        "source": conversion_source,
     }
 
 
