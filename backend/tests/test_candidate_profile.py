@@ -273,3 +273,46 @@ def test_docx_extraction_includes_table_cells():
     text = candidate_profile._extract_docx(buffer.getvalue())
     assert "Stakeholder management" in text
     assert "Risk assessment" in text
+
+
+def test_fallback_recognises_common_cv_heading_variants(monkeypatch):
+    monkeypatch.setattr(candidate_profile, "_openai_profile", lambda text: None)
+    text = """
+PROFESSIONAL PROFILE
+Operational professional with public-facing enforcement experience.
+
+KEY COMPETENCIES
+Stakeholder Management
+Report Writing
+Risk Assessment
+
+PROFESSIONAL EXPERIENCE
+Border Force Officer
+Gathered intelligence, assessed risk and worked with partner agencies.
+
+EDUCATION & QUALIFICATIONS
+Level 3 Certificate in Investigations
+"""
+    profile, provider = candidate_profile.extract_candidate_profile(text)
+    assert provider == "fallback"
+    assert "Stakeholder Management" in profile.skills
+    assert profile.experience
+    assert any("Level 3 Certificate" in item.name for item in profile.qualifications)
+
+
+def test_upload_rejects_empty_structured_profile(monkeypatch):
+    fake = FakeClient()
+    monkeypatch.setattr(candidate_profile, "get_supabase_client", lambda: fake)
+    monkeypatch.setattr(
+        candidate_profile,
+        "extract_candidate_profile",
+        lambda _text: (CandidateProfileData(summary="Readable CV text only."), "fallback"),
+    )
+    response = client.post(
+        "/candidate-profile/cv-upload",
+        headers={"Authorization": "Bearer valid_token"},
+        files={"file": ("candidate.txt", b"A readable CV with enough text to pass the file extraction threshold. " * 4, "text/plain")},
+    )
+    assert response.status_code == 422
+    assert "could not reliably identify" in response.json()["detail"].lower()
+    assert fake.evidence.rows == []
