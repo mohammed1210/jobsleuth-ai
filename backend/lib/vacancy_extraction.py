@@ -32,6 +32,7 @@ _SECTION_HEADINGS: dict[str, Category] = {
     "nationality requirements": "eligibility",
     "security clearance": "eligibility",
     "additional security checks": "eligibility",
+    "eligibility checks and further information": "eligibility",
     "essential": "essential",
     "essential criteria": "essential",
     "essential requirements": "essential",
@@ -501,7 +502,7 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
             section in {"essential", "eligibility"}
             or bool(
                 re.search(
-                    r"\b(?:must\s+(?:have|hold|obtain)|required|mandatory|essential|need(?:ed)?\s+to\s+(?:have|hold|obtain))\b",
+                    r"\b(?:must\s+(?:have|hold|obtain)|required|mandatory|essential|subject\s+to|need(?:ed)?\s+to\s+(?:have|hold|obtain))\b",
                     lowered,
                 )
             )
