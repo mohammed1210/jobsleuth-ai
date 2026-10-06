@@ -273,3 +273,39 @@ Shifts: 08:00-16:00
     assert any("calculating contracted hours" in item for item in essentials)
     assert any(item.startswith("working days:") for item in practical)
     assert any(item.startswith("shifts:") for item in practical)
+
+
+def test_benefits_section_does_not_become_candidate_criteria():
+    advert = """
+Patrol Officer
+
+Role Requirements:
+Excellent spoken and written communication skills
+Be able to self-task and take responsibility for service delivery.
+
+Benefits of working for Parkguard Ltd:
+28 Days Paid Annual Leave
+Enhanced Bank Holiday Pay
+Free Parking on shift
+Company Pension Scheme
+Employee Wellness Program
+Full Uniform & Kit (Made to Measure)
+One to One & Online Training Courses
+
+Ideal Candidates & Experience:
+Police/Law Enforcement
+Security (SIA)
+"""
+
+    items = deterministic_extract(advert)
+    combined = "\n".join(item["text"].lower() for item in items)
+
+    assert "excellent spoken and written communication skills" in combined
+    assert "police/law enforcement" in combined
+    assert "28 days paid annual leave" not in combined
+    assert "enhanced bank holiday pay" not in combined
+    assert "free parking on shift" not in combined
+    assert "company pension scheme" not in combined
+    assert "employee wellness program" not in combined
+    assert "full uniform & kit" not in combined
+    assert "one to one & online training courses" not in combined
