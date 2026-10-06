@@ -226,6 +226,10 @@ export default function VacancyApplyPage() {
           const saved = JSON.parse(raw) as Partial<VacancyDraftState>;
           if (saved.userId === requestedUserId && saved.analysis) {
             const savedInputsFingerprint = analysisInputFingerprint(
+              typeof saved.eligibility === 'string' ? saved.eligibility : '',
+              saved.eligibilityAnswers && typeof saved.eligibilityAnswers === 'object'
+                ? saved.eligibilityAnswers as Record<string, EligibilityAnswer>
+                : {},
               typeof saved.essential === 'string' ? saved.essential : '',
               typeof saved.desirable === 'string' ? saved.desirable : '',
               typeof saved.trainable === 'string' ? saved.trainable : '',
