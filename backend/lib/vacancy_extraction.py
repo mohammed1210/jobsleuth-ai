@@ -37,6 +37,9 @@ _SECTION_HEADINGS: dict[str, Category] = {
     "essential requirements": "essential",
     "what you will need": "essential",
     "what you'll need": "essential",
+    "what you need to do the job": "essential",
+    "what you need to do the job!": "essential",
+    "requirements of the role": "essential",
     "requirements": "essential",
     "role requirements": "essential",
     "job requirements": "essential",
@@ -377,6 +380,11 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "police vetting",
         "full police vetting",
         "checkable employment history",
+        "enhanced dbs",
+        "dbs clearance",
+        "employment references",
+        "occupational health checks",
+        "occupational health check",
     )
     practical_cues = (
         "hours per week",
@@ -401,6 +409,11 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "work location",
         "full-time training",
         "full time training",
+        "early and late shifts",
+        "work beyond your contracted hours",
+        "rota provided",
+        "full working days",
+        "reduced daily hours",
     )
     trainable_cues = (
         "training will be provided",
@@ -410,6 +423,8 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "will receive training",
         "will be trained",
         "will be taught",
+        "receive full training",
+        "paid training",
         "taught during training",
         "taught as part of training",
     )
@@ -440,6 +455,11 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "sc clearance",
         "police vetting",
         "full police vetting",
+        "enhanced dbs",
+        "dbs clearance",
+        "employment references",
+        "occupational health checks",
+        "occupational health check",
     )
 
     for raw in vacancy_text.splitlines():
