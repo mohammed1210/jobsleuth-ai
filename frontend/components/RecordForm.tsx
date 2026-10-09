@@ -11,12 +11,13 @@ type Props = {
   busy?: boolean;
   onSave: (input: Pick<EvidenceCard, 'title'> & Partial<EvidenceCard>) => Promise<unknown> | unknown;
   onCancel?: () => void;
+  showCancel?: boolean;
 };
 
 const text = (value: FormDataEntryValue | null) => String(value ?? '').trim();
 const list = (value: FormDataEntryValue | null) => text(value).split(/\n|,/).map((item) => item.trim()).filter(Boolean);
 
-export default function RecordForm({ initial, busy = false, onSave, onCancel }: Props) {
+export default function RecordForm({ initial, busy = false, onSave, onCancel, showCancel = false }: Props) {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -44,7 +45,7 @@ export default function RecordForm({ initial, busy = false, onSave, onCancel }: 
       <TagsFields initial={initial} />
       <div className="flex gap-3">
         <button type="submit" disabled={busy} className="btn-primary disabled:opacity-60">{busy ? 'Saving…' : 'Save evidence'}</button>
-        {initial && onCancel && <button type="button" onClick={onCancel} className="btn-secondary">Cancel</button>}
+        {(initial || showCancel) && onCancel && <button type="button" onClick={onCancel} className="btn-secondary">Cancel</button>}
       </div>
     </form>
   );
