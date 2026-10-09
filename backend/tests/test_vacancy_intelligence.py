@@ -285,6 +285,36 @@ def test_private_sector_curly_apostrophe_headings_are_recognised():
     assert any("competing priorities" in item["text"].lower() for item in essentials)
 
 
+def test_hillingdon_question_mark_heading_terminates_about_you_requirements():
+    advert = """
+Emergency Planning Officer
+
+About You
+To be successful in this role, you will need:
+- Detailed knowledge of emergency planning and business continuity.
+- Experience researching and developing plans and policies.
+
+Why Join Us?
+At Hillingdon, we are proud of the services we provide to residents.
+This is a full-time role (36 hours per week), with a minimum requirement of one day per week in the office.
+Full details are contained in the Job Description below.
+"""
+
+    items = deterministic_extract(advert)
+    essentials = [item for item in items if item["category"] == "essential"]
+    practical = [item for item in items if item["category"] == "practical"]
+    combined = "\n".join(item["text"].lower() for item in items)
+
+    assert len(essentials) == 2
+    assert any("detailed knowledge" in item["text"].lower() for item in essentials)
+    assert any("researching and developing plans" in item["text"].lower() for item in essentials)
+    assert "to be successful in this role" not in combined
+    assert "why join us" not in combined
+    assert "proud of the services" not in combined
+    assert "full details are contained" not in combined
+    assert any("36 hours per week" in item["text"].lower() for item in practical)
+
+
 def test_private_security_advert_separates_credentials_and_practical_constraints():
     items = deterministic_extract(PRIVATE_SECURITY_VACANCY)
     essentials = [item for item in items if item["category"] == "essential"]
