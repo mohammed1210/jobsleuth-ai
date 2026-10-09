@@ -16,6 +16,7 @@ export type EvidenceCard = {
   skills: string[];
   authority_context?: string | null;
   confidence: number;
+  source?: string;
 };
 
 export type EvidenceImportDraft = Omit<EvidenceCard, 'id'> & {
