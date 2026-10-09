@@ -28,7 +28,7 @@ Confidence managing behaviour and de-escalating conflict
 Teamwork and the ability to follow processes accurately
 Professionalism, integrity, and respect for confidentiality
 
-You will receive full role-specific training.
+You will receive full training.
 
 Eligibility checks and further information:
 You must have the right to work in the UK.
