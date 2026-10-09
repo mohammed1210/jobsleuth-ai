@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, File, Header, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
+from lib.settings import settings
 from lib.supabase import get_supabase_client
+from routes.candidate_profile import ALLOWED_SUFFIXES, MAX_CV_BYTES, _extract_text
 from routes.saved_jobs import verify_supabase_user
 
 router = APIRouter(prefix="/evidence", tags=["evidence_bank"])
@@ -53,6 +57,143 @@ class EvidenceResponse(EvidenceBase):
     user_id: str
     created_at: datetime | str | None = None
     updated_at: datetime | str | None = None
+
+
+class EvidenceImportDraft(EvidenceBase):
+    source_filename: str
+
+
+class EvidenceImportResponse(BaseModel):
+    drafts: list[EvidenceImportDraft] = Field(default_factory=list)
+    provider: str
+    files_processed: int
+
+
+MAX_IMPORT_FILES = 8
+MAX_IMPORT_DRAFTS = 12
+MAX_IMPORT_TEXT = 70000
+
+
+def _clean_import_list(values: Any, *, limit: int = 20) -> list[str]:
+    if not isinstance(values, list):
+        return []
+    output: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        cleaned = " ".join(str(value).split()).strip(" •·,-")
+        key = cleaned.casefold()
+        if cleaned and key not in seen:
+            seen.add(key)
+            output.append(cleaned[:500])
+        if len(output) >= limit:
+            break
+    return output
+
+
+def _validate_import_draft(raw: dict[str, Any], filenames: set[str]) -> EvidenceImportDraft | None:
+    title = " ".join(str(raw.get("title") or "").split()).strip()
+    source_filename = Path(str(raw.get("source_filename") or "")).name
+    actions = _clean_import_list(raw.get("actions"), limit=12)
+    if not title or source_filename not in filenames or not actions:
+        return None
+
+    return EvidenceImportDraft(
+        title=title[:140],
+        situation=str(raw.get("situation") or "").strip()[:3000],
+        task=str(raw.get("task") or "").strip()[:3000],
+        actions=actions,
+        outcome=str(raw.get("outcome") or "").strip()[:3000],
+        reflection=str(raw.get("reflection") or "").strip()[:3000],
+        tags=_clean_import_list(raw.get("tags"), limit=20),
+        behaviours=_clean_import_list(raw.get("behaviours"), limit=20),
+        skills=_clean_import_list(raw.get("skills"), limit=20),
+        authority_context=(str(raw.get("authority_context") or "").strip()[:1500] or None),
+        source="imported_application",
+        confidence=55,
+        source_filename=source_filename,
+    )
+
+
+def _openai_import_evidence(documents: list[tuple[str, str]]) -> list[EvidenceImportDraft] | None:
+    if not settings.OPENAI_API_KEY:
+        return None
+
+    filenames = {filename for filename, _text in documents}
+    joined = "\n\n".join(
+        f"=== FILE: {filename} ===\n{text}" for filename, text in documents
+    )[:MAX_IMPORT_TEXT]
+
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            response_format={"type": "json_object"},
+            temperature=0,
+            max_tokens=5000,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Extract reusable evidence examples from the candidate's existing personal statements or applications. "
+                        "Use ONLY facts explicitly stated in the supplied documents. Do not infer achievements, metrics, seniority, "
+                        "authority, qualifications, outcomes, behaviours, tools, or responsibilities that are not stated. "
+                        "Do not convert aspirations, vacancy criteria, employer descriptions, or generic claims into experience. "
+                        "Split genuinely distinct examples into separate cards and merge obvious duplicates across files. "
+                        "Leave a field blank when the source does not support it. Preserve limits on the candidate's authority. "
+                        "Return JSON with key examples, an array of objects with: source_filename, title, situation, task, "
+                        "actions (string array), outcome, reflection, tags (string array), behaviours (string array), "
+                        "skills (string array), authority_context. Return at most 12 examples."
+                    ),
+                },
+                {"role": "user", "content": joined},
+            ],
+        )
+        parsed = json.loads(response.choices[0].message.content or "{}")
+        raw_examples = parsed.get("examples")
+        if not isinstance(raw_examples, list):
+            return None
+
+        drafts: list[EvidenceImportDraft] = []
+        seen: set[tuple[str, str]] = set()
+        for raw in raw_examples[:MAX_IMPORT_DRAFTS]:
+            if not isinstance(raw, dict):
+                continue
+            draft = _validate_import_draft(raw, filenames)
+            if draft is None:
+                continue
+            key = (draft.title.casefold(), " ".join(draft.actions).casefold())
+            if key in seen:
+                continue
+            seen.add(key)
+            drafts.append(draft)
+        return drafts or None
+    except Exception:
+        return None
+
+
+def _fallback_import_evidence(documents: list[tuple[str, str]]) -> list[EvidenceImportDraft]:
+    drafts: list[EvidenceImportDraft] = []
+    for filename, text in documents:
+        paragraphs = [
+            " ".join(part.split()).strip()
+            for part in text.split("\n\n")
+            if len(" ".join(part.split()).strip()) >= 100
+        ]
+        for index, paragraph in enumerate(paragraphs[:3], start=1):
+            drafts.append(
+                EvidenceImportDraft(
+                    title=f"Imported example {index} from {Path(filename).stem}"[:140],
+                    actions=[paragraph[:3000]],
+                    source="imported_application",
+                    confidence=40,
+                    source_filename=filename,
+                )
+            )
+            if len(drafts) >= MAX_IMPORT_DRAFTS:
+                return drafts
+    return drafts
 
 
 _VACANCY_MARKERS = (
@@ -138,6 +279,46 @@ def _require_persistence(result: Any, *, action: str) -> list[dict[str, Any]]:
             detail=f"Evidence Bank persistence unavailable during {action}. Try again later.",
         )
     return rows
+
+
+@router.post("/import-documents", response_model=EvidenceImportResponse)
+async def import_evidence_documents(
+    files: list[UploadFile] = File(...),
+    authorization: str | None = Header(None),
+) -> EvidenceImportResponse:
+    await verify_supabase_user(authorization)
+    if not files:
+        raise HTTPException(status_code=400, detail="Choose at least one application document to import.")
+    if len(files) > MAX_IMPORT_FILES:
+        raise HTTPException(status_code=400, detail=f"Import up to {MAX_IMPORT_FILES} files at a time.")
+
+    documents: list[tuple[str, str]] = []
+    for file in files:
+        filename = Path(file.filename or "application").name
+        suffix = Path(filename).suffix.lower()
+        if suffix not in ALLOWED_SUFFIXES:
+            raise HTTPException(status_code=415, detail="Upload PDF, DOCX or TXT application documents.")
+
+        data = await file.read(MAX_CV_BYTES + 1)
+        if len(data) > MAX_CV_BYTES:
+            raise HTTPException(status_code=413, detail=f"{filename} must be 5 MB or smaller.")
+        documents.append((filename, _extract_text(filename, data)))
+
+    drafts = _openai_import_evidence(documents)
+    provider = "openai" if drafts is not None else "fallback"
+    if drafts is None:
+        drafts = _fallback_import_evidence(documents)
+    if not drafts:
+        raise HTTPException(
+            status_code=422,
+            detail="We could read these files but could not identify a reusable experience example.",
+        )
+
+    return EvidenceImportResponse(
+        drafts=drafts,
+        provider=provider,
+        files_processed=len(documents),
+    )
 
 
 @router.get("", response_model=list[EvidenceResponse])
