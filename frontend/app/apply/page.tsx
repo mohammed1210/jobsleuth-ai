@@ -285,8 +285,10 @@ export default function ApplyPage() {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  className="btn-secondary text-sm"
+                  className="btn-secondary text-sm disabled:cursor-wait disabled:opacity-60"
+                  disabled={bank.savingRecord}
                   onClick={() => {
+                    if (bank.savingRecord) return;
                     if (importIndex + 1 < importDrafts.length) {
                       setImportIndex((current) => current + 1);
                     } else {
@@ -300,8 +302,10 @@ export default function ApplyPage() {
                 </button>
                 <button
                   type="button"
-                  className="text-sm font-semibold text-gray-600 hover:text-gray-900"
+                  className="text-sm font-semibold text-gray-600 hover:text-gray-900 disabled:cursor-wait disabled:opacity-60"
+                  disabled={bank.savingRecord}
                   onClick={() => {
+                    if (bank.savingRecord) return;
                     setImportDrafts([]);
                     setImportIndex(0);
                     setImportMessage(null);
