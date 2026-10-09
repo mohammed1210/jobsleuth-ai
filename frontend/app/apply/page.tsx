@@ -8,8 +8,10 @@ import HeaderClient from '@/components/HeaderClient';
 import CandidateProfilePanel from '@/components/profile/CandidateProfilePanel';
 import RecordForm from '@/components/RecordForm';
 import EvidenceCardView from '@/components/evidence/EvidenceCardView';
+import EvidenceImportPanel from '@/components/evidence/EvidenceImportPanel';
 import { fetchCandidateProfile, type CandidateProfile } from '@/lib/candidateProfileApi';
 import type { EvidenceCard } from '@/lib/applyApi';
+import type { EvidenceImportSuggestion } from '@/lib/evidenceImportApi';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { removeRecord } from '@/lib/removeRecord';
 import { useRecords } from '@/lib/useRecords';
@@ -42,6 +44,8 @@ export default function ApplyPage() {
   const [error, setError] = useState<string | null>(null);
   const [target, setTarget] = useState<EvidenceTarget | null>(null);
   const [candidateProfile, setCandidateProfile] = useState<CandidateProfile | null>(null);
+  const [manualEntry, setManualEntry] = useState(false);
+  const [importDraft, setImportDraft] = useState<EvidenceImportSuggestion | null>(null);
   const bank = useRecords(session);
 
   useEffect(() => {
@@ -98,8 +102,18 @@ export default function ApplyPage() {
   }, []);
 
   const saveEvidence = async (input: Parameters<typeof bank.saveRecord>[0]) => {
-    const saved = await bank.saveRecord(input);
-    if (!saved || !target) return;
+    const payload = importDraft && !bank.editing
+      ? { ...input, source: 'statement_import', confidence: input.confidence ?? importDraft.confidence }
+      : input;
+    const saved = await bank.saveRecord(payload);
+    if (!saved) return;
+
+    if (importDraft) {
+      setImportDraft(null);
+      setManualEntry(false);
+    }
+
+    if (!target) return;
     window.sessionStorage.setItem(
       EVIDENCE_REANALYSE_KEY,
       JSON.stringify({
@@ -127,6 +141,24 @@ export default function ApplyPage() {
       setError('Could not remove this record.');
     }
   };
+
+  const importPrefill: EvidenceCard | null = importDraft
+    ? {
+        id: 'statement-import-prefill',
+        title: importDraft.title,
+        situation: importDraft.situation,
+        task: importDraft.task,
+        actions: importDraft.actions,
+        outcome: importDraft.outcome,
+        reflection: importDraft.reflection,
+        tags: importDraft.tags,
+        behaviours: importDraft.behaviours,
+        skills: importDraft.skills,
+        authority_context: importDraft.authority_context ?? null,
+        source: 'statement_import',
+        confidence: importDraft.confidence,
+      }
+    : null;
 
   const cvPrefill: EvidenceCard | null = target?.cvDraft
     ? {
@@ -175,6 +207,17 @@ export default function ApplyPage() {
             session={session}
             profile={candidateProfile}
             onProfileChange={setCandidateProfile}
+          />
+        )}
+
+        {session && !target && (
+          <EvidenceImportPanel
+            session={session}
+            onReview={(draft) => {
+              bank.setEditing(null);
+              setManualEntry(false);
+              setImportDraft(draft);
+            }}
           />
         )}
 
@@ -232,25 +275,87 @@ export default function ApplyPage() {
           </section>
         )}
 
-        <div className={target?.cvDraft ? 'mx-auto max-w-3xl' : 'grid gap-8 lg:grid-cols-[420px_1fr]'}>
-          <RecordForm
-            key={bank.editing?.id ?? `new-${bank.records.length}-${target?.requirement ?? 'general'}-${target?.cvDraft ? 'cv' : 'blank'}`}
-            initial={bank.editing ?? cvPrefill}
-            busy={bank.savingRecord}
-            onSave={saveEvidence}
-            onCancel={() => {
-              bank.setEditing(null);
-              if (target?.cvDraft) dismissTarget();
-            }}
-          />
-          {!target?.cvDraft && (
-            <div className="space-y-4">
-              {bank.loadingRecords && <div className="card p-8 text-center text-gray-600">Loading…</div>}
-              {!bank.loadingRecords && bank.records.length === 0 && <div className="card p-8 text-center text-gray-600">No saved examples yet.</div>}
-              {bank.records.map((card) => <EvidenceCardView key={card.id} card={card} onEdit={bank.setEditing} onRemove={() => remove(card.id)} />)}
+        {!target && !bank.editing && !manualEntry && !importDraft && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white p-5">
+            <div>
+              <p className="font-semibold text-gray-900">Prefer to add one yourself?</p>
+              <p className="mt-1 text-sm text-gray-600">Manual entry is still available, but you only need it when you do not already have the example written elsewhere.</p>
             </div>
-          )}
-        </div>
+            <button type="button" className="btn-secondary" onClick={() => setManualEntry(true)}>Add an example manually</button>
+          </div>
+        )}
+
+        {importDraft && (
+          <section className="mx-auto max-w-3xl rounded-2xl border border-brand-200 bg-brand-50 p-5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">Review imported evidence</p>
+            <h2 className="mt-1 text-xl font-bold text-gray-900">{importDraft.title}</h2>
+            <p className="mt-1 text-sm text-gray-600">Check JobSleuth's extraction against the original wording before saving it as verified evidence.</p>
+            {importDraft.source_excerpt && (
+              <blockquote className="mt-4 rounded-xl border bg-white p-4 text-sm leading-6 text-gray-700">
+                {importDraft.source_excerpt}
+              </blockquote>
+            )}
+            <p className="mt-2 text-xs text-gray-500">Source: {importDraft.source_filename}</p>
+          </section>
+        )}
+
+        {(target || bank.editing || manualEntry || importDraft) && (
+          <div className={(target?.cvDraft || importDraft) ? 'mx-auto max-w-3xl' : 'grid gap-8 lg:grid-cols-[420px_1fr]'}>
+            <RecordForm
+              key={bank.editing?.id ?? importDraft?.title ?? `new-${bank.records.length}-${target?.requirement ?? 'general'}-${target?.cvDraft ? 'cv' : 'blank'}`}
+              initial={bank.editing ?? importPrefill ?? cvPrefill}
+              busy={bank.savingRecord}
+              onSave={saveEvidence}
+              onCancel={() => {
+                bank.setEditing(null);
+                setImportDraft(null);
+                setManualEntry(false);
+                if (target?.cvDraft) dismissTarget();
+              }}
+            />
+            {!target?.cvDraft && !importDraft && (
+              <div className="space-y-4">
+                {bank.loadingRecords && <div className="card p-8 text-center text-gray-600">Loading…</div>}
+                {!bank.loadingRecords && bank.records.length === 0 && <div className="card p-8 text-center text-gray-600">No saved examples yet.</div>}
+                {bank.records.map((card) => (
+                  <EvidenceCardView
+                    key={card.id}
+                    card={card}
+                    onEdit={(selected) => {
+                      setManualEntry(false);
+                      setImportDraft(null);
+                      bank.setEditing(selected);
+                    }}
+                    onRemove={() => remove(card.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {!target && !manualEntry && !importDraft && !bank.editing && (
+          <section className="space-y-4">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Saved evidence</h2>
+              <p className="mt-1 text-sm text-gray-600">Reusable examples JobSleuth can match to future vacancies.</p>
+            </div>
+            {bank.loadingRecords && <div className="card p-8 text-center text-gray-600">Loading…</div>}
+            {!bank.loadingRecords && bank.records.length === 0 && <div className="card p-8 text-center text-gray-600">No saved examples yet. Import a past application above to get started quickly.</div>}
+            {bank.records.map((card) => (
+              <EvidenceCardView
+                key={card.id}
+                card={card}
+                onEdit={(selected) => {
+                  setManualEntry(false);
+                  setImportDraft(null);
+                  bank.setEditing(selected);
+                }}
+                onRemove={() => remove(card.id)}
+              />
+            ))}
+          </section>
+        )}
       </main>
     </div>
   );
