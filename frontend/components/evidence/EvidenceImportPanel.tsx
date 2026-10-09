@@ -31,9 +31,10 @@ export default function EvidenceImportPanel({ session, onReview }: Props) {
       try {
         const result = await importEvidenceDocument(session, file);
         next.push(
-          ...result.drafts.map((draft) => ({
+          ...result.drafts.map((draft, sourceIndex) => ({
             ...draft,
             source_filename: result.source_filename,
+            source_index: sourceIndex,
           })),
         );
       } catch (error) {

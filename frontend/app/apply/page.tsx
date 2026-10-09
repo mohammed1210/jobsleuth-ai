@@ -302,10 +302,11 @@ export default function ApplyPage() {
         {(target || bank.editing || manualEntry || importDraft) && (
           <div className={(target?.cvDraft || importDraft) ? 'mx-auto max-w-3xl' : 'grid gap-8 lg:grid-cols-[420px_1fr]'}>
             <RecordForm
-              key={bank.editing?.id ?? importDraft?.title ?? `new-${bank.records.length}-${target?.requirement ?? 'general'}-${target?.cvDraft ? 'cv' : 'blank'}`}
+              key={bank.editing?.id ?? (importDraft ? `import-${importDraft.source_filename}-${importDraft.source_index}` : `new-${bank.records.length}-${target?.requirement ?? 'general'}-${target?.cvDraft ? 'cv' : 'blank'}`)}
               initial={bank.editing ?? importPrefill ?? cvPrefill}
               busy={bank.savingRecord}
               onSave={saveEvidence}
+              showCancel={manualEntry}
               onCancel={() => {
                 bank.setEditing(null);
                 setImportDraft(null);

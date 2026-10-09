@@ -25,6 +25,7 @@ export type EvidenceImportResponse = {
 
 export type EvidenceImportSuggestion = EvidenceImportDraft & {
   source_filename: string;
+  source_index: number;
 };
 
 export async function importEvidenceDocument(

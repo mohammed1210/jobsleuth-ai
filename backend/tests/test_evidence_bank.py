@@ -260,3 +260,38 @@ def test_import_draft_requires_verbatim_source_excerpt():
         0,
         "I briefed operational colleagues as circumstances changed.",
     ) is None
+
+
+def test_statement_import_star_fallback_handles_blank_lines_between_fields(monkeypatch):
+    monkeypatch.setattr(evidence_bank, "_openai_evidence_import", lambda _text, _filename: None)
+    text = b"""
+Situation:
+A time-sensitive operational issue needed a safe response.
+
+Task:
+I was responsible for checking the available information and escalating within my authority.
+
+Action:
+I checked the records, contacted the relevant colleagues and documented the decision.
+
+Result:
+The issue was resolved safely and the required record was completed.
+
+Reflection:
+I would establish the named liaison earlier next time.
+"""
+
+    response = client.post(
+        "/evidence/import",
+        headers={"Authorization": "Bearer valid_token"},
+        files={"file": ("star-blank-lines.txt", text, "text/plain")},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["extraction_provider"] == "star-fallback"
+    draft = body["drafts"][0]
+    assert "time-sensitive operational issue" in draft["situation"]
+    assert "checking the available information" in draft["task"]
+    assert "contacted the relevant colleagues" in draft["actions"][0]
+    assert "resolved safely" in draft["outcome"]
