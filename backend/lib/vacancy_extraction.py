@@ -468,7 +468,7 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         line = _clean_line(raw)
         if not line:
             continue
-        lowered = line.lower().rstrip(":")
+        lowered = line.lower().replace("’", "'").replace("‘", "'").rstrip(":?!").strip()
         is_bullet = bool(re.match(r"^\s*(?:[-*•]|\d+[.)])", raw))
 
         heading = _heading_section(line, raw, is_bullet)
