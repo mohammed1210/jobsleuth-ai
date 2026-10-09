@@ -213,6 +213,25 @@ export default function ApplyPage() {
         {session && !target && (
           <EvidenceImportPanel
             session={session}
+            existingRecords={bank.records}
+            onQuickSave={async (draft) => {
+              bank.setEditing(null);
+              const saved = await bank.saveRecord({
+                title: draft.title,
+                situation: draft.situation,
+                task: draft.task,
+                actions: draft.actions,
+                outcome: draft.outcome,
+                reflection: draft.reflection,
+                tags: draft.tags,
+                behaviours: draft.behaviours,
+                skills: draft.skills,
+                authority_context: draft.authority_context ?? null,
+                confidence: draft.confidence,
+                source: 'statement_import',
+              });
+              return Boolean(saved);
+            }}
             onReview={(draft) => {
               bank.setEditing(null);
               setManualEntry(false);

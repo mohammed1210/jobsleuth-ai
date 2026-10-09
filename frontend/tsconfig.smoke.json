@@ -13,7 +13,9 @@
     "lib/applicationInstructions.ts",
     "lib/pilotFeedbackApi.ts",
     "lib/pilotFeedbackForm.ts",
+    "lib/evidenceImportDedupe.ts",
     "tests/applicationInstructions.smoke.test.ts",
-    "tests/pilotFeedbackForm.smoke.test.ts"
+    "tests/pilotFeedbackForm.smoke.test.ts",
+    "tests/evidenceImportDedupe.smoke.test.ts"
   ]
 }
