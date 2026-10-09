@@ -18,6 +18,16 @@ export type EvidenceCard = {
   confidence: number;
 };
 
+export type EvidenceImportDraft = Omit<EvidenceCard, 'id'> & {
+  source_filename: string;
+};
+
+export type EvidenceImportResponse = {
+  drafts: EvidenceImportDraft[];
+  provider: string;
+  files_processed: number;
+};
+
 export type Requirement = {
   text: string;
   category: 'eligibility' | 'essential' | 'desirable' | 'trainable';
@@ -100,6 +110,22 @@ export async function createEvidence(
     body: JSON.stringify(input),
   });
   if (!response.ok) throw await apiError(response, 'Failed to save evidence');
+  return response.json();
+}
+
+export async function importEvidenceDocuments(
+  session: Session,
+  files: File[],
+): Promise<EvidenceImportResponse> {
+  const formData = new FormData();
+  files.forEach((file) => formData.append('files', file));
+
+  const response = await fetch(`${getBackendUrl()}/evidence/import-documents`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${session.access_token}` },
+    body: formData,
+  });
+  if (!response.ok) throw await apiError(response, 'Failed to import application evidence');
   return response.json();
 }
 
