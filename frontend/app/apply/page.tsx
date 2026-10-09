@@ -9,7 +9,7 @@ import CandidateProfilePanel from '@/components/profile/CandidateProfilePanel';
 import RecordForm from '@/components/RecordForm';
 import EvidenceCardView from '@/components/evidence/EvidenceCardView';
 import { fetchCandidateProfile, type CandidateProfile } from '@/lib/candidateProfileApi';
-import type { EvidenceCard } from '@/lib/applyApi';
+import { importEvidenceDocuments, type EvidenceCard, type EvidenceImportDraft } from '@/lib/applyApi';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { removeRecord } from '@/lib/removeRecord';
 import { useRecords } from '@/lib/useRecords';
@@ -42,6 +42,10 @@ export default function ApplyPage() {
   const [error, setError] = useState<string | null>(null);
   const [target, setTarget] = useState<EvidenceTarget | null>(null);
   const [candidateProfile, setCandidateProfile] = useState<CandidateProfile | null>(null);
+  const [importDrafts, setImportDrafts] = useState<EvidenceImportDraft[]>([]);
+  const [importIndex, setImportIndex] = useState(0);
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
   const bank = useRecords(session);
 
   useEffect(() => {
@@ -97,9 +101,27 @@ export default function ApplyPage() {
     run();
   }, []);
 
+  const activeImport = importDrafts[importIndex] ?? null;
+
   const saveEvidence = async (input: Parameters<typeof bank.saveRecord>[0]) => {
-    const saved = await bank.saveRecord(input);
-    if (!saved || !target) return;
+    const saved = await bank.saveRecord(
+      activeImport ? { ...input, source: 'imported_application' } : input,
+    );
+    if (!saved) return;
+
+    if (activeImport) {
+      if (importIndex + 1 < importDrafts.length) {
+        setImportIndex((current) => current + 1);
+        setImportMessage(`Saved. Review example ${importIndex + 2} of ${importDrafts.length}.`);
+      } else {
+        setImportDrafts([]);
+        setImportIndex(0);
+        setImportMessage('Imported examples reviewed and saved to your Evidence Bank.');
+      }
+      return;
+    }
+
+    if (!target) return;
     window.sessionStorage.setItem(
       EVIDENCE_REANALYSE_KEY,
       JSON.stringify({
@@ -111,6 +133,25 @@ export default function ApplyPage() {
     window.sessionStorage.removeItem(EVIDENCE_TARGET_KEY);
     setTarget(null);
     router.push(target.returnTo || '/apply/vacancy');
+  };
+
+  const importDocuments = async (files: File[]) => {
+    if (!session || files.length === 0) return;
+    setImporting(true);
+    setImportMessage(null);
+    bank.setRecordError(null);
+    try {
+      const result = await importEvidenceDocuments(session, files);
+      setImportDrafts(result.drafts);
+      setImportIndex(0);
+      setImportMessage(
+        `Found ${result.drafts.length} reusable example${result.drafts.length === 1 ? '' : 's'} across ${result.files_processed} file${result.files_processed === 1 ? '' : 's'}. Review before saving.`,
+      );
+    } catch (error) {
+      bank.setRecordError(error instanceof Error ? error.message : 'Could not import application evidence.');
+    } finally {
+      setImporting(false);
+    }
   };
 
   const dismissTarget = () => {
@@ -127,6 +168,24 @@ export default function ApplyPage() {
       setError('Could not remove this record.');
     }
   };
+
+  const importPrefill: EvidenceCard | null = activeImport
+    ? {
+        id: `import-preview-${importIndex}`,
+        title: activeImport.title,
+        situation: activeImport.situation,
+        task: activeImport.task,
+        actions: activeImport.actions,
+        outcome: activeImport.outcome,
+        reflection: activeImport.reflection,
+        tags: activeImport.tags,
+        behaviours: activeImport.behaviours,
+        skills: activeImport.skills,
+        authority_context: activeImport.authority_context,
+        confidence: activeImport.confidence,
+        source: 'imported_application',
+      }
+    : null;
 
   const cvPrefill: EvidenceCard | null = target?.cvDraft
     ? {
@@ -170,12 +229,89 @@ export default function ApplyPage() {
         </div>
         {(error || bank.recordError) && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">{error || bank.recordError}</div>}
 
-        {session && !target?.cvDraft && (
+        {session && !target?.cvDraft && !activeImport && (
           <CandidateProfilePanel
             session={session}
             profile={candidateProfile}
             onProfileChange={setCandidateProfile}
           />
+        )}
+
+        {session && !target && !activeImport && (
+          <section className="rounded-2xl border border-gray-200 bg-white p-5">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="max-w-3xl">
+                <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">Already have application examples?</p>
+                <h2 className="mt-2 text-xl font-bold text-gray-900">Import personal statements</h2>
+                <p className="mt-2 text-sm text-gray-600">
+                  Upload old personal statements or applications and JobSleuth will turn the examples you already wrote into Evidence Card drafts for review.
+                </p>
+                <p className="mt-2 text-xs text-gray-500">PDF, DOCX or TXT · up to 8 files at once · files are processed transiently and are not stored.</p>
+              </div>
+              <label className="btn-secondary cursor-pointer px-4 py-2 text-sm">
+                {importing ? 'Importing…' : 'Choose files'}
+                <input
+                  type="file"
+                  multiple
+                  accept=".pdf,.docx,.txt"
+                  disabled={importing}
+                  className="hidden"
+                  onChange={(event) => {
+                    const files = Array.from(event.target.files ?? []);
+                    void importDocuments(files);
+                    event.currentTarget.value = '';
+                  }}
+                />
+              </label>
+            </div>
+          </section>
+        )}
+
+        {importMessage && (
+          <div className="rounded-xl border border-brand-100 bg-brand-50 px-4 py-3 text-sm text-brand-900">{importMessage}</div>
+        )}
+
+        {activeImport && !bank.editing && (
+          <section className="rounded-2xl border border-brand-200 bg-brand-50 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="max-w-3xl">
+                <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">Review imported evidence</p>
+                <h2 className="mt-2 text-xl font-bold text-gray-900">Example {importIndex + 1} of {importDrafts.length}</h2>
+                <p className="mt-2 text-sm text-gray-700">
+                  Extracted from <span className="font-semibold">{activeImport.source_filename}</span>. Check the facts, edit anything unclear and save only examples you recognise as accurate.
+                </p>
+                <p className="mt-2 text-xs text-gray-500">JobSleuth has not saved this example yet.</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="btn-secondary text-sm"
+                  onClick={() => {
+                    if (importIndex + 1 < importDrafts.length) {
+                      setImportIndex((current) => current + 1);
+                    } else {
+                      setImportDrafts([]);
+                      setImportIndex(0);
+                      setImportMessage('Import review finished.');
+                    }
+                  }}
+                >
+                  Skip
+                </button>
+                <button
+                  type="button"
+                  className="text-sm font-semibold text-gray-600 hover:text-gray-900"
+                  onClick={() => {
+                    setImportDrafts([]);
+                    setImportIndex(0);
+                    setImportMessage(null);
+                  }}
+                >
+                  Exit import
+                </button>
+              </div>
+            </div>
+          </section>
         )}
 
         {target && !bank.editing && (
@@ -232,18 +368,23 @@ export default function ApplyPage() {
           </section>
         )}
 
-        <div className={target?.cvDraft ? 'mx-auto max-w-3xl' : 'grid gap-8 lg:grid-cols-[420px_1fr]'}>
+        <div className={target?.cvDraft || activeImport ? 'mx-auto max-w-3xl' : 'grid gap-8 lg:grid-cols-[420px_1fr]'}>
           <RecordForm
-            key={bank.editing?.id ?? `new-${bank.records.length}-${target?.requirement ?? 'general'}-${target?.cvDraft ? 'cv' : 'blank'}`}
-            initial={bank.editing ?? cvPrefill}
+            key={bank.editing?.id ?? `new-${bank.records.length}-${target?.requirement ?? 'general'}-${target?.cvDraft ? 'cv' : activeImport ? `import-${importIndex}` : 'blank'}`}
+            initial={bank.editing ?? cvPrefill ?? importPrefill}
             busy={bank.savingRecord}
             onSave={saveEvidence}
             onCancel={() => {
               bank.setEditing(null);
               if (target?.cvDraft) dismissTarget();
+              if (activeImport) {
+                setImportDrafts([]);
+                setImportIndex(0);
+                setImportMessage(null);
+              }
             }}
           />
-          {!target?.cvDraft && (
+          {!target?.cvDraft && !activeImport && (
             <div className="space-y-4">
               {bank.loadingRecords && <div className="card p-8 text-center text-gray-600">Loading…</div>}
               {!bank.loadingRecords && bank.records.length === 0 && <div className="card p-8 text-center text-gray-600">No saved examples yet.</div>}
