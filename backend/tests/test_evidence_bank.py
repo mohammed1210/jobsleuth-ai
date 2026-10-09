@@ -246,3 +246,17 @@ def test_statement_import_rejects_unstructured_text_when_no_ai(monkeypatch):
 
     assert response.status_code == 422
     assert "could not reliably identify" in response.json()["detail"].lower()
+
+
+
+def test_import_draft_requires_verbatim_source_excerpt():
+    raw = {
+        "title": "Communication example",
+        "actions": ["I briefed operational colleagues."],
+        "source_excerpt": "I briefed people clearly.",
+    }
+    assert evidence_bank._normalise_import_draft(
+        raw,
+        0,
+        "I briefed operational colleagues as circumstances changed.",
+    ) is None
