@@ -44,6 +44,22 @@ Learning and development tailored to your role.
     assert "Well organised and efficient, able to prioritise different pieces of work with different deadlines." in essential_texts
 
 
+def test_punctuated_person_specification_keeps_introductory_prose_filtered():
+    advert = """
+Person Specification?
+This role sits in a busy operational team and supports several workstreams.
+Experience managing competing priorities in a high-volume environment.
+Benefits
+Learning and development tailored to your role.
+"""
+
+    items = deterministic_extract(advert)
+    essential_texts = [item["text"] for item in items if item["category"] == "essential"]
+
+    assert "This role sits in a busy operational team and supports several workstreams." not in essential_texts
+    assert "Experience managing competing priorities in a high-volume environment." in essential_texts
+
+
 def test_person_specification_preserves_common_unbulleted_criterion_prefixes():
     advert = """
 Person specification
