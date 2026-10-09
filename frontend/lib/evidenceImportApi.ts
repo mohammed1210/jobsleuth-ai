@@ -1,6 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 
 import { apiError, getBackendUrl } from '@/lib/backendConfig';
+import { prepareEvidenceUpload } from '@/lib/evidenceImportUpload';
 
 export type EvidenceImportDraft = {
   title: string;
@@ -32,8 +33,9 @@ export async function importEvidenceDocument(
   session: Session,
   file: File,
 ): Promise<EvidenceImportResponse> {
+  const upload = await prepareEvidenceUpload(file);
   const form = new FormData();
-  form.append('file', file);
+  form.append('file', upload.blob, upload.filename);
 
   const response = await fetch(`${getBackendUrl()}/evidence/import`, {
     method: 'POST',
