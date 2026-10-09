@@ -265,7 +265,15 @@ def _openai_evidence_import(text: str, filename: str) -> list[EvidenceImportDraf
 def _fallback_star_import(text: str) -> list[EvidenceImportDraft]:
     """Conservative fallback for documents that already use explicit STAR headings."""
 
-    chunks = re.split(r"\n\s*\n+", text)
+    situation_starts = list(re.finditer(r"(?im)^\s*situation\s*:", text))
+    if situation_starts:
+        chunks = [
+            text[match.start() : (situation_starts[index + 1].start() if index + 1 < len(situation_starts) else len(text))]
+            for index, match in enumerate(situation_starts)
+        ]
+    else:
+        chunks = [text]
+
     drafts: list[EvidenceImportDraft] = []
     for chunk in chunks:
         lowered = chunk.casefold()
