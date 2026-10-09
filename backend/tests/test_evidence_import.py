@@ -1,3 +1,6 @@
+import sys
+from types import SimpleNamespace
+
 from fastapi.testclient import TestClient
 
 from backend.main import app
@@ -101,3 +104,46 @@ def test_import_application_documents_limits_batch_size():
 
     assert response.status_code == 400
     assert "up to 8 files" in response.json()["detail"].lower()
+
+
+def test_openai_import_processes_each_long_file_without_tail_truncation(monkeypatch):
+    calls = []
+
+    class FakeCompletions:
+        def create(self, **kwargs):
+            content = kwargs["messages"][1]["content"]
+            calls.append(content)
+            filename = "first.txt" if "first.txt" in content else "second.txt"
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content=(
+                                '{"examples":[{"source_filename":"'
+                                + filename
+                                + '","title":"Example from '
+                                + filename
+                                + '","actions":["Grounded action from '
+                                + filename
+                                + '"]}]}'
+                            )
+                        )
+                    )
+                ]
+            )
+
+    fake_client = SimpleNamespace(chat=SimpleNamespace(completions=FakeCompletions()))
+    monkeypatch.setattr(evidence_bank.settings, "OPENAI_API_KEY", "test-key")
+    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=lambda api_key: fake_client))
+
+    drafts = evidence_bank._openai_import_evidence(
+        [
+            ("first.txt", "A" * 50000),
+            ("second.txt", "B" * 50000),
+        ]
+    )
+
+    assert drafts is not None
+    assert {draft.source_filename for draft in drafts} == {"first.txt", "second.txt"}
+    assert len(calls) == 2
+    assert "second.txt" in calls[1]
