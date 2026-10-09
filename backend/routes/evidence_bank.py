@@ -166,7 +166,7 @@ def _dedupe_text(values: list[str], *, limit: int = 12) -> list[str]:
     return output
 
 
-def _normalise_import_draft(raw: dict[str, Any], index: int) -> EvidenceImportDraft | None:
+def _normalise_import_draft(raw: dict[str, Any], index: int, source_text: str) -> EvidenceImportDraft | None:
     actions = _dedupe_text([str(item) for item in (raw.get("actions") or []) if item], limit=8)
     situation = re.sub(r"\s+", " ", str(raw.get("situation") or "")).strip()[:1200]
     task = re.sub(r"\s+", " ", str(raw.get("task") or "")).strip()[:1200]
@@ -174,6 +174,9 @@ def _normalise_import_draft(raw: dict[str, Any], index: int) -> EvidenceImportDr
     reflection = re.sub(r"\s+", " ", str(raw.get("reflection") or "")).strip()[:1200]
     authority_context = re.sub(r"\s+", " ", str(raw.get("authority_context") or "")).strip()[:800] or None
     excerpt = re.sub(r"\s+", " ", str(raw.get("source_excerpt") or "")).strip()[:2200]
+    normalised_source = re.sub(r"\s+", " ", source_text).strip().casefold()
+    if not excerpt or excerpt.casefold() not in normalised_source:
+        return None
     if not any((situation, task, actions, outcome, reflection, authority_context)):
         return None
 
@@ -240,7 +243,7 @@ def _openai_evidence_import(text: str, filename: str) -> list[EvidenceImportDraf
         for index, raw in enumerate(drafts_raw[:12]):
             if not isinstance(raw, dict):
                 continue
-            draft = _normalise_import_draft(raw, index)
+            draft = _normalise_import_draft(raw, index, source)
             if draft is None:
                 continue
             key = "|".join(
