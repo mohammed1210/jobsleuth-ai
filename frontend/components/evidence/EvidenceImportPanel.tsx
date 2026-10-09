@@ -3,21 +3,29 @@
 import { useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 
+import type { EvidenceCard } from '@/lib/applyApi';
 import {
   importEvidenceDocument,
   type EvidenceImportSuggestion,
 } from '@/lib/evidenceImportApi';
+import {
+  canQuickSaveImportedEvidence,
+  dedupeImportedEvidence,
+} from '@/lib/evidenceImportDedupe';
 
 type Props = {
   session: Session;
+  existingRecords: EvidenceCard[];
   onReview: (draft: EvidenceImportSuggestion) => void;
+  onQuickSave: (draft: EvidenceImportSuggestion) => Promise<boolean>;
 };
 
-export default function EvidenceImportPanel({ session, onReview }: Props) {
+export default function EvidenceImportPanel({ session, existingRecords, onReview, onQuickSave }: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [suggestions, setSuggestions] = useState<EvidenceImportSuggestion[]>([]);
   const [busy, setBusy] = useState(false);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const runImport = async () => {
@@ -44,11 +52,17 @@ export default function EvidenceImportPanel({ session, onReview }: Props) {
       }
     }
 
-    setSuggestions(next);
-    if (next.length && failures.length) {
-      setMessage(`Found ${next.length} example(s). ${failures.length} file(s) could not be processed.`);
-    } else if (next.length) {
-      setMessage(`Found ${next.length} reusable example(s). Review only the ones you want to keep.`);
+    const deduped = dedupeImportedEvidence(next, existingRecords);
+    setSuggestions(deduped.unique);
+    const duplicateNote = deduped.skipped
+      ? ` ${deduped.skipped} likely duplicate${deduped.skipped === 1 ? '' : 's'} hidden.`
+      : '';
+    if (deduped.unique.length && failures.length) {
+      setMessage(`Found ${deduped.unique.length} example(s). ${failures.length} file(s) could not be processed.${duplicateNote}`);
+    } else if (deduped.unique.length) {
+      setMessage(`Found ${deduped.unique.length} reusable example(s). Review only the ones you want to keep.${duplicateNote}`);
+    } else if (deduped.skipped && !failures.length) {
+      setMessage(`No new examples found. ${deduped.skipped} likely duplicate${deduped.skipped === 1 ? ' was' : 's were'} already represented in your Evidence Bank.`);
     } else if (failures.length) {
       setMessage(failures.join(' '));
     }
@@ -99,23 +113,56 @@ export default function EvidenceImportPanel({ session, onReview }: Props) {
 
       {suggestions.length > 0 && (
         <div className="mt-5 grid gap-3 md:grid-cols-2">
-          {suggestions.map((draft, index) => (
-            <article key={`${draft.source_filename}-${draft.title}-${index}`} className="rounded-xl border bg-white p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{draft.source_filename}</p>
-              <h3 className="mt-1 font-semibold text-gray-900">{draft.title}</h3>
-              <p className="mt-2 line-clamp-3 text-sm text-gray-600">
-                {draft.actions[0] || draft.situation || draft.task || draft.outcome}
-              </p>
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {draft.skills.slice(0, 4).map((skill) => (
-                  <span key={skill} className="rounded-full bg-gray-100 px-2 py-1 text-xs text-gray-600">{skill}</span>
-                ))}
-              </div>
-              <button type="button" className="btn-secondary mt-4 px-3 py-2 text-sm" onClick={() => onReview(draft)}>
-                Review & save
-              </button>
-            </article>
-          ))}
+          {suggestions.map((draft) => {
+            const key = `${draft.source_filename}-${draft.source_index}`;
+            const canQuickSave = canQuickSaveImportedEvidence(draft);
+            return (
+              <article key={key} className="rounded-xl border bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{draft.source_filename}</p>
+                <h3 className="mt-1 font-semibold text-gray-900">{draft.title}</h3>
+                <p className="mt-2 line-clamp-3 text-sm text-gray-600">
+                  {draft.actions[0] || draft.situation || draft.task || draft.outcome}
+                </p>
+                {draft.source_excerpt && (
+                  <details className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-600">
+                    <summary className="cursor-pointer font-medium text-gray-700">Check original wording</summary>
+                    <p className="mt-2 leading-6">{draft.source_excerpt}</p>
+                  </details>
+                )}
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {draft.skills.slice(0, 4).map((skill) => (
+                    <span key={skill} className="rounded-full bg-gray-100 px-2 py-1 text-xs text-gray-600">{skill}</span>
+                  ))}
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {canQuickSave && (
+                    <button
+                      type="button"
+                      className="btn-primary px-3 py-2 text-sm"
+                      disabled={savingKey === key}
+                      onClick={async () => {
+                        setSavingKey(key);
+                        const saved = await onQuickSave(draft);
+                        setSavingKey(null);
+                        if (saved) {
+                          setSuggestions((current) => current.filter((item) => `${item.source_filename}-${item.source_index}` !== key));
+                          setMessage('Evidence saved. You can keep reviewing the remaining suggestions.');
+                        }
+                      }}
+                    >
+                      {savingKey === key ? 'Saving…' : 'Looks right — save'}
+                    </button>
+                  )}
+                  <button type="button" className="btn-secondary px-3 py-2 text-sm" onClick={() => onReview(draft)}>
+                    {canQuickSave ? 'Review & edit' : 'Complete & save'}
+                  </button>
+                </div>
+                {!canQuickSave && (
+                  <p className="mt-2 text-xs text-gray-500">A little more detail is needed before this becomes useful verified evidence.</p>
+                )}
+              </article>
+            );
+          })}
         </div>
       )}
     </section>
