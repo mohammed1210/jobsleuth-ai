@@ -118,56 +118,61 @@ def _openai_import_evidence(documents: list[tuple[str, str]]) -> list[EvidenceIm
     if not settings.OPENAI_API_KEY:
         return None
 
-    filenames = {filename for filename, _text in documents}
-    joined = "\n\n".join(
-        f"=== FILE: {filename} ===\n{text}" for filename, text in documents
-    )[:MAX_IMPORT_TEXT]
-
     try:
         from openai import OpenAI
 
         client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            response_format={"type": "json_object"},
-            temperature=0,
-            max_tokens=5000,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Extract reusable evidence examples from the candidate's existing personal statements or applications. "
-                        "Use ONLY facts explicitly stated in the supplied documents. Do not infer achievements, metrics, seniority, "
-                        "authority, qualifications, outcomes, behaviours, tools, or responsibilities that are not stated. "
-                        "Do not convert aspirations, vacancy criteria, employer descriptions, or generic claims into experience. "
-                        "Split genuinely distinct examples into separate cards and merge obvious duplicates across files. "
-                        "Leave a field blank when the source does not support it. Preserve limits on the candidate's authority. "
-                        "Return JSON with key examples, an array of objects with: source_filename, title, situation, task, "
-                        "actions (string array), outcome, reflection, tags (string array), behaviours (string array), "
-                        "skills (string array), authority_context. Return at most 12 examples."
-                    ),
-                },
-                {"role": "user", "content": joined},
-            ],
-        )
-        parsed = json.loads(response.choices[0].message.content or "{}")
-        raw_examples = parsed.get("examples")
-        if not isinstance(raw_examples, list):
-            return None
-
         drafts: list[EvidenceImportDraft] = []
         seen: set[tuple[str, str]] = set()
-        for raw in raw_examples[:MAX_IMPORT_DRAFTS]:
-            if not isinstance(raw, dict):
+
+        # Process every accepted file independently so a large earlier document
+        # can never silently truncate examples from later uploads.
+        for filename, text in documents:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                response_format={"type": "json_object"},
+                temperature=0,
+                max_tokens=3000,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Extract reusable evidence examples from the candidate's existing personal statement or application. "
+                            "Use ONLY facts explicitly stated in the supplied document. Do not infer achievements, metrics, seniority, "
+                            "authority, qualifications, outcomes, behaviours, tools, or responsibilities that are not stated. "
+                            "Do not convert aspirations, vacancy criteria, employer descriptions, or generic claims into experience. "
+                            "Split genuinely distinct examples into separate cards. Leave a field blank when the source does not support it. "
+                            "Preserve limits on the candidate's authority. Return JSON with key examples, an array of objects with: "
+                            "source_filename, title, situation, task, actions (string array), outcome, reflection, tags (string array), "
+                            "behaviours (string array), skills (string array), authority_context. Return at most 6 examples."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": f"=== FILE: {filename} ===\n{text[:MAX_IMPORT_TEXT]}",
+                    },
+                ],
+            )
+            parsed = json.loads(response.choices[0].message.content or "{}")
+            raw_examples = parsed.get("examples")
+            if not isinstance(raw_examples, list):
                 continue
-            draft = _validate_import_draft(raw, filenames)
-            if draft is None:
-                continue
-            key = (draft.title.casefold(), " ".join(draft.actions).casefold())
-            if key in seen:
-                continue
-            seen.add(key)
-            drafts.append(draft)
+
+            for raw in raw_examples[:6]:
+                if not isinstance(raw, dict):
+                    continue
+                raw["source_filename"] = filename
+                draft = _validate_import_draft(raw, {filename})
+                if draft is None:
+                    continue
+                key = (draft.title.casefold(), " ".join(draft.actions).casefold())
+                if key in seen:
+                    continue
+                seen.add(key)
+                drafts.append(draft)
+                if len(drafts) >= MAX_IMPORT_DRAFTS:
+                    return drafts
+
         return drafts or None
     except Exception:
         return None
