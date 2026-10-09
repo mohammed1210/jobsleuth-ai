@@ -15,6 +15,7 @@ export type EvidenceCard = {
   behaviours: string[];
   skills: string[];
   authority_context?: string | null;
+  source?: string;
   confidence: number;
 };
 
