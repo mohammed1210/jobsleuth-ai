@@ -147,6 +147,7 @@ _LEAD_INS = {
     "we will assess you against these behaviours during the selection process",
     "we'll assess you against these technical skills during the selection process",
     "we will assess you against these technical skills during the selection process",
+    "to be successful in this role, you will need",
 }
 
 _PERSON_SPEC_CRITERION_PREFIXES = (
@@ -196,7 +197,7 @@ def is_non_requirement_text(value: str) -> bool:
     text = " ".join(value.strip().split())
     if not text:
         return True
-    lowered = text.lower().rstrip(":")
+    lowered = text.lower().rstrip(":?!").strip()
     if lowered in _IGNORED_SECTION_HEADINGS or lowered in _SECTION_HEADINGS or lowered in _LEAD_INS:
         return True
     if re.fullmatch(r"benefits(?:\s+of\s+working(?:\s+(?:for|with)\s+.+|\s+here)?)?", lowered):
@@ -213,7 +214,7 @@ def _heading_section(line: str, raw: str, is_bullet: bool) -> Category | Literal
         return None
     # Job sites commonly preserve typographic apostrophes in headings
     # (for example “What you’ll bring”). Normalise them before exact lookup.
-    lowered = line.lower().replace("’", "'").replace("‘", "'").rstrip(":").strip()
+    lowered = line.lower().replace("’", "'").replace("‘", "'").rstrip(":?!").strip()
     looks_like_heading = raw.strip().endswith(":") or len(line.split()) <= 8
     if not looks_like_heading:
         return None
