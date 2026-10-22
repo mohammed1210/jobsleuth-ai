@@ -52,3 +52,58 @@ def test_invalid_signature_is_rejected(monkeypatch):
     monkeypatch.setattr(settings, "SUPABASE_SERVICE_ROLE_KEY", "service_test")
     response = TestClient(app).post("/stripe/webhook", data=b"{}", headers={"stripe-signature":"invalid"})
     assert response.status_code == 400
+
+def test_signed_webhook_uses_current_cancelled_state(monkeypatch):
+    """A delayed paid event must not restore access to a cancelled subscription."""
+    table = FakeTable()
+    user = "00000000-0000-4000-8000-000000000001"
+    monkeypatch.setattr(stripe_webhook, "get_supabase_client", lambda: SimpleNamespace(table=lambda name: table))
+    monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test")
+    monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", "whsec_test")
+    monkeypatch.setattr(settings, "SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setattr(settings, "SUPABASE_SERVICE_ROLE_KEY", "service_test")
+    monkeypatch.setattr(settings, "NEXT_PUBLIC_STRIPE_PRICE_PRO", "price_pro_test")
+    event = {"type": "invoice.paid", "data": {"object": {"subscription": "sub_test"}}}
+    monkeypatch.setattr(stripe_webhook.stripe.Webhook, "construct_event", lambda *args: event)
+    subscription = {
+        "id": "sub_test", "customer": "cus_test", "status": "canceled",
+        "metadata": {"user_id": user},
+        "items": {"data": [{"price": {"id": "price_pro_test"}}]},
+    }
+    monkeypatch.setattr(
+        stripe_webhook.stripe.Subscription,
+        "retrieve",
+        lambda sub_id: dict(subscription),
+    )
+    response = TestClient(app).post(
+        "/stripe/webhook", content=b"mock-signed-payload",
+        headers={"stripe-signature": "t=1,v1=mock"},
+    )
+    assert response.status_code == 200
+    assert table.rows[user]["plan"] == "free"
+    assert table.rows[user]["status"] == "canceled"
+
+
+def test_webhook_persistence_failure_is_retryable(monkeypatch):
+    """Stripe must receive a non-2xx when Supabase cannot store a change."""
+    monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_test")
+    monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", "whsec_test")
+    monkeypatch.setattr(settings, "SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setattr(settings, "SUPABASE_SERVICE_ROLE_KEY", "service_test")
+    event = {"type": "customer.subscription.updated", "data": {"object": {"id": "sub_test"}}}
+    monkeypatch.setattr(stripe_webhook.stripe.Webhook, "construct_event", lambda *args: event)
+    monkeypatch.setattr(stripe_webhook.stripe.Subscription, "retrieve", lambda sub_id: {
+        "id":"sub_test", "customer":"cus_test", "status":"active",
+        "metadata":{"user_id":"00000000-0000-4000-8000-000000000001"},
+        "items":{"data":[{"price":{"id":"price_pro_test"}}]},
+    })
+    class BrokenTable:
+        def select(self, *args): return self
+        def eq(self, *args): return self
+        def execute(self): raise RuntimeError("db temporarily unavailable")
+    monkeypatch.setattr(stripe_webhook, "get_supabase_client", lambda: SimpleNamespace(table=lambda _: BrokenTable()))
+    response = TestClient(app).post(
+        "/stripe/webhook", content=b"mock-signed-payload",
+        headers={"stripe-signature":"t=1,v1=mock"},
+    )
+    assert response.status_code == 503
