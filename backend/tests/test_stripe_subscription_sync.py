@@ -107,3 +107,13 @@ def test_webhook_persistence_failure_is_retryable(monkeypatch):
         headers={"stripe-signature":"t=1,v1=mock"},
     )
     assert response.status_code == 503
+
+
+def test_old_cancel_event_preserves_current_subscription(monkeypatch):
+    table = FakeTable()
+    uid = '00000000-0000-4000-8000-000000000001'
+    table.rows[uid] = {'user_id': uid, 'stripe_customer_id': 'cus_example', 'stripe_subscription_id': 'sub_new', 'status': 'active', 'plan': 'pro'}
+    monkeypatch.setattr(stripe_webhook, 'get_supabase_client', lambda: SimpleNamespace(table=lambda name: table))
+    stripe_webhook.sync_subscription({'id': 'sub_old', 'customer': 'cus_example', 'status': 'canceled', 'metadata': {'user_id': uid}, 'items': {'data': []}})
+    assert table.rows[uid]['stripe_subscription_id'] == 'sub_new'
+    assert table.rows[uid]['plan'] == 'pro'
