@@ -39,12 +39,14 @@ async def get_entitlements(authorization: str | None) -> dict:
         rows = (
             get_supabase_client()
             .table("subscriptions")
-            .select("plan,status")
+            .select("plan,status,updated_at")
             .eq("user_id", user_id)
+            .order("updated_at", desc=True)
             .execute()
             .data or []
         )
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Subscription verification unavailable") from exc
+    # The most recently updated subscription wins when historical rows exist.
     plan = resolve_plan(rows[0] if rows else None)
     return {"user_id": user_id, "email": user.get("email", ""), "plan": plan, "features": FEATURES[plan]}
