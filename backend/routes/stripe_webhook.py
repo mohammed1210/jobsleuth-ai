@@ -1,170 +1,96 @@
-"""Stripe webhook receiver for JobSleuth AI backend.
-
-This endpoint handles events from Stripe. Extend it to react to invoice
-payments, subscription updates, etc. Make sure to configure your Stripe
-dashboard to send webhooks to this URL.
-
-Returns deterministic JSON responses for plan mapping.
-"""
-
-
-from typing import Dict, Any
-
+"""Synchronise verified Stripe events against canonical subscription state."""
+from uuid import UUID
 import stripe
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
-
+from fastapi import APIRouter, HTTPException, Request
 from lib.settings import settings
+from lib.supabase import get_supabase_client
 
-router = APIRouter(prefix="/stripe")
-
-stripe.api_key = settings.STRIPE_SECRET_KEY or None
-webhook_secret = settings.STRIPE_WEBHOOK_SECRET
-
-
-# Deterministic plan mapping from Stripe price IDs to internal plan names
-PLAN_MAPPING: Dict[str, str] = {
-    settings.NEXT_PUBLIC_STRIPE_PRICE_PRO: "pro",
-    settings.NEXT_PUBLIC_STRIPE_PRICE_CAREER_PLUS: "career_plus",
-    settings.NEXT_PUBLIC_STRIPE_PRICE_INVESTOR: "investor",
-}
-
+router = APIRouter(prefix="/stripe", tags=["billing"])
+EVENT_TYPES = {"checkout.session.completed", "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted", "invoice.paid", "invoice.payment_failed"}
 
 def map_price_to_plan(price_id: str) -> str:
-    """Map Stripe price ID to internal plan name.
-    
-    Args:
-        price_id: Stripe price ID
-        
-    Returns:
-        Internal plan name (pro, investor, or free)
-    """
-    return PLAN_MAPPING.get(price_id, "free")
+    mapping = {settings.NEXT_PUBLIC_STRIPE_PRICE_CAREER_PLUS: "career_plus", settings.NEXT_PUBLIC_STRIPE_PRICE_PRO: "pro"}
+    return mapping.get(price_id, "free") if price_id.startswith("price_") else "free"
 
+def _uuid(value):
+    try:
+        return str(UUID(str(value)))
+    except (ValueError, TypeError, AttributeError):
+        return None
 
-def create_deterministic_response(
-    status: str,
-    event_type: str,
-    data: Dict[str, Any] = None
-) -> JSONResponse:
-    """Create a deterministic JSON response.
-    
-    Ensures consistent key ordering and structure.
-    
-    Args:
-        status: Status message
-        event_type: Stripe event type
-        data: Additional data
-        
-    Returns:
-        JSONResponse with deterministic structure
-    """
-    response = {
-        "status": status,
-        "event_type": event_type,
-    }
-    
-    if data:
-        # Sort keys to ensure deterministic order
-        response["data"] = {k: data[k] for k in sorted(data.keys())}
-    
-    return JSONResponse(response)
+def _subscription_id(event):
+    obj = event["data"]["object"]
+    if event["type"] == "checkout.session.completed":
+        return obj.get("subscription")
+    if event["type"].startswith("customer.subscription."):
+        return obj.get("id")
+    parent = obj.get("parent") or {}
+    return obj.get("subscription") or (parent.get("subscription_details") or {}).get("subscription")
 
+def sync_subscription(subscription):
+    user_id = _uuid((subscription.get("metadata") or {}).get("user_id"))
+    if not user_id:
+        raise ValueError("Missing verified subscription user mapping")
+    customer = subscription.get("customer")
+    subscription_id = subscription.get("id")
+    if not customer or not subscription_id:
+        raise ValueError("Missing subscription identifiers")
+    table = get_supabase_client().table("subscriptions")
+    result = table.select("*").eq("user_id", user_id).execute()
+    existing = result.data or []
+    if len(existing) > 1:
+        raise ValueError("Duplicate subscription rows require reconciliation")
+    if existing and existing[0].get("stripe_customer_id") not in (None, customer):
+        raise ValueError("Customer ownership conflict")
+    if (
+        existing
+        and existing[0].get("stripe_subscription_id") not in (None, subscription_id)
+        and subscription.get("status") == "canceled"
+    ):
+        # A cancellation for an old subscription must not revoke a newer one.
+        return
+    items = (subscription.get("items") or {}).get("data") or []
+    price = ((items[0].get("price") or {}).get("id") if items else "") or ""
+    status = subscription.get("status") or "inactive"
+    plan = map_price_to_plan(price) if status in {"active", "trialing"} else "free"
+    payload = {"user_id": user_id, "stripe_customer_id": customer, "stripe_subscription_id": subscription_id, "plan": plan, "status": status}
+    if existing:
+        table.update(payload).eq("user_id", user_id).execute()
+    else:
+        table.insert(payload).execute()
 
 @router.post("/webhook")
-async def stripe_webhook(request: Request) -> JSONResponse:
-    """Handle Stripe webhook events with deterministic responses."""
-    payload = await request.body()
-    sig_header = request.headers.get("stripe-signature")
-
-    if not webhook_secret:
-        return JSONResponse({"ok": False, "error": "webhook_not_configured"}, status_code=200)
-
+async def stripe_webhook(request: Request):
+    if not settings.STRIPE_WEBHOOK_SECRET or not settings.STRIPE_SECRET_KEY:
+        raise HTTPException(status_code=503, detail="Stripe webhooks not configured")
+    if not settings.SUPABASE_URL or not settings.SUPABASE_SERVICE_ROLE_KEY:
+        raise HTTPException(status_code=503, detail="Billing storage unavailable")
     try:
-        event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
-    except ValueError:
-        # Invalid payload
-        return JSONResponse({"ok": False, "error": "Invalid payload"}, status_code=400)
-    except stripe.error.SignatureVerificationError:
-        # Invalid signature
-        return JSONResponse({"ok": False, "error": "Invalid signature"}, status_code=400)
-
+        event = stripe.Webhook.construct_event(await request.body(), request.headers.get("stripe-signature"), settings.STRIPE_WEBHOOK_SECRET)
+    except (ValueError, stripe.error.SignatureVerificationError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid webhook signature") from exc
     event_type = event["type"]
-    
-    # Handle the event with deterministic responses
-    if event_type == 'checkout.session.completed':
-        session = event['data']['object']
-        customer_id = session.get('customer')
-        subscription_id = session.get('subscription')
-        
-        # Get subscription details to map to plan
-        plan = "free"
-        if subscription_id:
-            try:
-                subscription = stripe.Subscription.retrieve(subscription_id)
-                if subscription.items.data:
-                    price_id = subscription.items.data[0].price.id
-                    plan = map_price_to_plan(price_id)
-            except Exception as e:
-                print(f"Error retrieving subscription: {e}")
-        
-        return create_deterministic_response(
-            "success",
-            event_type,
-            {
-                "customer_id": customer_id,
-                "plan": plan,
-                "subscription_id": subscription_id,
-            }
-        )
-    
-    elif event_type == 'invoice.paid':
-        invoice = event['data']['object']
-        customer_id = invoice.get('customer')
-        subscription_id = invoice.get('subscription')
-        
-        return create_deterministic_response(
-            "success",
-            event_type,
-            {
-                "customer_id": customer_id,
-                "subscription_id": subscription_id,
-            }
-        )
-    
-    elif event_type == 'customer.subscription.updated':
-        subscription = event['data']['object']
-        customer_id = subscription.get('customer')
-        
-        # Map price to plan
-        plan = "free"
-        if subscription.get('items', {}).get('data'):
-            price_id = subscription['items']['data'][0]['price']['id']
-            plan = map_price_to_plan(price_id)
-        
-        return create_deterministic_response(
-            "success",
-            event_type,
-            {
-                "customer_id": customer_id,
-                "plan": plan,
-                "status": subscription.get('status'),
-            }
-        )
-    
-    elif event_type == 'customer.subscription.deleted':
-        subscription = event['data']['object']
-        customer_id = subscription.get('customer')
-        
-        return create_deterministic_response(
-            "success",
-            event_type,
-            {
-                "customer_id": customer_id,
-                "plan": "free",  # Revert to free plan
-            }
-        )
-    
-    # Return success for unhandled events (but with deterministic structure)
-    return create_deterministic_response("success", event_type)
-
+    if event_type not in EVENT_TYPES:
+        return {"ok": True, "event_type": event_type}
+    subscription_id = _subscription_id(event)
+    if not subscription_id:
+        if event_type.startswith("invoice."):
+            return {"ok": True, "event_type": event_type}
+        raise HTTPException(status_code=422, detail="Missing subscription identifier")
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    try:
+        # Read current state so stale or duplicate deliveries cannot re-grant paid access.
+        if event_type == "customer.subscription.deleted":
+            # Cancelled subscriptions can be absent from Stripe's retrieve API;
+            # deletion event payload is signature-verified and authoritative.
+            snapshot = dict(event["data"]["object"])
+            snapshot["status"] = "canceled"
+        else:
+            subscription = stripe.Subscription.retrieve(subscription_id)
+            snapshot = subscription.to_dict_recursive() if hasattr(subscription, "to_dict_recursive") else dict(subscription)
+        sync_subscription(snapshot)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Subscription synchronisation failed") from exc
+    return {"ok": True, "event_type": event_type}
