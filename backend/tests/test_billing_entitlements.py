@@ -29,6 +29,7 @@ async def test_verified_user_without_subscription_is_free(monkeypatch):
     class Query:
         def select(self,*args): return self
         def eq(self,*args): return self
+        def order(self,*args,**kwargs): return self
         def execute(self): return SimpleNamespace(data=[])
     monkeypatch.setattr(billing, "verify_supabase_user", verified)
     monkeypatch.setattr(billing, "get_supabase_client", lambda:SimpleNamespace(table=lambda _:Query()))
