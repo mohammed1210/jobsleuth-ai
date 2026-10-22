@@ -52,3 +52,29 @@ async def test_billing_storage_error_never_defaults_to_pro(monkeypatch):
     with pytest.raises(HTTPException) as error:
         await billing.get_entitlements("Bearer valid")
     assert error.value.status_code == 503
+
+@pytest.mark.asyncio
+async def test_latest_subscription_selected_when_old_canceled_row_exists(monkeypatch):
+    monkeypatch.setattr(settings, "SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setattr(settings, "SUPABASE_SERVICE_ROLE_KEY", "service_role_test")
+    async def verified(_authorization):
+        return {"id":"00000000-0000-4000-8000-000000000001", "email":"test@example.com"}
+    class Query:
+        def __init__(self):
+            self.ordered = False
+        def select(self,*args): return self
+        def eq(self,*args): return self
+        def order(self, column, desc=False):
+            assert column == "updated_at"
+            assert desc is True
+            self.ordered = True
+            return self
+        def execute(self):
+            assert self.ordered
+            return SimpleNamespace(data=[
+                {"plan":"pro", "status":"active"},
+                {"plan":"free", "status":"canceled"},
+            ])
+    monkeypatch.setattr(billing, "verify_supabase_user", verified)
+    monkeypatch.setattr(billing, "get_supabase_client", lambda:SimpleNamespace(table=lambda _:Query()))
+    assert (await billing.get_entitlements("Bearer valid"))["plan"] == "pro"
