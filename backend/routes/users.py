@@ -60,38 +60,11 @@ def verify_bearer_token(authorization: Optional[str]) -> str:
     return "user_123"
 
 
-@router.get("/me/plan", response_model=UserPlanResponse)
-async def get_user_plan(
-    authorization: Optional[str] = Header(None)
-) -> UserPlanResponse:
-    """Get the authenticated user's plan (bearer token precedence).
-    
-    Args:
-        authorization: Bearer token (takes precedence)
-        
-    Returns:
-        User plan details
-        
-    Raises:
-        HTTPException: If unauthorized
-    """
-    # Bearer token verification takes precedence
-    user_id = verify_bearer_token(authorization)
-    
-    # Mock implementation - in production, query database
-    mock_plan = UserPlanResponse(
-        user_id=user_id,
-        email="user@example.com",
-        plan=PlanType.PRO,
-        features={
-            "unlimited_saved_jobs": True,
-            "ai_scores": True,
-            "advanced_filters": True,
-            "email_alerts": True,
-        },
-    )
-    
-    return mock_plan
+@router.get("/me/plan")
+async def get_user_plan(authorization: Optional[str] = Header(None)) -> dict:
+    """Return the real verified subscription plan, never a mock Pro plan."""
+    from lib.billing_entitlements import get_entitlements
+    return await get_entitlements(authorization)
 
 
 @router.get("/me", response_model=dict)
