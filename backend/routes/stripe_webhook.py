@@ -71,8 +71,14 @@ async def stripe_webhook(request: Request):
     stripe.api_key = settings.STRIPE_SECRET_KEY
     try:
         # Read current state so stale or duplicate deliveries cannot re-grant paid access.
-        subscription = stripe.Subscription.retrieve(subscription_id)
-        snapshot = subscription.to_dict_recursive() if hasattr(subscription, "to_dict_recursive") else dict(subscription)
+        if event_type == "customer.subscription.deleted":
+            # Cancelled subscriptions can be absent from Stripe's retrieve API;
+            # deletion event payload is signature-verified and authoritative.
+            snapshot = dict(event["data"]["object"])
+            snapshot["status"] = "canceled"
+        else:
+            subscription = stripe.Subscription.retrieve(subscription_id)
+            snapshot = subscription.to_dict_recursive() if hasattr(subscription, "to_dict_recursive") else dict(subscription)
         sync_subscription(snapshot)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
