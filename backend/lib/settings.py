@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_ROLE_KEY: str = ""
 
     STRIPE_SECRET_KEY: str = ""
+    BILLING_CHECKOUT_ENABLED: bool = False
     STRIPE_WEBHOOK_SECRET: str = ""
     NEXT_PUBLIC_STRIPE_PRICE_PRO: str = "price_pro_xxx"
     NEXT_PUBLIC_STRIPE_PRICE_CAREER_PLUS: str = "price_career_plus_xxx"
