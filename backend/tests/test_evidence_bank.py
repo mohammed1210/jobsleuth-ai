@@ -249,6 +249,35 @@ def test_statement_import_rejects_unstructured_text_when_no_ai(monkeypatch):
 
 
 
+def test_import_draft_accepts_typographic_docx_equivalents():
+    raw = {
+        "title": "Communication example",
+        "actions": ["I briefed operational colleagues."],
+        "source_excerpt": 'I said “keep going” — then recorded the outcome…',
+    }
+    draft = evidence_bank._normalise_import_draft(
+        raw,
+        0,
+        'I said "keep going" - then recorded the outcome...',
+    )
+
+    assert draft is not None
+    assert draft.source_excerpt == 'I said “keep going” — then recorded the outcome…'
+
+
+def test_import_draft_still_rejects_paraphrased_source_excerpt():
+    raw = {
+        "title": "Communication example",
+        "actions": ["I briefed operational colleagues."],
+        "source_excerpt": "I communicated clearly with the team.",
+    }
+    assert evidence_bank._normalise_import_draft(
+        raw,
+        0,
+        "I briefed operational colleagues as circumstances changed.",
+    ) is None
+
+
 def test_import_draft_requires_verbatim_source_excerpt():
     raw = {
         "title": "Communication example",

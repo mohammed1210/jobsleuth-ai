@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import logging
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +19,7 @@ from routes.candidate_profile import ALLOWED_SUFFIXES, MAX_CV_BYTES, _extract_te
 from routes.saved_jobs import verify_supabase_user
 
 router = APIRouter(prefix="/evidence", tags=["evidence_bank"])
+logger = logging.getLogger(__name__)
 
 
 class EvidenceBase(BaseModel):
@@ -152,6 +155,33 @@ def _reject_vacancy_contamination(payload: dict[str, Any]) -> None:
         )
 
 
+_GROUNDING_TRANSLATION = str.maketrans({
+    "\u2018": "'",
+    "\u2019": "'",
+    "\u201b": "'",
+    "\u2032": "'",
+    "\u201c": '"',
+    "\u201d": '"',
+    "\u201f": '"',
+    "\u2033": '"',
+    "\u2010": "-",
+    "\u2011": "-",
+    "\u2012": "-",
+    "\u2013": "-",
+    "\u2014": "-",
+    "\u2212": "-",
+    "\u2026": "...",
+})
+
+
+def _canonical_grounding_text(value: str) -> str:
+    """Normalise presentation-only DOCX/model differences for source grounding."""
+
+    text = unicodedata.normalize("NFKC", value).translate(_GROUNDING_TRANSLATION)
+    text = text.replace("\u00a0", " ").replace("\u200b", "")
+    return re.sub(r"\s+", " ", text).strip().casefold()
+
+
 def _dedupe_text(values: list[str], *, limit: int = 12) -> list[str]:
     output: list[str] = []
     seen: set[str] = set()
@@ -174,8 +204,9 @@ def _normalise_import_draft(raw: dict[str, Any], index: int, source_text: str) -
     reflection = re.sub(r"\s+", " ", str(raw.get("reflection") or "")).strip()[:1200]
     authority_context = re.sub(r"\s+", " ", str(raw.get("authority_context") or "")).strip()[:800] or None
     excerpt = re.sub(r"\s+", " ", str(raw.get("source_excerpt") or "")).strip()[:2200]
-    normalised_source = re.sub(r"\s+", " ", source_text).strip().casefold()
-    if not excerpt or excerpt.casefold() not in normalised_source:
+    canonical_excerpt = _canonical_grounding_text(excerpt)
+    canonical_source = _canonical_grounding_text(source_text)
+    if not canonical_excerpt or canonical_excerpt not in canonical_source:
         return None
     if not any((situation, task, actions, outcome, reflection, authority_context)):
         return None
@@ -240,11 +271,13 @@ def _openai_evidence_import(text: str, filename: str) -> list[EvidenceImportDraf
             return []
         drafts: list[EvidenceImportDraft] = []
         seen: set[str] = set()
+        rejected = 0
         for index, raw in enumerate(drafts_raw[:12]):
             if not isinstance(raw, dict):
                 continue
             draft = _normalise_import_draft(raw, index, source)
             if draft is None:
+                rejected += 1
                 continue
             key = "|".join(
                 [
@@ -257,8 +290,15 @@ def _openai_evidence_import(text: str, filename: str) -> list[EvidenceImportDraf
                 continue
             seen.add(key)
             drafts.append(draft)
+        logger.info(
+            "evidence_import_validation raw_drafts=%d accepted=%d rejected=%d",
+            len(drafts_raw[:12]),
+            len(drafts),
+            rejected,
+        )
         return drafts
     except Exception:
+        logger.exception("evidence_import_openai_failed")
         return None
 
 
