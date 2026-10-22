@@ -1,5 +1,6 @@
 """Authenticated subscription checkout for known JobSleuth plans."""
 import stripe
+from uuid import UUID
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 from lib.settings import settings
@@ -32,11 +33,17 @@ async def create_checkout_session(request: CheckoutRequest, authorization: str |
     if not settings.STRIPE_SECRET_KEY:
         raise HTTPException(status_code=503, detail="Stripe is not configured")
     prices = _allowed_prices()
-    if request.plan not in prices:
+    if request.plan not in ("career_plus", "pro"):
         raise HTTPException(status_code=422, detail="Unknown billing plan")
+    if request.plan not in prices:
+        raise HTTPException(status_code=503, detail="This billing plan is not configured")
     if not settings.SUPABASE_URL:
         raise HTTPException(status_code=503, detail="Authentication is not configured")
     user = await verify_supabase_user(authorization)
+    try:
+        UUID(user["id"])
+    except (ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(status_code=401, detail="A verified account is required") from exc
     billing = _billing_user(user)
     stripe.api_key = settings.STRIPE_SECRET_KEY
     params = dict(
