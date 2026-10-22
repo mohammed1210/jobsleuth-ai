@@ -38,8 +38,17 @@ def sync_subscription(subscription):
     table = get_supabase_client().table("subscriptions")
     result = table.select("*").eq("user_id", user_id).execute()
     existing = result.data or []
+    if len(existing) > 1:
+        raise ValueError("Duplicate subscription rows require reconciliation")
     if existing and existing[0].get("stripe_customer_id") not in (None, customer):
         raise ValueError("Customer ownership conflict")
+    if (
+        existing
+        and existing[0].get("stripe_subscription_id") not in (None, subscription_id)
+        and subscription.get("status") == "canceled"
+    ):
+        # A cancellation for an old subscription must not revoke a newer one.
+        return
     items = (subscription.get("items") or {}).get("data") or []
     price = ((items[0].get("price") or {}).get("id") if items else "") or ""
     status = subscription.get("status") or "inactive"
