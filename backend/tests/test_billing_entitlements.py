@@ -77,4 +77,7 @@ async def test_latest_subscription_selected_when_old_canceled_row_exists(monkeyp
             ])
     monkeypatch.setattr(billing, "verify_supabase_user", verified)
     monkeypatch.setattr(billing, "get_supabase_client", lambda:SimpleNamespace(table=lambda _:Query()))
-    assert (await billing.get_entitlements("Bearer valid"))["plan"] == "pro"
+    with pytest.raises(HTTPException) as error:
+        await billing.get_entitlements("Bearer valid")
+    assert error.value.status_code == 503
+    assert "reconciliation" in error.value.detail
