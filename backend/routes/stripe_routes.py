@@ -30,6 +30,8 @@ def _billing_user(user: dict[str, str]) -> dict:
 
 @router.post("/checkout")
 async def create_checkout_session(request: CheckoutRequest, authorization: str | None = Header(None)) -> dict[str, str]:
+    if not settings.BILLING_CHECKOUT_ENABLED:
+        raise HTTPException(status_code=503, detail="Billing checkout is not yet available")
     if not settings.STRIPE_SECRET_KEY:
         raise HTTPException(status_code=503, detail="Stripe is not configured")
     prices = _allowed_prices()
