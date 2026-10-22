@@ -8,7 +8,7 @@ from fastapi import HTTPException
 
 from lib.settings import settings
 from lib.supabase import get_supabase_client
-from routes.saved_jobs import verify_supabase_user
+from routes.saved_jobs import verify_supabase_user, _extract_token
 
 PLANS = ("free", "career_plus", "pro")
 ACTIVE_STATUSES = {"active", "trialing"}
@@ -27,6 +27,7 @@ def resolve_plan(record: dict | None) -> str:
 
 
 async def get_entitlements(authorization: str | None) -> dict:
+    _extract_token(authorization)
     if not settings.SUPABASE_URL or not settings.SUPABASE_SERVICE_ROLE_KEY:
         raise HTTPException(status_code=503, detail="Subscription verification unavailable")
     user = await verify_supabase_user(authorization)
