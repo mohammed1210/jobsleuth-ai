@@ -1,0 +1,57 @@
+name: Daily Regression Check
+
+on:
+  schedule:
+    # UTC. The run may start later during GitHub Actions scheduling congestion.
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-regression
+  cancel-in-progress: false
+
+jobs:
+  backend:
+    name: Backend regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Verify backend imports
+        run: python -c "from main import app; print('backend import ok')"
+      - name: Run backend tests
+        run: pytest -q
+
+  frontend:
+    name: Frontend regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Run frontend tests
+        run: npm test
+      - name: Verify production build
+        run: npm run build
