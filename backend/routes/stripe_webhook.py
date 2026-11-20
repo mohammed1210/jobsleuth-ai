@@ -9,8 +9,19 @@ router = APIRouter(prefix="/stripe", tags=["billing"])
 EVENT_TYPES = {"checkout.session.completed", "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted", "invoice.paid", "invoice.payment_failed"}
 
 def map_price_to_plan(price_id: str) -> str:
-    mapping = {settings.NEXT_PUBLIC_STRIPE_PRICE_CAREER_PLUS: "career_plus", settings.NEXT_PUBLIC_STRIPE_PRICE_PRO: "pro"}
-    return mapping.get(price_id, "free") if price_id.startswith("price_") else "free"
+    # Match the checkout allowlist: placeholders and ambiguous configuration
+    # must never grant premium entitlements.
+    if not isinstance(price_id, str) or not price_id.startswith("price_") or price_id.endswith("_xxx"):
+        return "free"
+    matches = [
+        plan
+        for plan, configured_price in (
+            ("career_plus", settings.NEXT_PUBLIC_STRIPE_PRICE_CAREER_PLUS),
+            ("pro", settings.NEXT_PUBLIC_STRIPE_PRICE_PRO),
+        )
+        if configured_price == price_id
+    ]
+    return matches[0] if len(matches) == 1 else "free"
 
 def _uuid(value):
     try:

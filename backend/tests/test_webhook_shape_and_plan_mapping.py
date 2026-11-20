@@ -17,3 +17,16 @@ def test_retired_investor_plan_does_not_grant_access():
 
 def test_unknown_prices_are_never_premium():
     assert map_price_to_plan("price_unknown_xxx") == "free"
+
+
+def test_placeholder_prices_never_grant_paid_access(monkeypatch):
+    monkeypatch.setattr(settings, "NEXT_PUBLIC_STRIPE_PRICE_PRO", "price_pro_xxx")
+    monkeypatch.setattr(settings, "NEXT_PUBLIC_STRIPE_PRICE_CAREER_PLUS", "price_career_plus_xxx")
+    assert map_price_to_plan("price_pro_xxx") == "free"
+    assert map_price_to_plan("price_career_plus_xxx") == "free"
+
+
+def test_ambiguous_configured_price_never_grants_paid_access(monkeypatch):
+    monkeypatch.setattr(settings, "NEXT_PUBLIC_STRIPE_PRICE_PRO", "price_shared_test")
+    monkeypatch.setattr(settings, "NEXT_PUBLIC_STRIPE_PRICE_CAREER_PLUS", "price_shared_test")
+    assert map_price_to_plan("price_shared_test") == "free"
