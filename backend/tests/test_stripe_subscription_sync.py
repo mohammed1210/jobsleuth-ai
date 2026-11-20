@@ -1,4 +1,3 @@
-from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -139,3 +138,20 @@ def test_multiple_subscription_items_fail_closed(monkeypatch):
     mixed["items"]["data"].append({"price": {"id": "price_unknown"}})
     stripe_webhook.sync_subscription(mixed)
     assert client.rpc.call_args.args[1]["p_plan"] == "free"
+
+
+def test_installed_stripe_sdk_supports_retrieval_interface():
+    # Real SDK construction: no HTTP request or actual credentials required.
+    client = stripe_webhook.stripe.StripeClient("sk_test_synthetic_only")
+    assert callable(client.v1.subscriptions.retrieve)
+
+
+def test_retrieve_subscription_uses_instance_client(monkeypatch):
+    retrieve = Mock(return_value=snapshot())
+    client = Mock()
+    client.v1.subscriptions.retrieve = retrieve
+    factory = Mock(return_value=client)
+    monkeypatch.setattr(stripe_webhook.stripe, "StripeClient", factory)
+    assert stripe_webhook._retrieve_subscription("sub_test") == snapshot()
+    factory.assert_called_once_with(settings.STRIPE_SECRET_KEY)
+    retrieve.assert_called_once_with("sub_test")

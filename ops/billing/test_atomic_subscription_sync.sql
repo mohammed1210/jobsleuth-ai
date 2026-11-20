@@ -1,10 +1,10 @@
 -- Synthetic disposable PostgreSQL integration fixture. Never use live data.
-do $$
+set role service_role;
+do $
 declare
     u uuid := '00000000-0000-4000-8000-000000000001';
     ans text;
 begin
-    insert into auth.users(id) values (u);
     if has_function_privilege('anon', 'public.billing_sync_subscription(uuid,text,text,bigint,text,text,bigint)', 'EXECUTE')
        or has_function_privilege('authenticated', 'public.billing_sync_subscription(uuid,text,text,bigint,text,text,bigint)', 'EXECUTE')
        or not has_function_privilege('service_role', 'public.billing_sync_subscription(uuid,text,text,bigint,text,text,bigint)', 'EXECUTE') then
@@ -44,3 +44,5 @@ begin
         raise exception 'Duplicate records';
     end if;
 end $$;
+
+reset role;
