@@ -1,6 +1,6 @@
 -- Synthetic disposable PostgreSQL integration fixture. Never use live data.
 set role service_role;
-do $
+do $$
 declare
     u uuid := '00000000-0000-4000-8000-000000000001';
     ans text;
