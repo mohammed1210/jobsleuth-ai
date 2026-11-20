@@ -34,6 +34,12 @@ jobs:
         run: python -c "from main import app; print('backend import ok')"
       - name: Run backend tests
         run: pytest -q
+      - name: Read-only production smoke checks
+        if: always()
+        env:
+          BACKEND_URL: https://jobsleuth-ai-production.up.railway.app
+          FRONTEND_URL: https://jobsleuth-ai.vercel.app
+        run: bash ../ops/smoke-test.sh
 
   frontend:
     name: Frontend regression

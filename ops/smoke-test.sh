@@ -1,58 +1,31 @@
 #!/bin/bash
-# Smoke test script for JobSleuth AI backend
-
-set -e
+# Read-only smoke checks: no credentials, private data, or paid API calls.
+set -euo pipefail
 
 BACKEND_URL="${BACKEND_URL:-http://localhost:8000}"
+FRONTEND_URL="${FRONTEND_URL:-}"
 
-echo "🧪 Running backend smoke tests..."
-echo "Backend URL: $BACKEND_URL"
-echo
+check_status() {
+    local label="$1" url="$2" expected="$3" actual
+    if ! actual=$(curl --silent --show-error --max-time 20 --retry 1 \
+        --output /dev/null --write-out '%{http_code}' "$url"); then
+        echo "$label: connection failed" >&2
+        return 1
+    fi
+    if [[ "$actual" != "$expected" ]]; then
+        echo "$label: expected HTTP $expected, got $actual" >&2
+        return 1
+    fi
+    echo "$label: HTTP $actual"
+}
 
-# Test 1: Health endpoint
-echo "Test 1: Health endpoint"
-response=$(curl -s -w "\n%{http_code}" "$BACKEND_URL/health")
-http_code=$(echo "$response" | tail -n1)
-body=$(echo "$response" | sed '$d')
+check_status 'Backend health' "${BACKEND_URL%/}/health" 200
+check_status 'Public jobs listing' "${BACKEND_URL%/}/jobs?page=1&per_page=5" 200
+check_status 'Unauthenticated plan must be denied' "${BACKEND_URL%/}/users/me/plan" 401
 
-if [ "$http_code" = "200" ]; then
-    echo "✅ Health check passed (HTTP $http_code)"
-    echo "   Response: $body"
-else
-    echo "❌ Health check failed (HTTP $http_code)"
-    exit 1
+if [[ -n "$FRONTEND_URL" ]]; then
+    check_status 'Frontend home' "${FRONTEND_URL%/}/" 200
 fi
-echo
 
-# Test 2: Jobs listing
-echo "Test 2: Jobs listing"
-response=$(curl -s -w "\n%{http_code}" "$BACKEND_URL/jobs?page=1&per_page=5")
-http_code=$(echo "$response" | tail -n1)
-body=$(echo "$response" | sed '$d')
-
-if [ "$http_code" = "200" ]; then
-    echo "✅ Jobs listing passed (HTTP $http_code)"
-    job_count=$(echo "$body" | grep -o '"jobs":\[' | wc -l)
-    echo "   Jobs endpoint responded successfully"
-else
-    echo "❌ Jobs listing failed (HTTP $http_code)"
-    exit 1
-fi
-echo
-
-# Test 3: User plan endpoint (should work without auth)
-echo "Test 3: User plan endpoint (no auth fallback)"
-response=$(curl -s -w "\n%{http_code}" "$BACKEND_URL/users/plan?email=test@example.com")
-http_code=$(echo "$response" | tail -n1)
-body=$(echo "$response" | sed '$d')
-
-if [ "$http_code" = "200" ]; then
-    echo "✅ User plan endpoint passed (HTTP $http_code)"
-    echo "   Response: $body"
-else
-    echo "❌ User plan endpoint failed (HTTP $http_code)"
-    exit 1
-fi
-echo
-
-echo "🎉 All smoke tests passed!"
+# This is only an anonymous smoke check, not an authenticated Apply test.
+echo 'Read-only smoke checks passed.'
