@@ -32,3 +32,7 @@ jobs:
 
       - name: Backend tests
         run: pytest -q
+
+      - name: Atomic billing persistence (disposable PostgreSQL)
+        timeout-minutes: 5
+        run: bash ../ops/billing/verify_atomic_subscription_sync.sh
