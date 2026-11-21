@@ -1,14 +1,32 @@
-"""Job listing routes for JobSleuth AI backend."""
+"""Read real job postings from the public-read Supabase jobs table.
 
+Unlike the old MVP demo, no fictional job rows are returned when the database
+is empty or unavailable. The jobs table is SELECT-granted to the anon key with
+a public-read RLS policy in the isolated Supabase project.
+"""
+
+from __future__ import annotations
+
+import re
 from typing import Optional
-from fastapi import APIRouter, Query, HTTPException
+
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
+
+from lib.supabase import get_supabase_anon_client
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
+PUBLIC_FIELDS = (
+    "id,title,company,location,salary,salary_min,salary_max,"
+    "role_type,source,url,description,created_at"
+)
+# This raw value is embedded in PostgREST's or_() filter grammar; reject
+# control, filter and wildcard punctuation rather than allow filter injection.
+SAFE_SEARCH_RE = re.compile(r"^[\w\s-]+$", flags=re.UNICODE)
+
 
 class JobResponse(BaseModel):
-    """Job response model."""
     id: int
     title: str
     company: str
@@ -25,183 +43,101 @@ class JobResponse(BaseModel):
 
 
 class JobListResponse(BaseModel):
-    """Job list response model."""
     jobs: list[JobResponse]
     total: int
     page: int
     per_page: int
 
 
+def _safe_search(text: str | None, label: str) -> str | None:
+    if text is None:
+        return None
+    value = text.strip()
+    if not value:
+        return None
+    if not SAFE_SEARCH_RE.fullmatch(value):
+        raise HTTPException(
+            status_code=422,
+            detail=f"{label} contains unsupported search characters",
+        )
+    return value
+
+
+def _record(row: dict) -> JobResponse:
+    try:
+        return JobResponse(
+            **{key: value for key, value in row.items() if key != "created_at"},
+            # This is the insertion time, not necessarily the advertiser's
+            # publication date: do not claim an external job-posting timestamp.
+            date_posted=None,
+            ai_score=None,
+        )
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail="Job data unavailable") from exc
+
+
 @router.get("", response_model=JobListResponse)
 async def list_jobs(
-    q: Optional[str] = Query(None, description="Search query"),
-    location: Optional[str] = Query(None, description="Location filter"),
-    role_type: Optional[str] = Query(None, description="Role type filter"),
-    salary_min: Optional[int] = Query(None, ge=0, description="Minimum salary filter"),
-    page: int = Query(1, ge=1, description="Page number"),
-    per_page: int = Query(10, ge=1, le=100, description="Results per page"),
+    q: Optional[str] = Query(None, max_length=120, description="Job title or company"),
+    location: Optional[str] = Query(None, max_length=120),
+    role_type: Optional[str] = Query(None, max_length=120),
+    salary_min: Optional[int] = Query(None, ge=0),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(10, ge=1, le=100),
 ) -> JobListResponse:
-    """List jobs with optional filters and pagination.
-    
-    Args:
-        q: Search query
-        location: Location filter
-        page: Page number (starting from 1)
-        per_page: Results per page
-        
-    Returns:
-        Paginated list of jobs
-    """
-    # Mock data for now - will be replaced with actual database queries
-    mock_jobs = [
-        JobResponse(
-            id=1,
-            title="Senior Software Engineer",
-            company="TechCorp",
-            location="San Francisco, CA",
-            salary="$120k - $180k",
-            salary_min=120000,
-            salary_max=180000,
-            role_type="Full-time",
-            ai_score=0.87,
-            source="Indeed",
-            date_posted="2 days ago",
-            url="https://example.com/job/1",
-            description="We are seeking a talented Senior Software Engineer...",
-        ),
-        JobResponse(
-            id=2,
-            title="Frontend Developer",
-            company="StartupXYZ",
-            location="Remote",
-            salary="$90k - $130k",
-            salary_min=90000,
-            salary_max=130000,
-            role_type="Remote",
-            ai_score=0.82,
-            source="LinkedIn",
-            date_posted="1 week ago",
-            url="https://example.com/job/2",
-            description="Join our team as a Frontend Developer...",
-        ),
-        JobResponse(
-            id=3,
-            title="Full Stack Engineer",
-            company="BigTech Inc",
-            location="New York, NY",
-            salary="$100k - $150k",
-            salary_min=100000,
-            salary_max=150000,
-            role_type="Hybrid",
-            ai_score=0.78,
-            source="Indeed",
-            date_posted="3 days ago",
-            url="https://example.com/job/3",
-            description="We're looking for a Full Stack Engineer...",
-        ),
-    ]
-    
-    # Apply filters (mock implementation)
-    filtered_jobs = mock_jobs
-    if q:
-        q_lower = q.lower()
-        filtered_jobs = [
-            job for job in filtered_jobs
-            if q_lower in job.title.lower() or q_lower in job.company.lower()
-        ]
-    
-    if location:
-        location_lower = location.lower()
-        filtered_jobs = [
-            job for job in filtered_jobs
-            if location_lower in job.location.lower()
-        ]
-
-    if role_type:
-        role_type_lower = role_type.lower()
-        filtered_jobs = [
-            job for job in filtered_jobs
-            if job.role_type and role_type_lower in job.role_type.lower()
-        ]
-
-    if salary_min is not None:
-        filtered_jobs = [
-            job for job in filtered_jobs
-            if job.salary_max is None or job.salary_max >= salary_min
-        ]
-    
-    # Pagination
-    total = len(filtered_jobs)
+    search = _safe_search(q, "Job search")
+    place = _safe_search(location, "Location")
+    kind = _safe_search(role_type, "Role type")
     start = (page - 1) * per_page
-    end = start + per_page
-    paginated_jobs = filtered_jobs[start:end]
-    
-    return JobListResponse(
-        jobs=paginated_jobs,
-        total=total,
-        page=page,
-        per_page=per_page,
-    )
+    end = start + per_page - 1
+
+    try:
+        query = get_supabase_anon_client().table("jobs").select(
+            PUBLIC_FIELDS, count="exact"
+        )
+        if search:
+            # Escaping is enforced by SAFE_SEARCH_RE: no commas, parentheses,
+            # quote marks, periods, or LIKE wildcards can enter this expression.
+            query = query.or_(
+                f"title.ilike.%{search}%,company.ilike.%{search}%"
+            )
+        if place:
+            query = query.ilike("location", f"%{place}%")
+        if kind:
+            query = query.ilike("role_type", kind)
+        if salary_min is not None:
+            # Unknown salary maxima are excluded from a minimum-salary filter.
+            query = query.gte("salary_max", salary_min)
+        response = query.order("created_at", desc=True).range(start, end).execute()
+        if response.count is None or response.data is None:
+            raise HTTPException(status_code=503, detail="Job data unavailable")
+        return JobListResponse(
+            jobs=[_record(row) for row in response.data],
+            total=response.count,
+            page=page,
+            per_page=per_page,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Job data unavailable") from exc
 
 
 @router.get("/{job_id}", response_model=JobResponse)
 async def get_job(job_id: int) -> JobResponse:
-    """Get a single job by ID.
-    
-    Args:
-        job_id: Job ID
-        
-    Returns:
-        Job details
-        
-    Raises:
-        HTTPException: If job not found
-    """
-    # Mock data for now
-    mock_jobs = {
-        1: JobResponse(
-            id=1,
-            title="Senior Software Engineer",
-            company="TechCorp",
-            location="San Francisco, CA",
-            salary="$120k - $180k",
-            salary_min=120000,
-            salary_max=180000,
-            role_type="Full-time",
-            ai_score=0.87,
-            source="Indeed",
-            date_posted="2 days ago",
-            url="https://example.com/job/1",
-            description="""
-                <h3>About the Role</h3>
-                <p>We are seeking a talented Senior Software Engineer to join our growing team.</p>
-                <h3>Responsibilities</h3>
-                <ul>
-                    <li>Design and develop scalable web applications</li>
-                    <li>Collaborate with cross-functional teams</li>
-                    <li>Write clean, maintainable code</li>
-                </ul>
-            """,
-        ),
-        2: JobResponse(
-            id=2,
-            title="Frontend Developer",
-            company="StartupXYZ",
-            location="Remote",
-            salary="$90k - $130k",
-            salary_min=90000,
-            salary_max=130000,
-            role_type="Remote",
-            ai_score=0.82,
-            source="LinkedIn",
-            date_posted="1 week ago",
-            url="https://example.com/job/2",
-            description="<p>Join our team as a Frontend Developer...</p>",
-        ),
-    }
-    
-    job = mock_jobs.get(job_id)
-    if not job:
+    if job_id < 1:
         raise HTTPException(status_code=404, detail="Job not found")
-    
-    return job
+    try:
+        response = (
+            get_supabase_anon_client().table("jobs").select(PUBLIC_FIELDS)
+            .eq("id", job_id).limit(1).execute()
+        )
+        if response.data is None:
+            raise HTTPException(status_code=503, detail="Job data unavailable")
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return _record(response.data[0])
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Job data unavailable") from exc

@@ -19,11 +19,12 @@ UUID-job migration or restore the PropNexus database.**
 - Among the four evidence rows one is an internal `cv_profile` record. The
   `/evidence` endpoint intentionally excludes that record; expect **three**
   visible cards and a separately retrievable CV profile, not four visible cards.
-- NEW project contains **zero** saved jobs and zero subscription rows. No real
-  job listings have been imported, and the current `/jobs` backend serves
-  **mock example job listings**. Treat search/save-job scenarios as incomplete
-  until the listings pipeline is connected. Do not claim a successful live job
-  save against a fake job ID.
+- NEW project contains **zero** saved jobs and zero subscription rows.
+  This dependent PR replaces the demo `/jobs` backend with database-backed
+  public-read queries, so its response is an honest empty list until actual
+  vacancy ingestion is enabled. No real jobs have been imported. Do not seed
+  fake jobs merely to make Saved Jobs tests pass; verify real ingestion
+  separately before the launch.
 - Railway service `jobsleuth-ai` is online on `main` with root `backend`.
   Its variable names include `SUPABASE_URL`, `SUPABASE_KEY`,
   `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `FRONTEND_URL` and
