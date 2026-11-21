@@ -78,10 +78,13 @@ data remain untouched, and Railway/Vercel/Stripe must not change.
 
 **Create Auth account first:** In the NEW project's [Authentication → Users
 dashboard](https://supabase.com/dashboard/project/uqvhnqhbushhtkthwrhk/auth/users),
-select **Add user → Send invitation** for the selected permanent email. Check
-Authentication → URL Configuration first so the invite redirects to a valid
-approved site. Complete email verification, then confirm exactly one NEW Auth
-user exists. Supabase connector does not expose Auth user invitation; do not
+select **Add user → Create new user** and choose the permanent email and a
+strong password privately; if offered, use **Auto Confirm User** after verifying
+it is your own address. This avoids confirmation redirects while the production
+frontend still points at the old project. Alternatively use **Send invitation**,
+but first check Authentication → URL Configuration to ensure the link has a
+valid destination. In either case, confirm exactly one verified NEW Auth user
+exists before the private transfer. Supabase connector does not expose Auth user invitation; do not
 insert directly into Supabase-managed `auth.users` tables. No password or secret
 should be given to ChatGPT.
 

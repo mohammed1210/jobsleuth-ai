@@ -119,8 +119,10 @@ def main():
 
     src = dst = None
     try:
-        src = psycopg.connect(srcurl, autocommit=True, row_factory=dict_row)
-        dst = psycopg.connect(dsturl, autocommit=True, row_factory=dict_row)
+        src = psycopg.connect(srcurl, autocommit=True, row_factory=dict_row,
+                              sslmode="require", connect_timeout=10)
+        dst = psycopg.connect(dsturl, autocommit=True, row_factory=dict_row,
+                              sslmode="require", connect_timeout=10)
         src.execute("begin isolation level repeatable read read only")
         dst.execute("begin isolation level serializable read write" if args.commit
                     else "begin isolation level repeatable read read only")
