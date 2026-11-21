@@ -19,6 +19,19 @@ Never perform a full shared-project restore onto JobSleuth: it would copy unrela
 
 These figures are **not** a lock or a final export count. Repeat the read-only inventory immediately before transfer and reconcile any new writes.
 
+## Consolidating test accounts into ONE permanent JobSleuth account (owner-reported plan)
+
+On 21 November 2026, the owner confirmed that **only they have used JobSleuth**, sometimes via **one to three test logins**. This is useful planning context, but it is **not identity proof that all five users in the mixed PropNexus/JobSleuth Auth project are theirs**. Two Auth users with Evidence Bank records must still be verified against an owner-controlled private account list before any actual import.
+
+**Proposed default:** create **one new verified JobSleuth Auth account** in the dedicated project using the owner's chosen permanent email/password and a fresh login. The old accounts remain intact and can still serve PropNexus. The private mapping can be explicitly *many old IDs to one new ID*, but only for source accounts the owner verifies.
+
+- Two source Evidence Bank owners can consolidate 1 + 3 cards into **4 cards under one new Auth UUID**; preserve every card ID and field and both timestamps, after checking source record ID collisions.
+- Pilot feedback includes **3 historic test submissions**. Preserve them as a private backup even if they are excluded from *real pilot conversion metrics*. Do not silently count them as real 5-user pilot results; decide whether to import/archive before the actual transfer.
+- The other **three source accounts** remain untouched until the owner identifies which, if any, are unrelated to JobSleuth. Even if they are all test accounts, we need not migrate unnecessary logins.
+- The migration rehearsal `stage2_single_account_consolidation.sql` simulates 2 old owners -> 1 new owner **only in a disposable local database**, proves data and timestamp preservation across all columns, and ROLLBACKs its simulated consolidation.
+- For actual execution, separately authorize the confirmed set of source account identities, the chosen permanent login and whether to migrate pilot feedback. No `auth.users` rows should be inserted by SQL in a live project: use supported Supabase Auth signup/invitation/admin APIs with verified ownership. No actual user has been invited or migrated.
+- **Do not merge the accounts on the legacy mixed-use Supabase project**. Only copy approved app records to the fresh account; this avoids altering PropNexus identity or data.
+
 ## Private owner identification (not done)
 
 1. Privately identify which specific people control the **two Auth accounts with JobSleuth Evidence Bank records**. Verify application affiliation from the service/consent context and a verified account ownership process — not from untrusted `raw_user_meta_data` or a user-supplied email alone.

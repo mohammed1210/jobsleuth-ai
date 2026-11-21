@@ -23,6 +23,8 @@ grant execute on function auth.uid() to anon, authenticated, service_role;
 SETUP
 sql < ops/supabase/fresh_project_bootstrap.sql > /dev/null
 sql < ops/supabase/stage2_synthetic_rehearsal.sql > /dev/null
+# Rehearse 2 old test owners -> one new account under a rolled-back transaction.
+sql < ops/supabase/stage2_single_account_consolidation.sql > /dev/null
 # Role tests use synthetic identities. A signed-in user cannot see another
 # user's Evidence Bank or feedback, and anonymous billing access is denied.
 a_cards="$(sql -qAtc "set role authenticated; set request.jwt.claim.sub = '00000000-0000-4000-8000-000000000031'; select count(*) from public.evidence_cards;")"
