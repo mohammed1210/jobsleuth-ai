@@ -138,7 +138,7 @@ def test_pagination_uses_exact_db_total(db):
     assert len(res.json()["jobs"]) == 1
 
 
-@pytest.mark.parametrize("search", ["Lead,role", "test)or(title.eq.x)", "100%", "Developer.name"])
+@pytest.mark.parametrize("search", ["Lead,role", "test)or(title.eq.x)", "100%", "Developer.name", "foo_bar", "foo\nbar"])
 def test_postgrest_filter_injection_rejected(db, search):
     res = client.get("/jobs", params={"q": search})
     assert res.status_code == 422

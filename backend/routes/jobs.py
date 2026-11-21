@@ -23,7 +23,7 @@ PUBLIC_FIELDS = (
 )
 # This raw value is embedded in PostgREST's or_() filter grammar; reject
 # control, filter and wildcard punctuation rather than allow filter injection.
-SAFE_SEARCH_RE = re.compile(r"^[\w\s-]+$", flags=re.UNICODE)
+SAFE_SEARCH_RE = re.compile(r"^[^\W_]+(?:[ -]+[^\W_]+)*$", flags=re.UNICODE)
 
 
 class JobResponse(BaseModel):
