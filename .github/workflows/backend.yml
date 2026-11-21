@@ -40,3 +40,6 @@ jobs:
       - name: Synthetic Stage 2 account and evidence migration rehearsal
         timeout-minutes: 5
         run: bash ../ops/supabase/verify_stage2_rehearsal.sh
+
+      - name: Private migration guardrail unit tests (offline)
+        run: python ../ops/supabase/test_private_stage2_transfer.py

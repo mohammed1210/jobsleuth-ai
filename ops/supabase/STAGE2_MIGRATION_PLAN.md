@@ -67,3 +67,51 @@ On 21 November 2026, the owner confirmed that **only they have used JobSleuth**,
 The non-identifying report in `ops/supabase/stage2_read_only_inventory.sql` can be reviewed in the OLD project via read-only SQL. It outputs no email, actual UUID or evidence-card content. If an operator needs the actual account identities, they must review them privately in Supabase under appropriate access controls.
 
 **Current authorization stops at Stage 2 planning.** Neither this PR nor CI transfers records or changes Railway, Vercel, Stripe or either production database.
+
+
+## Stage 2 real-transfer operator runbook (approved, but not yet executed)
+
+The owner authorised the destination Auth account and transfer of FOUR evidence
+cards and THREE historical feedback records from exactly TWO known, personally
+owned test logins into ONE permanent new JobSleuth login. Source accounts and
+data remain untouched, and Railway/Vercel/Stripe must not change.
+
+**Create Auth account first:** In the NEW project's [Authentication → Users
+dashboard](https://supabase.com/dashboard/project/uqvhnqhbushhtkthwrhk/auth/users),
+select **Add user → Send invitation** for the selected permanent email. Check
+Authentication → URL Configuration first so the invite redirects to a valid
+approved site. Complete email verification, then confirm exactly one NEW Auth
+user exists. Supabase connector does not expose Auth user invitation; do not
+insert directly into Supabase-managed `auth.users` tables. No password or secret
+should be given to ChatGPT.
+
+**Private migration utility:** `ops/supabase/private_stage2_transfer.py` runs
+on the owner's authorised private computer, with `psycopg[binary]` installed
+in a local venv. Never run it through GitHub CI or on a shared terminal. Set
+these environment variables privately using the source/target Supabase
+"Connect" panels; NEVER paste values into Git or this conversation:
+
+- `JOBSLEUTH_SOURCE_DB_URL` — OLD shared project PostgreSQL URL
+- `JOBSLEUTH_TARGET_DB_URL` — NEW isolated project PostgreSQL URL
+- `JOBSLEUTH_SOURCE_EMAILS` — exactly two verified test-account email addresses, comma-separated
+- `JOBSLEUTH_DEST_EMAIL` — permanent new account email
+
+Run without arguments first (read-only dry-run). Confirm the source records and
+destination are as expected and that the new user has completed verification.
+Only then run:
+
+```sh
+python ops/supabase/private_stage2_transfer.py --commit \
+  --confirm CONFIRM_4_EVIDENCE_3_FEEDBACK
+```
+
+The script requires exact project URLs, two verified source accounts and one
+verified destination account. It accepts precisely 4 evidence cards + 3 feedback
+rows, performs an atomic NEW-project SQL transaction, preserves IDs/all business
+fields/timestamps, and checks counts and remapped ownership before commit. It
+does not modify the OLD database and does not print personal record contents.
+
+**After transfer:** old production still writes to the shared project. Avoid
+editing evidence until an approved coordinated frontend/backend cutover; rerun
+an inventory to detect any new/changed source records. Production cutover and
+billing remain separate approvals.
