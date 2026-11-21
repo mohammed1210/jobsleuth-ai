@@ -1,8 +1,12 @@
-"""Saved jobs routes authenticated with Supabase access tokens."""
+"""Saved Jobs backed by real Supabase data and verified Auth tokens.
 
+Production routes never return sample rows or report success after a database
+failure. The legacy /saved alias shares the same safe implementation.
+"""
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Header, HTTPException
@@ -28,10 +32,8 @@ class SavedJobResponse(BaseModel):
 
 
 def _extract_token(authorization: str | None) -> str:
-    if not authorization:
+    if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Authorization Bearer token required")
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Invalid authorization format")
     token = authorization.removeprefix("Bearer ").strip()
     if not token or token == "invalid":
         raise HTTPException(status_code=401, detail="Invalid or expired token")
@@ -39,81 +41,101 @@ def _extract_token(authorization: str | None) -> str:
 
 
 async def verify_supabase_user(authorization: str | None) -> dict[str, str]:
+    """Validate the token against the *configured* Supabase Auth project."""
     token = _extract_token(authorization)
-    if not settings.SUPABASE_URL:
-        return {"id": "user_123", "email": "user@example.com"}
+    if not settings.SUPABASE_URL or not (settings.SUPABASE_KEY or settings.SUPABASE_SERVICE_ROLE_KEY):
+        raise HTTPException(status_code=503, detail="Authentication provider is not configured")
 
-    headers = {"Authorization": f"Bearer {token}"}
-    api_key = settings.SUPABASE_KEY or settings.SUPABASE_SERVICE_ROLE_KEY
-    if api_key:
-        headers["apikey"] = api_key
-
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "apikey": settings.SUPABASE_KEY or settings.SUPABASE_SERVICE_ROLE_KEY,
+    }
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.get(f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1/user", headers=headers)
-        if response.status_code >= 400:
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-        user = response.json()
-        return {"id": user.get("id") or user.get("sub"), "email": user.get("email", "")}
-    except HTTPException:
-        raise
-    except Exception:
-        if token == "valid_token":
-            return {"id": "user_123", "email": "user@example.com"}
-        raise HTTPException(status_code=401, detail="Could not validate token")
+            response = await client.get(
+                f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1/user", headers=headers
+            )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail="Authentication provider unavailable") from exc
+
+    if response.status_code >= 500:
+        raise HTTPException(status_code=503, detail="Authentication provider unavailable")
+    if response.status_code >= 400:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    try:
+        data = response.json()
+        user_id = str(UUID(data["id"]))
+        if not data.get("email"):
+            raise ValueError("Verified email is required")
+    except (ValueError, TypeError, KeyError, AttributeError) as exc:
+        raise HTTPException(status_code=401, detail="Invalid identity response") from exc
+    return {"id": user_id, "email": str(data["email"])}
 
 
-def _mock_saved_jobs(user_id: str) -> list[SavedJobResponse]:
-    return [
-        SavedJobResponse(
-            id=1,
-            user_id=user_id,
-            job_id=1,
-            saved_at="2026-05-22T10:30:00Z",
-            job={
-                "id": 1,
-                "title": "Senior Software Engineer",
-                "company": "Northstar Labs",
-                "location": "Remote",
-                "salary": "$140k - $180k",
-                "source": "JobSleuth seed",
-                "url": "https://example.com/jobs/1",
-            },
-        )
-    ]
+def _storage_unavailable(action: str, exc: Exception | None = None) -> HTTPException:
+    return HTTPException(status_code=503, detail=f"Saved Jobs storage unavailable during {action}")
+
+
+def _map_record(row: dict[str, Any]) -> SavedJobResponse:
+    record = dict(row)
+    if "jobs" in record:
+        record["job"] = record.pop("jobs")
+    if "job" not in record or record["job"] is None:
+        raise _storage_unavailable("reading job details")
+    try:
+        return SavedJobResponse(**record)
+    except (ValueError, TypeError) as exc:
+        raise _storage_unavailable("parsing saved jobs", exc) from exc
 
 
 async def _list_saved(authorization: str | None) -> list[SavedJobResponse]:
     user = await verify_supabase_user(authorization)
-    user_id = user["id"]
     try:
-        result = get_supabase_client().table("saved_jobs").select("*, jobs(*)").eq("user_id", user_id).execute()
-        rows = result.data or []
-        if rows:
-            return [SavedJobResponse(**row) for row in rows]
-    except Exception:
-        pass
-    return _mock_saved_jobs(user_id)
+        result = (
+            get_supabase_client().table("saved_jobs")
+            .select("*, jobs(*)").eq("user_id", user["id"]).execute()
+        )
+        return [_map_record(row) for row in (result.data or [])]
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _storage_unavailable("listing", exc) from exc
 
 
 async def _save_job(request: SavedJobRequest, authorization: str | None) -> SavedJobResponse:
     user = await verify_supabase_user(authorization)
-    payload = {"user_id": user["id"], "job_id": request.job_id}
     try:
-        result = get_supabase_client().table("saved_jobs").upsert(payload).execute()
-        if result.data:
-            return SavedJobResponse(**result.data[0])
-    except Exception:
-        pass
-    return SavedJobResponse(id=1, user_id=user["id"], job_id=request.job_id, saved_at="2026-05-22T10:30:00Z")
+        storage = get_supabase_client()
+        jobs = (
+            storage.table("jobs").select("id")
+            .eq("id", request.job_id).limit(1).execute()
+        )
+        if not jobs.data:
+            raise HTTPException(status_code=404, detail="Job does not exist in the database")
+        saved = (
+            storage.table("saved_jobs")
+            .upsert({"user_id": user["id"], "job_id": request.job_id},
+                    on_conflict="user_id,job_id")
+            .execute()
+        )
+        if not saved.data:
+            raise _storage_unavailable("saving")
+        return SavedJobResponse(**saved.data[0])
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _storage_unavailable("saving", exc) from exc
 
 
 async def _delete_saved(job_id: int, authorization: str | None) -> dict[str, bool]:
     user = await verify_supabase_user(authorization)
     try:
-        get_supabase_client().table("saved_jobs").delete().eq("user_id", user["id"]).eq("job_id", job_id).execute()
-    except Exception:
-        pass
+        (
+            get_supabase_client().table("saved_jobs")
+            .delete().eq("user_id", user["id"]).eq("job_id", job_id).execute()
+        )
+    except Exception as exc:
+        raise _storage_unavailable("deleting", exc) from exc
     return {"ok": True}
 
 

@@ -1,122 +1,80 @@
-"""User and plan management routes with bearer token precedence."""
+"""Verified user profiles and free/paid plan information."""
+from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Header
-from pydantic import BaseModel
-from enum import Enum
+
+from fastapi import APIRouter, Header, HTTPException
+from pydantic import BaseModel, Field
+
+from lib.supabase import get_supabase_client
+from routes.saved_jobs import verify_supabase_user
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-class PlanType(str, Enum):
-    """User plan types."""
-    FREE = "free"
-    PRO = "pro"
-    INVESTOR = "investor"
-
-
-class UserPlanResponse(BaseModel):
-    """User plan response."""
-    user_id: str
-    email: str
-    plan: PlanType
-    features: dict[str, bool]
-
-
-def verify_bearer_token(authorization: Optional[str]) -> str:
-    """Verify bearer token with precedence and return user ID.
-    
-    Bearer token takes precedence over other auth methods.
-    
-    Args:
-        authorization: Authorization header
-        
-    Returns:
-        User ID
-        
-    Raises:
-        HTTPException: If token is invalid or missing
-    """
-    if not authorization:
-        raise HTTPException(
-            status_code=401, 
-            detail="Authorization required. Please provide a Bearer token."
-        )
-    
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=401, 
-            detail="Invalid authorization format. Expected: Bearer <token>"
-        )
-    
-    token = authorization[7:]  # Remove "Bearer " prefix
-    
-    # Mock validation - in production, validate with Supabase JWT
-    if not token or token == "invalid":
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-    
-    # Return mock user ID - in production, decode JWT and get user ID
-    # The JWT validation takes precedence over any other auth method
-    return "user_123"
+class ProfileUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    desired_title: str | None = Field(default=None, max_length=140)
+    location: str | None = Field(default=None, max_length=140)
 
 
 @router.get("/me/plan")
 async def get_user_plan(authorization: Optional[str] = Header(None)) -> dict:
-    """Return the real verified subscription plan, never a mock Pro plan."""
+    """Return verified entitlements (never a mock paid plan)."""
     from lib.billing_entitlements import get_entitlements
     return await get_entitlements(authorization)
 
 
-@router.get("/me", response_model=dict)
-async def get_user_profile(
-    authorization: Optional[str] = Header(None)
-) -> dict:
-    """Get the authenticated user's profile (bearer token precedence).
-    
-    Args:
-        authorization: Bearer token (takes precedence)
-        
-    Returns:
-        User profile
-        
-    Raises:
-        HTTPException: If unauthorized
-    """
-    # Bearer token verification takes precedence
-    user_id = verify_bearer_token(authorization)
-    
-    # Mock implementation
-    return {
-        "user_id": user_id,
-        "email": "user@example.com",
-        "name": "John Doe",
-        "created_at": "2024-01-01T00:00:00Z",
-    }
+@router.get("/me")
+async def get_user_profile(authorization: Optional[str] = Header(None)) -> dict:
+    user = await verify_supabase_user(authorization)
+    try:
+        response = (
+            get_supabase_client().table("user_profiles")
+            .select("full_name,desired_title,location,created_at")
+            .eq("user_id", user["id"]).limit(1).execute()
+        )
+        rows = response.data or []
+        if len(rows) > 1:
+            raise HTTPException(status_code=503, detail="Profile records require reconciliation")
+        record = rows[0] if rows else {}
+        return {
+            "user_id": user["id"],
+            "email": user["email"],
+            "name": record.get("full_name"),
+            "desired_title": record.get("desired_title"),
+            "location": record.get("location"),
+            "created_at": record.get("created_at"),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Profile storage unavailable") from exc
 
 
-@router.put("/me", response_model=dict)
+@router.put("/me")
 async def update_user_profile(
-    profile_data: dict,
-    authorization: Optional[str] = Header(None)
+    profile_data: ProfileUpdate, authorization: Optional[str] = Header(None)
 ) -> dict:
-    """Update the authenticated user's profile (bearer token precedence).
-    
-    Args:
-        profile_data: Profile update data
-        authorization: Bearer token (takes precedence)
-        
-    Returns:
-        Updated profile
-        
-    Raises:
-        HTTPException: If unauthorized
-    """
-    # Bearer token verification takes precedence
-    user_id = verify_bearer_token(authorization)
-    
-    # Mock implementation - in production, update database
-    return {
-        "status": "success",
-        "user_id": user_id,
-        "updated_fields": list(profile_data.keys()),
-    }
+    user = await verify_supabase_user(authorization)
+    changes = profile_data.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(status_code=422, detail="Provide at least one profile field")
+    if "name" in changes:
+        changes["full_name"] = changes.pop("name")
+    changes["updated_at"] = datetime.now(timezone.utc).isoformat()
+    try:
+        response = (
+            get_supabase_client().table("user_profiles")
+            .upsert({"user_id": user["id"], **changes}, on_conflict="user_id")
+            .execute()
+        )
+        if not response.data:
+            raise HTTPException(status_code=503, detail="Profile update was not persisted")
+        return {"status": "success", "user_id": user["id"],
+                "updated_fields": sorted(set(changes) - {"updated_at"})}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Profile storage unavailable") from exc
