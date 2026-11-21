@@ -37,11 +37,21 @@ def ensure_project(url, ref):
         "PGDATABASE", "PGPORT", "PGOPTIONS",
     )):
         raise ValueError("Remove inherited libpq PG* connection-routing variables")
-    direct = u.hostname == "db." + ref + ".supabase.co"
+    # libpq accepts comma-delimited failover hosts and percent-encoded socket
+    # directory paths. Both can bypass a naive pooler suffix check.
+    hostname = u.hostname or ""
+    if unquote(hostname) != hostname or any(
+        c not in "abcdefghijklmnopqrstuvwxyz0123456789.-" for c in hostname
+    ) or hostname.startswith(".") or ".." in hostname:
+        raise ValueError("Reject encoded, socket, multi-host or invalid database hosts")
+    direct = hostname == "db." + ref + ".supabase.co"
     if direct and unquote(u.username or "") != "postgres":
         raise ValueError("Unexpected direct-database user")
-    pooler = (u.hostname or "").endswith(".pooler.supabase.com") and unquote(
-        u.username or "") == "postgres." + ref
+    pooler = (hostname.endswith(".pooler.supabase.com")
+              and hostname.startswith("aws-")
+              and hostname.count(".") == 3
+              and unquote(
+        u.username or "") == "postgres." + ref)
     if not (direct or pooler):
         raise ValueError("Database project reference does not match approved source/target")
 

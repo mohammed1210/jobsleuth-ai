@@ -58,6 +58,21 @@ class TransferGuards(unittest.TestCase):
                 m.TARGET_REF,
             )
 
+    def test_multi_host_and_socket_paths_are_rejected(self):
+        attacks = (
+            "postgresql://postgres.uqvhnqhbushhtkthwrhk:TEST@"
+            "attacker.example,aws-0-eu-west-2.pooler.supabase.com/postgres",
+            "postgresql://postgres.uqvhnqhbushhtkthwrhk:TEST@"
+            "%2Ftmp%2Ffake.pooler.supabase.com/postgres",
+            "postgresql://postgres.uqvhnqhbushhtkthwrhk:TEST@"
+            "aws-0-eu-west-2.pooler.supabase.com%2Ftmp/postgres",
+            "postgresql://postgres.uqvhnqhbushhtkthwrhk:TEST@"
+            "fake.evil.pooler.supabase.com/postgres",
+        )
+        for value in attacks:
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                m.ensure_project(value, m.TARGET_REF)
+
     def test_owner_list(self):
         self.assertEqual(m.emails_from_env("A@example.com, B@example.com"),
                          ["a@example.com", "b@example.com"])
