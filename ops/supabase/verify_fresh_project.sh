@@ -39,7 +39,7 @@ insert into public.evidence_cards(user_id,title)
          ('00000000-0000-4000-8000-000000000002','Synthetic owner B');
 TESTDATA
 # A real RLS check, with SET ROLE and a synthetic JWT claim.
-visible="$(sql -Atc "set role authenticated; set request.jwt.claim.sub = '00000000-0000-4000-8000-000000000001'; select count(*) from public.evidence_cards;")"
+visible="$(sql -qAtc "set role authenticated; set request.jwt.claim.sub = '00000000-0000-4000-8000-000000000001'; select count(*) from public.evidence_cards;")"
 test "$visible" = 1
 # Anonymous access to evidence and subscriptions must be denied by ACLs.
 if sql -qAtc 'set role anon; select count(*) from public.subscriptions;' >/dev/null 2>&1; then
