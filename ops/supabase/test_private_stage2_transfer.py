@@ -25,6 +25,39 @@ class TransferGuards(unittest.TestCase):
         with self.assertRaises(ValueError):
             m.ensure_project(new, m.SOURCE_REF)
 
+    def test_connection_override_attempts_are_rejected(self):
+        base = "postgresql://postgres:TEST@db.uqvhnqhbushhtkthwrhk.supabase.co/postgres"
+        for suffix in (
+            "?host=db.wsfemkhxttddztnhthkc.supabase.co",
+            "?hostaddr=127.0.0.1",
+            "?user=postgres.wsfemkhxttddztnhthkc",
+            "?service=other",
+            "#host=db.wsfemkhxttddztnhthkc.supabase.co",
+        ):
+            with self.subTest(suffix=suffix):
+                with self.assertRaises(ValueError):
+                    m.ensure_project(base + suffix, m.TARGET_REF)
+
+    def test_environment_connection_routing_is_rejected(self):
+        from unittest.mock import patch
+        base = "postgresql://postgres:TEST@db.uqvhnqhbushhtkthwrhk.supabase.co/postgres"
+        for name in ("PGHOSTADDR", "PGSERVICE", "PGHOST", "PGUSER"):
+            with self.subTest(name=name), patch.dict(m.os.environ, {name: "unexpected"}):
+                with self.assertRaises(ValueError):
+                    m.ensure_project(base, m.TARGET_REF)
+
+    def test_nonstandard_db_and_user_are_rejected(self):
+        with self.assertRaises(ValueError):
+            m.ensure_project(
+                "postgresql://postgres:TEST@db.uqvhnqhbushhtkthwrhk.supabase.co/other",
+                m.TARGET_REF,
+            )
+        with self.assertRaises(ValueError):
+            m.ensure_project(
+                "postgresql://unexpected:TEST@db.uqvhnqhbushhtkthwrhk.supabase.co/postgres",
+                m.TARGET_REF,
+            )
+
     def test_owner_list(self):
         self.assertEqual(m.emails_from_env("A@example.com, B@example.com"),
                          ["a@example.com", "b@example.com"])

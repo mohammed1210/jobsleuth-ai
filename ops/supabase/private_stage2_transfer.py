@@ -25,7 +25,21 @@ def ensure_project(url, ref):
     u = urlsplit(url)
     if u.scheme not in ("postgresql", "postgres") or not u.password:
         raise ValueError("Use a password-protected Supabase PostgreSQL connection URL")
+    # libpq permits query-string host, hostaddr, user and service overrides.
+    # Forbid ALL connection URL options so the effective destination cannot
+    # differ from the URL's verified hostname/project ID.
+    if u.query or u.fragment:
+        raise ValueError("Connection URL query/fragment overrides are forbidden")
+    if u.path != "/postgres" or u.port not in (None, 5432, 6543):
+        raise ValueError("Expected the standard Supabase postgres database/port")
+    if any(os.environ.get(name) for name in (
+        "PGHOSTADDR", "PGHOST", "PGSERVICE", "PGSERVICEFILE", "PGUSER",
+        "PGDATABASE", "PGPORT", "PGOPTIONS",
+    )):
+        raise ValueError("Remove inherited libpq PG* connection-routing variables")
     direct = u.hostname == "db." + ref + ".supabase.co"
+    if direct and unquote(u.username or "") != "postgres":
+        raise ValueError("Unexpected direct-database user")
     pooler = (u.hostname or "").endswith(".pooler.supabase.com") and unquote(
         u.username or "") == "postgres." + ref
     if not (direct or pooler):
