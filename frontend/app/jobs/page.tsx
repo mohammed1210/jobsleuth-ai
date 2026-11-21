@@ -155,14 +155,13 @@ export default function JobsPage() {
             <div className="inline-flex items-center justify-center">
               <div className="w-12 h-12 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin"></div>
             </div>
-            <p className="mt-4 text-lg text-gray-600 font-medium">Finding perfect matches...</p>
-            <p className="mt-2 text-sm text-gray-500">AI is analyzing thousands of opportunities</p>
+            <p className="mt-4 text-lg text-gray-600 font-medium">Loading available vacancies...</p>
+            <p className="mt-2 text-sm text-gray-500">Retrieving current job listings from JobSleuth.</p>
           </div>
         ) : (
           <>
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center space-x-3">
-                
                 <span className="text-lg text-gray-700">
                   <span className="font-bold text-gray-900">{totalJobs}</span> jobs found
                 </span>
