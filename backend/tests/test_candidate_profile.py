@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from backend.main import app
@@ -10,6 +12,16 @@ from routes.candidate_profile import CandidateExperience, CandidateProfileData
 from routes.vacancy_analysis import _profile_support
 
 client = TestClient(app)
+
+
+# These route tests use a deliberately synthetic identity, never a real JWT.
+@pytest.fixture(autouse=True)
+def synthetic_auth(monkeypatch):
+    async def verified(authorization):
+        if authorization != "Bearer valid_token":
+            raise HTTPException(status_code=401, detail="Invalid test bearer token")
+        return {"id": "user_123", "email": "test@example.org"}
+    monkeypatch.setattr(candidate_profile, "verify_supabase_user", verified)
 
 
 class FakeResult:

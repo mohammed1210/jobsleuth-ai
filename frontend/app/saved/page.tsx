@@ -5,7 +5,7 @@ import Link from 'next/link';
 import type { Session } from '@supabase/supabase-js';
 import HeaderClient from '@/components/HeaderClient';
 import JobCard from '@/components/JobCard';
-import { deleteSavedJob, fallbackJobs, fetchSavedJobs, type Job, type SavedJob } from '@/lib/api';
+import { deleteSavedJob, fetchSavedJobs, type Job, type SavedJob } from '@/lib/api';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 
 export default function SavedJobsPage() {
@@ -40,7 +40,12 @@ export default function SavedJobsPage() {
     run();
   }, []);
 
-  const mapSavedRows = (rows: SavedJob[]) => rows.map((row) => row.job ?? fallbackJobs.find((job) => job.id === row.job_id)).filter(Boolean) as Job[];
+  const mapSavedRows = (rows: SavedJob[]) => {
+    if (rows.some((row) => !row.job)) {
+      throw new Error('Saved job details were not returned by the database.');
+    }
+    return rows.map((row) => row.job as Job);
+  };
 
   const loadSavedJobs = async (activeSession: Session) => {
     setLoading(true);
@@ -50,16 +55,22 @@ export default function SavedJobsPage() {
       setSavedJobs(mapSavedRows(rows));
     } catch (err) {
       console.error('Failed to fetch saved jobs:', err);
-      setError('Saved jobs API unavailable, showing a local sample.');
-      setSavedJobs(fallbackJobs.slice(0, 1));
+      setError('Saved jobs could not be loaded. No changes were made; please try again.');
+      setSavedJobs([]);
     } finally {
       setLoading(false);
     }
   };
 
   const handleUnsave = async (jobId: number) => {
-    if (session) await deleteSavedJob(jobId, session);
-    setSavedJobs((rows) => rows.filter((job) => job.id !== jobId));
+    if (!session) throw new Error('Please sign in before removing saved jobs.');
+    try {
+      await deleteSavedJob(jobId, session);
+      setSavedJobs((rows) => rows.filter((job) => job.id !== jobId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not remove the saved job.');
+      throw err;
+    }
   };
 
   if (!userEmail && !loading) {

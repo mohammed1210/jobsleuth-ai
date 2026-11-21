@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import HeaderClient from '@/components/HeaderClient';
 import JobCard from '@/components/JobCard';
-import { fallbackJobs, fetchJobs as fetchJobsFromApi, saveJob, type Job } from '@/lib/api';
+import { fetchJobs as fetchJobsFromApi, saveJob, type Job } from '@/lib/api';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 
 export default function JobsPage() {
@@ -34,8 +34,8 @@ export default function JobsPage() {
       setTotalPages(Math.max(1, Math.ceil(data.total / data.per_page)));
     } catch (err) {
       console.error('Failed to fetch jobs:', err);
-      setError('Backend unavailable, showing local sample jobs.');
-      setJobs(fallbackJobs);
+      setError('Job listings are temporarily unavailable. Please try again.');
+      setJobs([]);
       setTotalPages(1);
     } finally {
       setLoading(false);
@@ -57,14 +57,14 @@ export default function JobsPage() {
 
   async function handleSaveJob(jobId: number) {
     if (!isSupabaseConfigured()) {
-      setError('Sign in is not configured yet, but this job is ready to save once Supabase env vars are set.');
-      return;
+      setError('Sign in is not configured.');
+      throw new Error('Sign in is not configured.');
     }
     const supabase = getSupabaseClient();
     const { data } = await supabase.auth.getSession();
     if (!data.session) {
       setError('Sign in to save jobs.');
-      return;
+      throw new Error('Sign in to save jobs.');
     }
     await saveJob(jobId, data.session);
   }

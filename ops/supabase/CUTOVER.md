@@ -1,5 +1,11 @@
 # JobSleuth isolated Supabase project — cutover gate
 
+> **UPDATED 21 November 2026:** Stage 1 and the selective Stage 2 data
+> migration are complete. The historical checklist below describes the PRE-
+> MIGRATION state and is retained for audit only. For current release gates,
+> see [Stage 3 cutover runbook](STAGE3_CUTOVER.md). Do not reapply bootstrap or
+> repeat the approved user/evidence migration.
+
 **Status: draft, review only.** Supabase project `uqvhnqhbushhtkthwrhk` is healthy but empty as last observed on 21 November 2026. The running Railway backend still uses the older Supabase project associated with PropNexus. No cutover has been approved.
 
 ## Why a fresh bootstrap?
