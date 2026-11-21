@@ -17,11 +17,13 @@ export default function JobsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalJobs, setTotalJobs] = useState(0);
+  const [loadedSuccessfully, setLoadedSuccessfully] = useState(false);
   const perPage = 10;
 
   async function loadJobs() {
     setLoading(true);
     setError(null);
+    setLoadedSuccessfully(false);
     try {
       const data = await fetchJobsFromApi({
         ...(searchQuery ? { q: searchQuery } : {}),
@@ -33,12 +35,14 @@ export default function JobsPage() {
       });
       setJobs(data.jobs);
       setTotalJobs(data.total);
+      setLoadedSuccessfully(true);
       setTotalPages(Math.max(1, Math.ceil(data.total / data.per_page)));
     } catch (err) {
       console.error('Failed to fetch jobs:', err);
       setError('Job listings are temporarily unavailable. Please try again.');
       setJobs([]);
       setTotalJobs(0);
+      setLoadedSuccessfully(false);
       setTotalPages(1);
     } finally {
       setLoading(false);
@@ -161,18 +165,20 @@ export default function JobsPage() {
         ) : (
           <>
             <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-3">
-                <span className="text-lg text-gray-700">
-                  <span className="font-bold text-gray-900">{totalJobs}</span> jobs found
-                </span>
-              </div>
+              {loadedSuccessfully && (
+                <div className="flex items-center space-x-3">
+                  <span className="text-lg text-gray-700">
+                    <span className="font-bold text-gray-900">{totalJobs}</span> jobs found
+                  </span>
+                </div>
+              )}
 
             </div>
             <div className="space-y-6 mb-12">
               {jobs.map((job) => (
                 <JobCard key={job.id} job={job} onSave={handleSaveJob} aiScore={job.ai_score ?? undefined} />
               ))}
-              {jobs.length === 0 && (
+              {loadedSuccessfully && jobs.length === 0 && (
                 <div className="card p-8 text-center text-gray-600">
                   No matching vacancies are available in the database yet. Try another search or check back later.
                 </div>

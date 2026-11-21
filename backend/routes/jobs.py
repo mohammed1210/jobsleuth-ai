@@ -108,7 +108,7 @@ async def list_jobs(
         if salary_min is not None:
             # Unknown salary maxima are excluded from a minimum-salary filter.
             query = query.gte("salary_max", salary_min)
-        response = query.order("created_at", desc=True).range(start, end).execute()
+        response = query.order("created_at", desc=True).order("id", desc=True).range(start, end).execute()
         if response.count is None or response.data is None:
             raise HTTPException(status_code=503, detail="Job data unavailable")
         return JobListResponse(

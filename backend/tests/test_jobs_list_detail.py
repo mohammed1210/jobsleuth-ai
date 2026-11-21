@@ -24,6 +24,7 @@ class JobQuery:
         self.filters = []
         self.window = None
         self.count_requested = False
+        self.sort_columns = []
 
     def select(self, _columns, count=None):
         self.count_requested = count == "exact"
@@ -46,7 +47,8 @@ class JobQuery:
         return self
 
     def order(self, field, desc=False):
-        assert field == "created_at" and desc
+        assert field in ("created_at", "id") and desc
+        self.sort_columns.append(field)
         return self
 
     def range(self, start, end):
@@ -77,7 +79,8 @@ class JobQuery:
                 assert ",company.ilike.%" in expression
                 query = expression.split("title.ilike.%", 1)[1].split("%,company.ilike.", 1)[0]
                 rows = [r for r in rows if query.casefold() in r["title"].casefold() or query.casefold() in r["company"].casefold()]
-        rows.sort(key=lambda r: r["created_at"], reverse=True)
+        assert self.sort_columns in ([], ["created_at", "id"])
+        rows.sort(key=lambda r: (r["created_at"], r["id"]), reverse=True)
         count = len(rows)
         if self.window:
             start, end = self.window
@@ -136,6 +139,14 @@ def test_pagination_uses_exact_db_total(db):
     assert res.status_code == 200
     assert res.json()["total"] == 3
     assert len(res.json()["jobs"]) == 1
+    page_one = client.get("/jobs?page=1&per_page=2").json()["jobs"]
+    page_two = res.json()["jobs"]
+    # Same created_at batch timestamp: ID is a unique and stable tie-breaker.
+    assert [job["id"] for job in page_one] == [3, 2]
+    assert [job["id"] for job in page_two] == [1]
+    assert set(job["id"] for job in page_one).isdisjoint(
+        job["id"] for job in page_two
+    )
 
 
 @pytest.mark.parametrize("search", ["Lead,role", "test)or(title.eq.x)", "100%", "Developer.name", "foo_bar", "foo\nbar"])
