@@ -36,3 +36,7 @@ jobs:
       - name: Isolated Supabase bootstrap and RLS tests
         timeout-minutes: 5
         run: bash ../ops/supabase/verify_fresh_project.sh
+
+      - name: Synthetic Stage 2 account and evidence migration rehearsal
+        timeout-minutes: 5
+        run: bash ../ops/supabase/verify_stage2_rehearsal.sh
