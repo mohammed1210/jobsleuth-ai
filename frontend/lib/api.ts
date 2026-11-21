@@ -33,6 +33,15 @@ export async function fetchJobs(params: Record<string, string>) {
   return response.json() as Promise<{ jobs: Job[]; total: number; page: number; per_page: number }>;
 }
 
+/** A missing vacancy is distinct from an unavailable backend. */
+export async function fetchJobDetail(jobId: number): Promise<Job | null> {
+  if (!Number.isSafeInteger(jobId) || jobId <= 0) return null;
+  const response = await fetch(`${BACKEND_URL}/jobs/${jobId}`, { cache: 'no-store' });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error('Job details are temporarily unavailable. Please try again.');
+  return response.json() as Promise<Job>;
+}
+
 export async function fetchSavedJobs(session: Session) {
   const response = await fetch(`${BACKEND_URL}/saved-jobs`, {
     headers: { Authorization: `Bearer ${session.access_token}` },
