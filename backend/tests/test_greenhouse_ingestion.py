@@ -106,7 +106,13 @@ def test_empty_configuration_is_safe():
 def test_uk_only_and_no_invented_salary():
     assert is_uk_location("Remote - United Kingdom")
     assert is_uk_location("London, United Kingdom")
+    assert is_uk_location("Remote - UK")
     assert not is_uk_location("London, Ontario, Canada")
+    assert not is_uk_location("Birmingham, AL")
+    assert not is_uk_location("Cambridge, MA")
+    assert not is_uk_location("Reading, PA")
+    assert not is_uk_location("Newcastle, NSW")
+    assert not is_uk_location("Birmingham")
     assert not is_uk_location("New York")
     r = record(job(), BOARD, NOW)
     assert r["company"] == "Synthetic Employer"
@@ -141,6 +147,33 @@ def test_malformed_uk_post_fails_entire_board():
     value["absolute_url"] = "https://not-our-board.example/x"
     with mock_client([value]) as client, pytest.raises(FeedError):
         fetch_board(BOARD, client, NOW)
+
+
+@pytest.mark.parametrize("location", [None, {}, [], {"name": None}, {"name": ""}])
+def test_malformed_location_anywhere_prevents_expiry(location):
+    malformed = job(9876, "New York")
+    if location is None:
+        malformed.pop("location")
+    else:
+        malformed["location"] = location
+    with mock_client([job(), malformed]) as client, pytest.raises(FeedError):
+        fetch_board(BOARD, client, NOW)
+
+
+def test_same_prefix_but_different_external_id_is_rejected():
+    mismatched = job(1234)
+    mismatched["absolute_url"] = "https://job-boards.greenhouse.io/sampleemployer/jobs/12345"
+    assert record(mismatched, BOARD, NOW) is None
+    with mock_client([job(), mismatched]) as client, pytest.raises(FeedError):
+        fetch_board(BOARD, client, NOW)
+
+
+def test_identical_duplicate_source_rows_deduplicate_safely():
+    with mock_client([job(), job()]) as client:
+        rows, source_count = fetch_board(BOARD, client, NOW)
+    assert source_count == 2
+    assert len(rows) == 1
+    assert rows[0]["external_id"] == "1234"
 
 
 def test_zero_results_fails_closed():

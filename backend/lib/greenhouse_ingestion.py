@@ -20,15 +20,17 @@ SOURCE = "greenhouse"
 API_HOST = "boards-api.greenhouse.io"
 ALLOWED_JOB_HOSTS = {"job-boards.greenhouse.io", "boards.greenhouse.io"}
 BOARD_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{1,79}$")
+# Only explicit country/UK constituent nation evidence qualifies a post.
+# City-only labels (e.g. Cambridge, Birmingham) exist outside Britain too.
 UK_LOCATION_RE = re.compile(
-    r"\b(?:united kingdom|u\.?k\.?|england|scotland|wales|northern ireland|"
-    r"london|manchester|birmingham|bristol|edinburgh|glasgow|cardiff|belfast|"
-    r"leeds|liverpool|oxford|cambridge|reading|milton keynes|nottingham|"
-    r"sheffield|leicester|brighton|newcastle|southampton|portsmouth|"
-    r"guildford|slough|watford|hounslow|heathrow|buckinghamshire)\b",
+    r"\\b(?:united kingdom|u\\.?k\\.?|england|scotland|wales|northern ireland)\\b",
     flags=re.I,
 )
-FOREIGN_LOCATION_RE = re.compile(r"\b(?:ontario|canada|united states|usa|australia)\b", flags=re.I)
+FOREIGN_LOCATION_RE = re.compile(
+    r"\\b(?:ontario|canada|united states|u\\.?s\\.?a\\.?|australia|"
+    r"new south wales|nsw|united arab emirates)\\b",
+    flags=re.I,
+)
 MAX_JOBS_PER_BOARD = 1000
 MAX_CONTENT_BYTES = 2_000_000
 MAX_DESCRIPTION_CHARS = 600
@@ -129,7 +131,9 @@ def record(job: object, board: Board, seen_at: datetime) -> dict | None:
         return None
     if not link:
         return None
-    if f"/{board.slug}/jobs/{external_id}" not in link.lower():
+    # Compare the complete canonical path; substring matching would turn
+    # upstream ID 1234 into another job's /jobs/12345 link.
+    if urlsplit(link).path.rstrip("/").casefold() != f"/{board.slug}/jobs/{external_id}":
         return None
 
     updated_at = job.get("updated_at")
@@ -178,20 +182,25 @@ def fetch_board(board: Board, client: httpx.Client, seen_at: datetime) -> tuple[
     if isinstance(meta, dict) and isinstance(meta.get("total"), int) and meta["total"] != len(posts):
         raise FeedError("Incomplete source feed; do not expire jobs")
     results: dict[str, dict] = {}
-    candidate_count = 0
     for post in posts:
-        loc = post.get("location") if isinstance(post, dict) else None
-        if isinstance(loc, dict) and isinstance(loc.get("name"), str) and is_uk_location(loc["name"]):
-            candidate_count += 1
+        # Fail a whole scan if a row lacks the location field. Otherwise a
+        # UK posting could remain live upstream but be wrongly expired when
+        # its latest location is malformed or missing.
+        if not isinstance(post, dict):
+            raise FeedError("Malformed job row in employer feed")
+        loc = post.get("location")
+        if not isinstance(loc, dict) or not isinstance(loc.get("name"), str) or not loc["name"].strip():
+            raise FeedError("Missing location in employer feed; no expiry")
+        if not is_uk_location(loc["name"]):
+            continue
         item = record(post, board, seen_at)
-        if item:
-            if item["external_id"] in results and results[item["external_id"]] != item:
-                raise FeedError("Conflicting duplicate external posting in source feed")
-            results[item["external_id"]] = item
-    # Any failed parsing in a UK location makes the feed ineligible for
-    # deletion/expiry; fail the whole scan rather than silently hiding posts.
-    if candidate_count != len(results):
-        raise FeedError("Malformed UK vacancy rows; no jobs written")
+        if item is None:
+            raise FeedError("Malformed UK vacancy row; no expiry")
+        if item["external_id"] in results and results[item["external_id"]] != item:
+            raise FeedError("Conflicting duplicate external posting in source feed")
+        results[item["external_id"]] = item
+    # Identical duplicate rows are harmless; unique source ID is the canonical
+    # identity. Never compare raw UK row count against deduplicated identities.
     return list(results.values()), len(posts)
 
 
