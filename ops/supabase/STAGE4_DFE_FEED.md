@@ -54,7 +54,8 @@ NOT comprehensive public/civil service or UK-wide vacancies.
 
 ```sh
 cd backend
-python -m scripts.ingest_dfe             # no writes
+python -m scripts.ingest_dfe             # strict full-scan dry run; expected to fail closed if pagination overlaps
+python -m scripts.ingest_dfe --pilot     # page-one-only preview, no writes
 ```
 
 Requires full paginated scan. Apply uses the NEW Supabase backend secret in
@@ -66,6 +67,38 @@ JOBSLEUTH_DFE_INGEST_ENABLED=true \
 JOBSLEUTH_DFE_OGL_TERMS_ACK=true \
 python -m scripts.ingest_dfe --apply
 ```
+
+### Bounded first-page pilot while pagination is unstable
+
+**Do not import using the full-scan path** until a complete stable scan can be
+verified. The DfE API sorts by publication date alone; equal dates can overlap
+between pages. As confirmed in the 22 November 2026 read-only GitHub Actions
+probe, the full scan failed with `Incomplete, shifting or duplicate DfE pages`.
+The full-scan path intentionally fails closed and must not be weakened.
+
+The explicit `--pilot` option reads ONLY page one (at most 100 vacancies) and
+validates each item; it reports `scope=first_page_only`, source total and
+page count. A pilot is NOT the full feed, does not prove coverage, and NEVER
+deactivates jobs because they are absent from the current first page. Advertised
+closing times remain stored and enforced by `public.live_jobs` independently
+of refreshes. Earlier withdrawal of a posting before its advertised deadline
+cannot be inferred from this partial scan: a separate link/manual check is
+required before calling a pilot listing verified.
+
+Pilot writing requires ALL four explicit backend-only flags, tracked schema
+migration and separate release approval:
+
+```sh
+JOBSLEUTH_INGEST_ENABLED=true \
+JOBSLEUTH_DFE_INGEST_ENABLED=true \
+JOBSLEUTH_DFE_OGL_TERMS_ACK=true \
+JOBSLEUTH_DFE_PILOT_ENABLED=true \
+python -m scripts.ingest_dfe --pilot --apply
+```
+
+For the initial release, verify the original application URLs and save/remove
+flows against this small set before introducing any refresh scheduler.
+`--pilot` must never be repurposed into full-feed missing-job expiry.
 
 Never run these with real credentials in public CI or log private service keys.
 Get explicit release approval before enabling imports or automation; acknowledge
