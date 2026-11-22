@@ -38,8 +38,8 @@ jobs:
       - name: DfE source API one-page read-only probe
         if: github.event_name == 'pull_request' && github.event.pull_request.number == 99
         continue-on-error: true
-        timeout-minutes: 2
-        run: python -m scripts.probe_dfe
+        timeout-minutes: 5
+        run: python -m scripts.probe_dfe --full
 
       - name: Isolated Supabase bootstrap and RLS tests
         timeout-minutes: 5

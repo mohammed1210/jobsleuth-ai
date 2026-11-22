@@ -3,14 +3,19 @@
 A one-off probe validates whether the official published JSON endpoint serves
 the documented fields to the JobSleuth origin. Never prints vacancy text.
 """
+import argparse
 from datetime import datetime, timezone
 
 import httpx
 
-from lib.dfe_ingestion import FeedError, _page
+from lib.dfe_ingestion import FeedError, _page, fetch_all
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--full", action="store_true",
+                        help="Check the entire official DfE feed without writing any data")
+    args = parser.parse_args()
     try:
         now = datetime.now(timezone.utc)
         with httpx.Client(
@@ -18,9 +23,13 @@ def main():
             headers={"User-Agent": "JobSleuth-SourceContractCheck/1.0"},
             timeout=15,
         ) as client:
-            rows, pages, count = _page(client, 1, now)
-        print(f"DfE live JSON contract passed: first-page rows={len(rows)}; "
-              f"total pages={pages}; published records={count}. NO DATA WRITTEN.")
+            if args.full:
+                rows = fetch_all(client, now)
+                print(f"DfE FULL live feed validated: unique jobs={len(rows)}. NO DATA WRITTEN.")
+            else:
+                rows, pages, count = _page(client, 1, now)
+                print(f"DfE live JSON contract passed: first-page rows={len(rows)}; "
+                      f"total pages={pages}; published records={count}. NO DATA WRITTEN.")
     except (FeedError, httpx.HTTPError, ValueError) as exc:
         # Diagnostic category only: do not expose source rows, URL query
         # strings, upstream response bodies, tokens or applicant content.

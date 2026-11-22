@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 from decimal import Decimal, InvalidOperation
@@ -165,6 +166,10 @@ def fetch_all(client: httpx.Client, now: datetime) -> list[dict]:
     first, pages, expected = _page(client, 1, now)
     by_id = {}
     for page in range(1, pages + 1):
+        if page > 1:
+            # Polite, sequential requests; no parallel load on the public
+            # government endpoint and no burst traffic between pages.
+            time.sleep(0.2)
         items, total_pages, count = (first, pages, expected) if page == 1 else _page(client, page, now)
         if total_pages != pages or count != expected:
             raise FeedError("DfE source changed mid-scan: refuse partial import")
