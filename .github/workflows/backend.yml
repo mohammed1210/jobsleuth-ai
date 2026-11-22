@@ -33,6 +33,14 @@ jobs:
       - name: Backend tests
         run: pytest -q
 
+      # One-off non-blocking live-source contract probe for draft PR #99.
+      # No credentials, no vacancy imports, and no raw job descriptions logged.
+      - name: DfE source API one-page read-only probe
+        if: github.event_name == 'pull_request' && github.event.pull_request.number == 99
+        continue-on-error: true
+        timeout-minutes: 2
+        run: python -m scripts.probe_dfe
+
       - name: Isolated Supabase bootstrap and RLS tests
         timeout-minutes: 5
         run: bash ../ops/supabase/verify_fresh_project.sh
