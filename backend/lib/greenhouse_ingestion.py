@@ -23,12 +23,12 @@ BOARD_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{1,79}$")
 # Only explicit country/UK constituent nation evidence qualifies a post.
 # City-only labels (e.g. Cambridge, Birmingham) exist outside Britain too.
 UK_LOCATION_RE = re.compile(
-    r"\\b(?:united kingdom|u\\.?k\\.?|england|scotland|wales|northern ireland)\\b",
+    r"\b(?:united kingdom|u\.?k\.?|england|scotland|wales|northern ireland)\b",
     flags=re.I,
 )
 FOREIGN_LOCATION_RE = re.compile(
-    r"\\b(?:ontario|canada|united states|u\\.?s\\.?a\\.?|australia|"
-    r"new south wales|nsw|united arab emirates)\\b",
+    r"\b(?:ontario|canada|united states|u\.?s\.?a\.?|australia|"
+    r"new south wales|nsw|united arab emirates)\b",
     flags=re.I,
 )
 MAX_JOBS_PER_BOARD = 1000
