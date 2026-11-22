@@ -66,12 +66,14 @@ export default function JobCard({ job, onSave, saved = false, aiScore }: JobCard
 
       <div className="flex justify-between items-start mb-4">
         <div className="flex-1 pr-4">
-          <Link 
-            href={`/jobs/${job.id}`}
-            className="text-xl font-bold text-gray-900 hover:text-brand-600 transition-colors line-clamp-2 mb-1 block"
-          >
-            {job.title}
-          </Link>
+          {job.is_active === false ? (
+            <h3 className="text-xl font-bold text-gray-900 line-clamp-2 mb-1">{job.title}</h3>
+          ) : (
+            <Link href={`/jobs/${job.id}`}
+              className="text-xl font-bold text-gray-900 hover:text-brand-600 transition-colors line-clamp-2 mb-1 block">
+              {job.title}
+            </Link>
+          )}
           <p className="text-lg text-gray-700 font-medium">{job.company}</p>
         </div>
         <button
@@ -91,6 +93,11 @@ export default function JobCard({ job, onSave, saved = false, aiScore }: JobCard
         </button>
       </div>
       
+      {job.is_active === false && (
+        <p role="status" className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          This saved vacancy has closed. Its details remain for your records.
+        </p>
+      )}
       {saveError && <p role="alert" className="mb-3 text-sm text-red-700">{saveError}</p>}
 
       <div className="flex flex-wrap gap-2 mb-3">
@@ -123,13 +130,15 @@ export default function JobCard({ job, onSave, saved = false, aiScore }: JobCard
       )}
       
       <div className="flex items-center gap-3 pt-4 border-t border-gray-100">
-        <Link
-          href={`/jobs/${job.id}`}
-          className="text-brand-600 hover:text-brand-700 text-sm font-medium transition-colors"
-        >
-          View Details →
-        </Link>
-        {job.url && (
+        {job.is_active === false ? (
+          <span className="text-amber-700 text-sm font-medium">Listing closed</span>
+        ) : (
+          <Link href={`/jobs/${job.id}`}
+            className="text-brand-600 hover:text-brand-700 text-sm font-medium transition-colors">
+            View Details →
+          </Link>
+        )}
+        {job.url && job.is_active !== false && (
           <a
             href={job.url}
             target="_blank"

@@ -14,6 +14,7 @@ export type Job = {
   date_posted?: string | null;
   description?: string | null;
   ai_score?: number | null;
+  is_active?: boolean;
 };
 
 export type SavedJob = {
