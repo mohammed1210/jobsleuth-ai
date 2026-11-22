@@ -32,10 +32,30 @@ UUID-job migration or restore the PropNexus database.**
   so the connection URL was not independently checked at this audit.
   `DATABASE_URL` is not referenced by current backend application code per
   GitHub code search. **Do not overwrite it** without proving its owner/use.
-- The Vercel project is not yet connected to ChatGPT, so active environment
-  variable values and preview/production target configuration cannot be
-  checked via the connected tools. The owner must connect Vercel or use its
-  dashboard; do not guess any Vercel project IDs or current keys.
+- VERIFIED 22 November 2026: Vercel access is NOW connected and read-only.
+  Team `mohammed-abbas-projects-8ab7e126`, project `jobsleuth-ai`
+  (ID `prj_i7d9iVkepLHSnAHVyTP2tKRnYkdu`). Public production domain
+  `jobsleuth-ai.vercel.app` was verified. Latest READY production deployment
+  `dpl_8Jes4fhgzxHfgdeasQcJu8viop57` matches main commit
+  `ea7fa74b380f5a28c63c53d12671040087523c52`; PR #96/#97 previews
+  are NOT production deployments.
+- VERIFIED read-only Vercel project env values and scopes:
+  `NEXT_PUBLIC_SUPABASE_URL` currently points to OLD shared project
+  `wsfemkhxttddztnhthkc`, NOT the isolated project.
+  `NEXT_PUBLIC_SUPABASE_KEY` is an `anon` JWT key, not a service-role key.
+  `NEXT_PUBLIC_BACKEND_URL` points to the Railway production HTTPS domain.
+  `NEXT_PUBLIC_API_URL` is defined but has no value; do not rely on it for
+  cross-service routing. Both Supabase variables and the backend URL currently
+  target **development, preview AND production**. Split/update targets carefully
+  during an approved release; changing one shared variable can affect all
+  deployment environments. No env values or credentials are recorded here.
+- Dedicated Supabase has two enabled frontend-compatible keys: a modern
+  publishable key and a legacy anon key. The new service-role credential is
+  NOT available via the connected Supabase management tools; it must be
+  supplied privately into Railway's secret manager, never pasted into ChatGPT
+  or GitHub. Before release, validate new public key/project URL pairing and
+  privately store an authorised rollback copy of both platforms' old values.
+  Service_role must never appear in `NEXT_PUBLIC_*`.
 - Checkout remains disabled under the default `BILLING_CHECKOUT_ENABLED=false`
   (the connected Railway service did not list a corresponding override).
   PR #90's atomic Stripe migration is **not applied**. Do not activate
@@ -52,7 +72,10 @@ UUID-job migration or restore the PropNexus database.**
 3. Resolve the Supabase Auth security advisor warning, **leaked-password
    protection disabled**, before onboarding external testers:
    https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection
-4. Record existing Railway/Vercel variable names and *secure backup of values*
+4. VERIFIED on Vercel: production Supabase URL still points to OLD shared
+   project; public key is anon and backend URL targets Railway. Do NOT switch
+   only Vercel (or only Railway): old/new JWT issuers will disagree. Record
+   existing Railway/Vercel variable names and *secure backup of values*
    privately so production can be rolled back; never put secrets in this repo.
    Confirm billing flags remain off and domains/CORS/redirects match reality.
 5. Ensure both projects' schema and record counts still match this documented
@@ -87,8 +110,10 @@ against an incompatible live production backend.
 
 ## Proposed release sequence (separate explicit owner approval)
 
-1. Identify active Vercel production project and all custom domains in its
-   settings. Verify the approved app URL and local login flow.
+1. VERIFIED: the Vercel project is `jobsleuth-ai`; current production
+   domain is `jobsleuth-ai.vercel.app`, and last READY production deployment is
+   `dpl_8Jes4fhgzxHfgdeasQcJu8viop57` on `main`. Before switching,
+   recheck these IDs and verify the approved live app URL/callback configuration.
 2. Take privately stored configuration backups and record a deployment
    checkpoint, including Railway and Vercel revision IDs.
 3. Freeze JobSleuth-only evidence edits briefly; DO NOT freeze or mutate
@@ -129,3 +154,24 @@ and re-run smoke tests. Preserve the old shared project until an independently
 approved deletion/retention decision.
 
 **This file prepares the cutover; it does not authorize or deploy it.**
+
+## 22 November 2026 go/no-go snapshot
+
+| Gate | Current read-only finding | Release status |
+|---|---|---|
+| New Supabase schema and private records | One verified Auth account; 4 evidence cards; 3 test feedback rows | PASS |
+| New Supabase job inventory | 0 real jobs; 0 saved jobs | Expected empty; real ingestion needed for end-to-end save tests |
+| Vercel production project | Identified, GitHub main deployed and ready | PASS |
+| Frontend production Supabase identity | Points to old mixed-use project | Requires coordinated change |
+| Frontend public key exposure | Correctly classified as anon, not service_role | PASS for current config |
+| Vercel backend URL | Existing Railway production HTTPS service | PASS |
+| Railway production environment values | Names visible, sensitive values redacted | Must verify privately during release |
+| Frontend/build code | PRs #96 and #97 draft/unmerged, tests passed | Merge/release approval still required |
+| Supabase Auth advisor | Leaked-password protection disabled | Resolve before external pilot |
+| Live paid checkout | Not enabled; Stripe migration separate | MUST STAY OFF |
+
+**No-go until explicit owner approval** to merge/release the reviewed PRs and
+coordinate Railway + Vercel in one controlled production cutover. The owner
+has authorized Stage 3 investigation and preparation, NOT an implicit secrets
+rotation, redeployment, or automatic billing activation. Fresh login and
+app-level Evidence Bank checks remain post-cutover smoke tests.
