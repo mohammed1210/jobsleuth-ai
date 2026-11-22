@@ -55,7 +55,7 @@ def read_date(value: object, field: str) -> datetime:
     # datePosted. Do not pretend it specifies an exact publication time.
     # For date-only expiry, remain active until the END of the UK calendar
     # day rather than incorrectly closing at midnight UTC.
-    if re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}", value):
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
         try:
             day = date.fromisoformat(value)
         except ValueError as e:
