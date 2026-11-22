@@ -33,9 +33,16 @@ jobs:
       - name: Backend tests
         run: pytest -q
 
-      # One-off non-blocking live-source contract probe for draft PR #99.
+      # A real read-only page-one response MUST validate for the pilot.
       # No credentials, no vacancy imports, and no raw job descriptions logged.
-      - name: DfE source API one-page read-only probe
+      - name: DfE FIRST-PAGE source contract - required for pilot
+        if: github.event_name == 'pull_request' && github.event.pull_request.number == 99
+        timeout-minutes: 3
+        run: python -m scripts.probe_dfe
+
+      # Upstream publish-date-only sorting is not a stable full snapshot.
+      # Diagnostic only: green CI MUST NOT be interpreted as full-feed approval.
+      - name: DfE FULL-SCAN diagnostic - advisory, NOT approved for import
         if: github.event_name == 'pull_request' && github.event.pull_request.number == 99
         continue-on-error: true
         timeout-minutes: 5
