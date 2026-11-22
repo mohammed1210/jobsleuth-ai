@@ -107,8 +107,8 @@ async def _save_job(request: SavedJobRequest, authorization: str | None) -> Save
     try:
         storage = get_supabase_client()
         jobs = (
-            storage.table("jobs").select("id")
-            .eq("id", request.job_id).eq("is_active", True).limit(1).execute()
+            storage.table("live_jobs").select("id")
+            .eq("id", request.job_id).limit(1).execute()
         )
         if not jobs.data:
             raise HTTPException(status_code=404, detail="Job is unavailable or no longer accepting applications")

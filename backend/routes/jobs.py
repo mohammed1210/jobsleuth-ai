@@ -19,7 +19,7 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 PUBLIC_FIELDS = (
     "id,title,company,location,salary,salary_min,salary_max,"
-    "role_type,source,url,description,created_at"
+    "role_type,source,url,description,created_at,is_active,expires_at"
 )
 # This raw value is embedded in PostgREST's or_() filter grammar; reject
 # control, filter and wildcard punctuation rather than allow filter injection.
@@ -40,6 +40,8 @@ class JobResponse(BaseModel):
     ai_score: Optional[float] = None
     date_posted: Optional[str] = None
     description: Optional[str] = None
+    is_active: Optional[bool] = None
+    expires_at: Optional[str] = None
 
 
 class JobListResponse(BaseModel):
@@ -92,9 +94,9 @@ async def list_jobs(
     end = start + per_page - 1
 
     try:
-        query = get_supabase_anon_client().table("jobs").select(
+        query = get_supabase_anon_client().table("live_jobs").select(
             PUBLIC_FIELDS, count="exact"
-        ).eq("is_active", True)
+        )
         if search:
             # Escaping is enforced by SAFE_SEARCH_RE: no commas, parentheses,
             # quote marks, periods, or LIKE wildcards can enter this expression.
@@ -129,7 +131,7 @@ async def get_job(job_id: int) -> JobResponse:
         raise HTTPException(status_code=404, detail="Job not found")
     try:
         response = (
-            get_supabase_anon_client().table("jobs").select(PUBLIC_FIELDS)
+            get_supabase_anon_client().table("live_jobs").select(PUBLIC_FIELDS)
             .eq("id", job_id).eq("is_active", True).limit(1).execute()
         )
         if response.data is None:

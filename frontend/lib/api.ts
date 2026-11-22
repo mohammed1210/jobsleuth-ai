@@ -15,6 +15,7 @@ export type Job = {
   description?: string | null;
   ai_score?: number | null;
   is_active?: boolean;
+  expires_at?: string | null;
 };
 
 export type SavedJob = {

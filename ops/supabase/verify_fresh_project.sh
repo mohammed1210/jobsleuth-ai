@@ -97,6 +97,19 @@ begin
 end
 $check$;
 STAGE4
+# Read-time live_jobs view filters explicit expiry without relying on cron.
+sql <<'EXPIRE'
+update public.jobs set is_active=true, expires_at=now()-interval '1 day'
+where source='greenhouse' and source_board='synthetic' and external_id='1234';
+EXPIRE
+hidden="$(sql -qAtc "set role anon; select count(*) from public.live_jobs where source='greenhouse' and external_id='1234';")"
+test "$hidden" = 0
+sql <<'UNEXPIRE'
+update public.jobs set is_active=true, expires_at=now()+interval '1 day'
+where source='greenhouse' and source_board='synthetic' and external_id='1234';
+UNEXPIRE
+visible="$(sql -qAtc "set role anon; select count(*) from public.live_jobs where source='greenhouse' and external_id='1234';")"
+test "$visible" = 1
 # Public may still SELECT closed rows for saved-job history, while the API
 # explicitly filters is_active. Neither anon nor authenticated may INSERT.
 for role in anon authenticated; do

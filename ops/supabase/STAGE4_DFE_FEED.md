@@ -80,3 +80,15 @@ matches the repository source. If this cannot be verified, do not apply
 or claim JobSleuth has imported DfE vacancies. Start with no scheduler,
 monitor counts, then schedule daily refresh only after source and post-save
 workflows pass end-to-end.
+
+## Automatic closing-time enforcement (critical safety guarantee)
+
+Stage 4 additive migration also adds `public.jobs.expires_at` and a
+`public.live_jobs` view with PostgreSQL 15+ `security_invoker=true`.
+The view filters already-closed posts with `expires_at > now()`, **even if
+no refresh job ever runs again**. The public Jobs API and save-new-job checks
+read this view. Historical `public.saved_jobs` still joins the base jobs
+table so users may review closed saved adverts; the UI disables its original
+application link once expiry has passed. Dedicated project RLS remains
+in effect for the view's underlying table. This view and the SQL migration
+MUST be applied together with the code release. Neither is applied yet.

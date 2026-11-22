@@ -130,6 +130,7 @@ def record(raw: object, seen_at: datetime) -> dict:
         "role_type": role_type, "is_active": is_active,
         "last_seen_at": seen_at.isoformat(),
         "source_updated_at": None,  # DfE datePosted is NOT last-edited timestamp.
+        "expires_at": closes.isoformat(),
     }
 
 
