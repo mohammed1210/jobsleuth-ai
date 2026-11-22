@@ -94,7 +94,7 @@ async def list_jobs(
     try:
         query = get_supabase_anon_client().table("jobs").select(
             PUBLIC_FIELDS, count="exact"
-        )
+        ).eq("is_active", True)
         if search:
             # Escaping is enforced by SAFE_SEARCH_RE: no commas, parentheses,
             # quote marks, periods, or LIKE wildcards can enter this expression.
@@ -130,7 +130,7 @@ async def get_job(job_id: int) -> JobResponse:
     try:
         response = (
             get_supabase_anon_client().table("jobs").select(PUBLIC_FIELDS)
-            .eq("id", job_id).limit(1).execute()
+            .eq("id", job_id).eq("is_active", True).limit(1).execute()
         )
         if response.data is None:
             raise HTTPException(status_code=503, detail="Job data unavailable")

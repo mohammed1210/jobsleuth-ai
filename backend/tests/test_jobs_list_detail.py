@@ -100,7 +100,7 @@ def row(job_id=9, title="Public sector investigator", company="Example Agency", 
     return {"id": job_id, "title": title, "company": company, "location": "London",
             "salary": None, "salary_min": 40000, "salary_max": salary_max,
             "role_type": "Hybrid", "source": "synthetic", "url": "https://example.org/vacancy",
-            "description": "Synthetic data only", "created_at": "2026-11-21T00:00:00Z"}
+            "description": "Synthetic data only", "created_at": "2026-11-21T00:00:00Z", "is_active": True}
 
 
 def test_empty_database_returns_no_jobs(db):
@@ -153,6 +153,14 @@ def test_pagination_uses_exact_db_total(db):
 def test_postgrest_filter_injection_rejected(db, search):
     res = client.get("/jobs", params={"q": search})
     assert res.status_code == 422
+
+
+def test_inactive_job_is_hidden_from_public_listing_and_detail(db):
+    inactive = row(66, title="Closed role")
+    inactive["is_active"] = False
+    db.rows = [row(9), inactive]
+    assert client.get("/jobs").json()["total"] == 1
+    assert client.get("/jobs/66").status_code == 404
 
 
 def test_unavailable_db_does_not_show_mock_jobs(db):
