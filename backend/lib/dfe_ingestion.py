@@ -189,7 +189,27 @@ def fetch_all(client: httpx.Client, now: datetime) -> list[dict]:
     return list(by_id.values())
 
 
-def persist(storage, records: list[dict], now: datetime) -> dict:
+def fetch_pilot(client: httpx.Client, now: datetime) -> tuple[list[dict], int, int]:
+    """Read only page one for a bounded pilot, never treating it as a full feed.
+
+    DfE sorts solely by publish_on, so tied publication dates may straddle
+    paginated pages without stable ordering. A pilot cannot determine which
+    old records disappeared; callers MUST disable missing-job deactivation.
+    """
+    if now.tzinfo is None:
+        raise FeedError("Source scan requires timezone-aware UTC clock")
+    first, pages, expected = _page(client, 1, now)
+    by_id = {}
+    for row in first:
+        key = row["external_id"]
+        if key in by_id and by_id[key] != row:
+            raise FeedError("Conflicting DfE posting IDs within pilot page")
+        by_id[key] = row
+    return list(by_id.values()), pages, expected
+
+
+def persist(storage, records: list[dict], now: datetime, *,
+            deactivate_missing: bool = True) -> dict:
     if not records:
         raise FeedError("Cannot apply an empty DfE feed")
     for offset in range(0, len(records), 100):
@@ -207,6 +227,10 @@ def persist(storage, records: list[dict], now: datetime) -> dict:
                   .in_("external_id", ids).execute())
         if {r["external_id"] for r in (result.data or [])} != set(ids):
             raise FeedError("DfE import verification failed; no expiry")
+    # A partial page is never evidence that another vacancy disappeared.
+    # Source-advertised expires_at is separately enforced by live_jobs.
+    if not deactivate_missing:
+        return {"upserted": len(records), "deactivated": 0}
     cutoff = (now - timedelta(hours=GRACE_HOURS)).isoformat()
     old = (storage.table("jobs").update({"is_active": False})
            .eq("source", SOURCE).eq("source_board", BOARD)
@@ -214,18 +238,27 @@ def persist(storage, records: list[dict], now: datetime) -> dict:
     return {"upserted": len(records), "deactivated": len(old.data or [])}
 
 
-def run(*, client: httpx.Client, apply: bool, storage=None, now: datetime | None = None) -> dict:
+def run(*, client: httpx.Client, apply: bool, storage=None,
+        now: datetime | None = None, pilot: bool = False) -> dict:
     if apply and os.environ.get("JOBSLEUTH_INGEST_ENABLED") != "true":
         raise FeedError("Global vacancy ingestion is disabled")
     if apply and os.environ.get("JOBSLEUTH_DFE_OGL_TERMS_ACK") != "true":
         raise FeedError("DfE API reuse terms must be reviewed/acknowledged")
     if apply and os.environ.get("JOBSLEUTH_DFE_INGEST_ENABLED") != "true":
         raise FeedError("DfE feed is disabled")
+    if apply and pilot and os.environ.get("JOBSLEUTH_DFE_PILOT_ENABLED") != "true":
+        raise FeedError("One-page pilot import requires a separate explicit gate")
     if apply and storage is None:
         raise FeedError("Backend-only database connection required")
     at = now or datetime.now(timezone.utc)
-    jobs = fetch_all(client, at)
-    result = {"source": SOURCE, "records": len(jobs), "applied": apply}
+    if pilot:
+        jobs, pages, advertised = fetch_pilot(client, at)
+        result = {"source": SOURCE, "records": len(jobs), "applied": apply,
+                  "scope": "first_page_only", "source_total": advertised,
+                  "source_pages": pages, "missing_job_expiry": False}
+    else:
+        jobs = fetch_all(client, at)
+        result = {"source": SOURCE, "records": len(jobs), "applied": apply}
     if apply:
-        result.update(persist(storage, jobs, at))
+        result.update(persist(storage, jobs, at, deactivate_missing=not pilot))
     return result
