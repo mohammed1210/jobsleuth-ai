@@ -21,8 +21,15 @@ def main():
             rows, pages, count = _page(client, 1, now)
         print(f"DfE live JSON contract passed: first-page rows={len(rows)}; "
               f"total pages={pages}; published records={count}. NO DATA WRITTEN.")
-    except (FeedError, httpx.HTTPError, ValueError):
-        print("DfE live JSON contract could not be verified. NO DATA WRITTEN.")
+    except (FeedError, httpx.HTTPError, ValueError) as exc:
+        # Diagnostic category only: do not expose source rows, URL query
+        # strings, upstream response bodies, tokens or applicant content.
+        status = (
+            exc.response.status_code
+            if isinstance(exc, httpx.HTTPStatusError) else None
+        )
+        reason = str(exc) if isinstance(exc, FeedError) else type(exc).__name__
+        print(f"DfE API probe failed: {reason}; HTTP status={status}. NO DATA WRITTEN.")
         raise SystemExit(1) from None
 
 
