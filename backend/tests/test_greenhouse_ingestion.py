@@ -177,9 +177,13 @@ def test_idempotent_upsert_and_expiry_without_deletion():
         with mock_client([job(), job(4567, title="Fraud Analyst")]) as client:
             run([BOARD], apply=True, client=client, storage=store, now=NOW + timedelta(hours=24))
         assert len(store.rows) == 2
-        # Only after the grace period: the removed posting becomes inactive.
+        # Exactly 72h since last seen must NOT expire; only strictly older
+        # listings become inactive after a complete successful source scan.
         with mock_client([job()]) as client:
             run([BOARD], apply=True, client=client, storage=store, now=NOW + timedelta(hours=96))
+        assert store.rows[("greenhouse", "sampleemployer", "4567")]["is_active"] is True
+        with mock_client([job()]) as client:
+            run([BOARD], apply=True, client=client, storage=store, now=NOW + timedelta(hours=97))
     removed = store.rows[("greenhouse", "sampleemployer", "4567")]
     assert removed["is_active"] is False
     assert store.rows[("greenhouse", "sampleemployer", "1234")]["is_active"] is True
