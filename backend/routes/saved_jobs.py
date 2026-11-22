@@ -108,10 +108,10 @@ async def _save_job(request: SavedJobRequest, authorization: str | None) -> Save
         storage = get_supabase_client()
         jobs = (
             storage.table("jobs").select("id")
-            .eq("id", request.job_id).limit(1).execute()
+            .eq("id", request.job_id).eq("is_active", True).limit(1).execute()
         )
         if not jobs.data:
-            raise HTTPException(status_code=404, detail="Job does not exist in the database")
+            raise HTTPException(status_code=404, detail="Job is unavailable or no longer accepting applications")
         saved = (
             storage.table("saved_jobs")
             .upsert({"user_id": user["id"], "job_id": request.job_id},

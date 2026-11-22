@@ -63,7 +63,7 @@ class Query:
 class Storage:
     def __init__(self):
         self.saved = []
-        self.jobs = [{"id": 4, "title": "Synthetic job", "company": "Example", "location": "Remote"}]
+        self.jobs = [{"id": 4, "title": "Synthetic job", "company": "Example", "location": "Remote", "is_active": True}]
         self.fail = False
 
     def table(self, name):
@@ -123,6 +123,14 @@ def test_authenticated_save_list_delete_real_persistence(storage):
 
 def test_unknown_job_does_not_report_saved(storage):
     response = client.post("/saved-jobs", json={"job_id": 9999},
+                           headers={"Authorization": "Bearer valid_token"})
+    assert response.status_code == 404
+    assert storage.saved == []
+
+
+def test_closed_job_cannot_be_newly_saved(storage):
+    storage.jobs[0]["is_active"] = False
+    response = client.post("/saved-jobs", json={"job_id": 4},
                            headers={"Authorization": "Bearer valid_token"})
     assert response.status_code == 404
     assert storage.saved == []
