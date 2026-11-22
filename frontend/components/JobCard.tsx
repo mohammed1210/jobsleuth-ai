@@ -14,6 +14,7 @@ export interface JobCardProps {
 export default function JobCard({ job, onSave, saved = false, aiScore }: JobCardProps) {
   const [isSaved, setIsSaved] = useState(saved);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleSave = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -21,14 +22,17 @@ export default function JobCard({ job, onSave, saved = false, aiScore }: JobCard
     
     if (saving) return;
     
+    if (!onSave) return;
     setSaving(true);
-    setIsSaved(!isSaved);
-    
-    if (onSave) {
+    setSaveError(null);
+    try {
       await onSave(job.id);
+      setIsSaved((current) => !current);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not update this saved job.');
+    } finally {
+      setSaving(false);
     }
-    
-    setSaving(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -87,6 +91,8 @@ export default function JobCard({ job, onSave, saved = false, aiScore }: JobCard
         </button>
       </div>
       
+      {saveError && <p role="alert" className="mb-3 text-sm text-red-700">{saveError}</p>}
+
       <div className="flex flex-wrap gap-2 mb-3">
         <span className="inline-flex items-center px-3 py-1.5 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg">
           <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">

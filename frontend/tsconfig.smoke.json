@@ -15,9 +15,11 @@
     "lib/pilotFeedbackForm.ts",
     "lib/evidenceImportDedupe.ts",
     "lib/evidenceImportUpload.ts",
+    "lib/api.ts",
     "tests/applicationInstructions.smoke.test.ts",
     "tests/pilotFeedbackForm.smoke.test.ts",
     "tests/evidenceImportDedupe.smoke.test.ts",
-    "tests/evidenceImportUpload.smoke.test.ts"
+    "tests/evidenceImportUpload.smoke.test.ts",
+    "tests/jobDetailsApi.smoke.test.ts"
   ]
 }
