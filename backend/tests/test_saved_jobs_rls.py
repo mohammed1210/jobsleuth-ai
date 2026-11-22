@@ -43,8 +43,14 @@ class Query:
     def execute(self):
         if self.storage.fail:
             raise RuntimeError("synthetic storage outage")
-        if self.name == "jobs":
-            match = next((j for j in self.storage.jobs if all(j.get(k)==v for k,v in self.filters)), None)
+        if self.name == "live_jobs":
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            match = next((j for j in self.storage.jobs
+                          if all(j.get(k)==v for k,v in self.filters)
+                          and j.get("is_active", True)
+                          and (not j.get("expires_at") or
+                               datetime.fromisoformat(j["expires_at"].replace("Z", "+00:00")) > now)), None)
             return SimpleNamespace(data=[{"id": match["id"]}] if match else [])
         rows = self.storage.saved
         if self.operation == "upsert":
@@ -67,7 +73,7 @@ class Storage:
         self.fail = False
 
     def table(self, name):
-        assert name in {"jobs", "saved_jobs"}
+        assert name in {"live_jobs", "saved_jobs"}
         return Query(self, name)
 
 
@@ -134,6 +140,23 @@ def test_closed_job_cannot_be_newly_saved(storage):
                            headers={"Authorization": "Bearer valid_token"})
     assert response.status_code == 404
     assert storage.saved == []
+
+
+def test_expired_advert_cannot_be_saved_even_if_active_flag_stale(storage):
+    storage.jobs[0]["expires_at"] = "2026-01-01T00:00:00Z"
+    response = client.post("/saved-jobs", json={"job_id": 4},
+                           headers={"Authorization": "Bearer valid_token"})
+    assert response.status_code == 404
+    assert storage.saved == []
+
+
+def test_expired_saved_history_is_still_visible(storage):
+    storage.saved.append({"id": 99, "user_id": UID, "job_id": 4,
+                          "saved_at": "2026-11-20T00:00:00Z"})
+    storage.jobs[0]["expires_at"] = "2026-01-01T00:00:00Z"
+    response = client.get("/saved-jobs", headers={"Authorization": "Bearer valid_token"})
+    assert response.status_code == 200
+    assert response.json()[0]["job"]["expires_at"] == "2026-01-01T00:00:00Z"
 
 
 def test_storage_failures_return_503_without_sample(storage):

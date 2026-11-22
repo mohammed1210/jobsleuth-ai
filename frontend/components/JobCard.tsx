@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { Job } from '@/lib/api';
 
@@ -43,6 +43,28 @@ export default function JobCard({ job, onSave, saved = false, aiScore }: JobCard
   };
 
   const score = aiScore ?? job.ai_score ?? undefined;
+  const [checkedAt, setCheckedAt] = useState(() => Date.now());
+  const expiryMillis = job.expires_at ? Date.parse(job.expires_at) : NaN;
+
+  useEffect(() => {
+    if (!Number.isFinite(expiryMillis)) return;
+    const refresh = () => setCheckedAt(Date.now());
+    const remaining = Math.max(0, expiryMillis - Date.now() + 50);
+    // Exact deadline when practical, periodic check for long-lived tabs,
+    // and focus/visibility checks for browsers that suspend timers.
+    const timer = window.setTimeout(refresh, Math.min(remaining, 2147483647));
+    const interval = window.setInterval(refresh, 60_000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [expiryMillis]);
+
+  const closed = job.is_active === false || (Number.isFinite(expiryMillis) && expiryMillis <= checkedAt);
 
   return (
     <div 
@@ -66,7 +88,7 @@ export default function JobCard({ job, onSave, saved = false, aiScore }: JobCard
 
       <div className="flex justify-between items-start mb-4">
         <div className="flex-1 pr-4">
-          {job.is_active === false ? (
+          {closed ? (
             <h3 className="text-xl font-bold text-gray-900 line-clamp-2 mb-1">{job.title}</h3>
           ) : (
             <Link href={`/jobs/${job.id}`}
@@ -93,7 +115,7 @@ export default function JobCard({ job, onSave, saved = false, aiScore }: JobCard
         </button>
       </div>
       
-      {job.is_active === false && (
+      {closed && (
         <p role="status" className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
           This saved vacancy has closed. Its details remain for your records.
         </p>
@@ -116,11 +138,20 @@ export default function JobCard({ job, onSave, saved = false, aiScore }: JobCard
             {job.salary}
           </span>
         )}
-        {job.source && (
+        {job.source === 'dfe_teaching_vacancies' ? (
+          <span className="inline-flex flex-col gap-1 text-xs text-gray-600">
+            <span>Source: DfE Teaching Vacancies</span>
+            <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
+              target="_blank" rel="noopener noreferrer" className="underline"
+              onClick={(e) => e.stopPropagation()}>
+              Public sector information licensed under OGL v3.0
+            </a>
+          </span>
+        ) : job.source ? (
           <span className="inline-flex items-center px-3 py-1.5 bg-blue-100 text-blue-700 text-sm font-medium rounded-lg">
             {job.source}
           </span>
-        )}
+        ) : null}
       </div>
       
       {job.date_posted && (
@@ -130,7 +161,7 @@ export default function JobCard({ job, onSave, saved = false, aiScore }: JobCard
       )}
       
       <div className="flex items-center gap-3 pt-4 border-t border-gray-100">
-        {job.is_active === false ? (
+        {closed ? (
           <span className="text-amber-700 text-sm font-medium">Listing closed</span>
         ) : (
           <Link href={`/jobs/${job.id}`}
@@ -138,7 +169,7 @@ export default function JobCard({ job, onSave, saved = false, aiScore }: JobCard
             View Details →
           </Link>
         )}
-        {job.url && job.is_active !== false && (
+        {job.url && !closed && (
           <a
             href={job.url}
             target="_blank"

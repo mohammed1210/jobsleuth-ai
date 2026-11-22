@@ -14,7 +14,7 @@ class PublicJobs:
         self.fail = False
 
     def table(self, name):
-        assert name == "jobs"
+        assert name == "live_jobs"
         return JobQuery(self)
 
 
@@ -62,7 +62,11 @@ class JobQuery:
     def execute(self):
         if self.database.fail:
             raise RuntimeError("synthetic database outage")
-        rows = list(self.database.rows)
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        rows = [r for r in self.database.rows if r.get("is_active") is not False
+                and (not r.get("expires_at") or
+                     datetime.fromisoformat(r["expires_at"].replace("Z", "+00:00")) > now)]
         for filt in self.filters:
             kind = filt[0]
             if kind == "eq":
@@ -100,7 +104,7 @@ def row(job_id=9, title="Public sector investigator", company="Example Agency", 
     return {"id": job_id, "title": title, "company": company, "location": "London",
             "salary": None, "salary_min": 40000, "salary_max": salary_max,
             "role_type": "Hybrid", "source": "synthetic", "url": "https://example.org/vacancy",
-            "description": "Synthetic data only", "created_at": "2026-11-21T00:00:00Z", "is_active": True}
+            "description": "Synthetic data only", "created_at": "2026-11-21T00:00:00Z", "is_active": True, "expires_at": None}
 
 
 def test_empty_database_returns_no_jobs(db):
@@ -161,6 +165,14 @@ def test_inactive_job_is_hidden_from_public_listing_and_detail(db):
     db.rows = [row(9), inactive]
     assert client.get("/jobs").json()["total"] == 1
     assert client.get("/jobs/66").status_code == 404
+
+
+def test_expired_advert_is_hidden_even_without_refresh(db):
+    expired = row(77, title="Closed by official deadline")
+    expired["expires_at"] = "2026-11-01T00:00:00Z"
+    db.rows = [row(9), expired]
+    assert client.get("/jobs").json()["total"] == 1
+    assert client.get("/jobs/77").status_code == 404
 
 
 def test_unavailable_db_does_not_show_mock_jobs(db):
