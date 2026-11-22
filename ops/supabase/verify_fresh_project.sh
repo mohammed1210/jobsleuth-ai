@@ -50,4 +50,60 @@ if sql -qAtc 'set role anon; select count(*) from public.evidence_cards;' >/dev/
   echo "Anonymous access to evidence unexpectedly succeeded" >&2
   exit 1
 fi
+# Stage 4 additive job-ingestion schema is compatible with Stage 1 and
+# repeat-safe. Test every DDL step in the same disposable Postgres instance.
+sql < ops/supabase/stage4_jobs_ingestion.sql
+sql < ops/supabase/stage4_jobs_ingestion.sql
+sql <<'STAGE4'
+do $check$
+begin
+  if not exists (
+    select 1 from pg_indexes
+    where schemaname='public' and tablename='jobs'
+      and indexname='jobs_provider_identity_unique'
+  ) then raise exception 'Job source unique index missing'; end if;
+end
+$check$;
+insert into public.jobs(title, company, location, source, source_board,
+                        external_id, last_seen_at, is_active)
+values ('Synthetic vacancy', 'Synthetic employer', 'London, United Kingdom',
+        'greenhouse', 'synthetic', '1234', now(), true)
+on conflict(source, source_board, external_id)
+do update set title=excluded.title, last_seen_at=excluded.last_seen_at;
+insert into public.jobs(title, company, location, source, source_board,
+                        external_id, last_seen_at, is_active)
+values ('Synthetic vacancy', 'Synthetic employer', 'London, United Kingdom',
+        'greenhouse', 'synthetic', '1234', now(), true)
+on conflict(source, source_board, external_id)
+do update set title=excluded.title, last_seen_at=excluded.last_seen_at;
+do $check$
+begin
+  if (select count(*) from public.jobs
+      where source='greenhouse' and source_board='synthetic'
+      and external_id='1234') <> 1
+  then raise exception 'Source idempotence failed'; end if;
+end
+$check$;
+insert into public.saved_jobs(user_id, job_id)
+select '00000000-0000-4000-8000-000000000001', id
+from public.jobs where source='greenhouse'
+ and source_board='synthetic' and external_id='1234';
+update public.jobs set is_active=false
+where source='greenhouse' and source_board='synthetic' and external_id='1234';
+do $check$
+begin
+  if (select count(*) from public.saved_jobs) <> 1
+  then raise exception 'Closing an expired vacancy removed saved-job history'; end if;
+end
+$check$;
+STAGE4
+# Public may still SELECT closed rows for saved-job history, while the API
+# explicitly filters is_active. Neither anon nor authenticated may INSERT.
+for role in anon authenticated; do
+  if sql -qAtc "set role $role; insert into public.jobs(title,company,location) values ('Unsafe','No','London');" >/dev/null 2>&1; then
+    echo "Stage 4 unexpectedly granted $role direct job writes" >&2
+    exit 1
+  fi
+done
+echo "Stage 4 schema, idempotence, RLS and saved-job retention passed"
 echo "Fresh-project schema and RLS checks passed"
