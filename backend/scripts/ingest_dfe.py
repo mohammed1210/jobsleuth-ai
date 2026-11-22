@@ -18,6 +18,8 @@ from lib.dfe_ingestion import FeedError, run
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply", action="store_true", help="Commit source postings to dedicated Supabase")
+    parser.add_argument("--pilot", action="store_true",
+                        help="Use only page one; upserts only, never deactivate missing jobs")
     args = parser.parse_args()
     try:
         with httpx.Client(follow_redirects=False, trust_env=False,
@@ -26,7 +28,7 @@ def main():
             if args.apply:
                 from lib.supabase import get_supabase_client
                 storage = get_supabase_client()
-            output = run(client=client, apply=args.apply, storage=storage)
+            output = run(client=client, apply=args.apply, storage=storage, pilot=args.pilot)
         # Print ONLY aggregate counts, never raw feed content/credentials.
         print(json.dumps(output, sort_keys=True))
     except (httpx.HTTPError, FeedError, ValueError):
