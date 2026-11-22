@@ -104,7 +104,7 @@ def row(job_id=9, title="Public sector investigator", company="Example Agency", 
     return {"id": job_id, "title": title, "company": company, "location": "London",
             "salary": None, "salary_min": 40000, "salary_max": salary_max,
             "role_type": "Hybrid", "source": "synthetic", "url": "https://example.org/vacancy",
-            "description": "Synthetic data only", "created_at": "2026-11-21T00:00:00Z", "is_active": True, "expires_at": None
+            "description": "Synthetic data only", "created_at": "2026-11-21T00:00:00Z", "is_active": True, "expires_at": None}
 
 
 def test_empty_database_returns_no_jobs(db):
