@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import os
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urlsplit, urlunsplit
 
@@ -50,6 +51,20 @@ def official_job_url(value: object) -> tuple[str, str] | None:
 def read_date(value: object, field: str) -> datetime:
     if not isinstance(value, str):
         raise FeedError(f"Missing {field} in DfE vacancy")
+    # DfE's live JobPosting response can use date-only ISO 8601 for
+    # datePosted. Do not pretend it specifies an exact publication time.
+    # For date-only expiry, remain active until the END of the UK calendar
+    # day rather than incorrectly closing at midnight UTC.
+    if re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}", value):
+        try:
+            day = date.fromisoformat(value)
+        except ValueError as e:
+            raise FeedError(f"Invalid {field} date") from e
+        if field == "validThrough":
+            return datetime.combine(
+                day, time.max, tzinfo=ZoneInfo("Europe/London")
+            ).astimezone(timezone.utc)
+        return datetime.combine(day, time.min, tzinfo=timezone.utc)
     try:
         result = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as e:

@@ -54,6 +54,20 @@ def test_official_source_and_salary():
     assert r["source_updated_at"] is None
 
 
+def test_date_only_fields_from_real_dfe_api_are_supported():
+    from lib.dfe_ingestion import read_date
+    post = item()
+    post["datePosted"] = "2026-11-20"
+    post["validThrough"] = "2026-11-22"
+    assert record(post, datetime(2026, 11, 22, 18, tzinfo=timezone.utc))["is_active"]
+    assert not record(post, datetime(2026, 11, 23, 0, tzinfo=timezone.utc))["is_active"]
+    assert read_date("2026-07-02", "validThrough").isoformat() == "2026-07-02T22:59:59.999999+00:00"
+    with pytest.raises(FeedError):
+        read_date("2026-02-30", "validThrough")
+    with pytest.raises(FeedError):
+        read_date("2026-11-22T09:30:00", "validThrough")
+
+
 def test_closed_source_job_is_immediately_inactive():
     assert record(item(date="2026-11-20T16:00:00Z"), NOW)["is_active"] is False
 
