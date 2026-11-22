@@ -19,6 +19,14 @@ UUID-job migration or restore the PropNexus database.**
 - Among the four evidence rows one is an internal `cv_profile` record. The
   `/evidence` endpoint intentionally excludes that record; expect **three**
   visible cards and a separately retrievable CV profile, not four visible cards.
+- The OLD project does not contain `public.jobs`, `public.saved_jobs`
+  or `public.user_profiles` at all (read-only `information_schema` check,
+  22 November 2026). The new isolated project DOES have these tables.
+  Therefore **merging PR #96 or #97 to `main` while Railway still points
+  at the OLD database will break real Saved Jobs/account profile/jobs routes.**
+  Coordinate code deployment and both Supabase environment switches as one
+  separately approved release, with a rollback checkpoint and acceptance of
+  a short maintenance window if necessary. Do not pre-merge either PR on its own.
 - NEW project contains **zero** saved jobs and zero subscription rows.
   This dependent PR replaces the demo `/jobs` backend with database-backed
   public-read queries, so its response is an honest empty list until actual
@@ -167,6 +175,7 @@ approved deletion/retention decision.
 | Vercel backend URL | Existing Railway production HTTPS service | PASS |
 | Railway production environment values | Names visible, sensitive values redacted | Must verify privately during release |
 | Frontend/build code | PRs #96 and #97 draft/unmerged, tests passed | Merge/release approval still required |
+| Legacy source schema compatibility | OLD database lacks jobs, saved_jobs and user_profiles | **BLOCKED**: never merge code before paired environment cutover |
 | Supabase Auth advisor | Leaked-password protection disabled | Resolve before external pilot |
 | Live paid checkout | Not enabled; Stripe migration separate | MUST STAY OFF |
 
