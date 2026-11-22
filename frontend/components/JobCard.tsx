@@ -116,11 +116,20 @@ export default function JobCard({ job, onSave, saved = false, aiScore }: JobCard
             {job.salary}
           </span>
         )}
-        {job.source && (
+        {job.source === 'dfe_teaching_vacancies' ? (
+          <span className="inline-flex flex-col gap-1 text-xs text-gray-600">
+            <span>Source: DfE Teaching Vacancies</span>
+            <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
+              target="_blank" rel="noopener noreferrer" className="underline"
+              onClick={(e) => e.stopPropagation()}>
+              Public sector information licensed under OGL v3.0
+            </a>
+          </span>
+        ) : job.source ? (
           <span className="inline-flex items-center px-3 py-1.5 bg-blue-100 text-blue-700 text-sm font-medium rounded-lg">
             {job.source}
           </span>
-        )}
+        ) : null}
       </div>
       
       {job.date_posted && (

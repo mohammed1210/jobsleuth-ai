@@ -191,7 +191,17 @@ export default function JobDetailPage() {
                 <span className="rounded-lg bg-gray-100 px-4 py-2">{job.location}</span>
                 {job.salary && <span className="rounded-lg bg-gray-100 px-4 py-2">{job.salary}</span>}
                 {job.role_type && <span className="rounded-lg bg-gray-100 px-4 py-2">{job.role_type}</span>}
-                {job.source && <span className="rounded-lg bg-gray-100 px-4 py-2">Source: {job.source}</span>}
+                {job.source === 'dfe_teaching_vacancies' ? (
+                  <span className="rounded-lg bg-gray-100 px-4 py-2">
+                    Source: DfE Teaching Vacancies —{' '}
+                    <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
+                      target="_blank" rel="noopener noreferrer" className="underline">
+                      OGL v3.0
+                    </a>
+                  </span>
+                ) : job.source ? (
+                  <span className="rounded-lg bg-gray-100 px-4 py-2">Source: {job.source}</span>
+                ) : null}
               </div>
 
               {actionError && (
