@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { Job } from '@/lib/api';
 
@@ -43,8 +43,28 @@ export default function JobCard({ job, onSave, saved = false, aiScore }: JobCard
   };
 
   const score = aiScore ?? job.ai_score ?? undefined;
+  const [checkedAt, setCheckedAt] = useState(() => Date.now());
   const expiryMillis = job.expires_at ? Date.parse(job.expires_at) : NaN;
-  const closed = job.is_active === false || (Number.isFinite(expiryMillis) && expiryMillis <= Date.now());
+
+  useEffect(() => {
+    if (!Number.isFinite(expiryMillis)) return;
+    const refresh = () => setCheckedAt(Date.now());
+    const remaining = Math.max(0, expiryMillis - Date.now() + 50);
+    // Exact deadline when practical, periodic check for long-lived tabs,
+    // and focus/visibility checks for browsers that suspend timers.
+    const timer = window.setTimeout(refresh, Math.min(remaining, 2147483647));
+    const interval = window.setInterval(refresh, 60_000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [expiryMillis]);
+
+  const closed = job.is_active === false || (Number.isFinite(expiryMillis) && expiryMillis <= checkedAt);
 
   return (
     <div 

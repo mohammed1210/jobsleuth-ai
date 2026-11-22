@@ -92,3 +92,12 @@ table so users may review closed saved adverts; the UI disables its original
 application link once expiry has passed. Dedicated project RLS remains
 in effect for the view's underlying table. This view and the SQL migration
 MUST be applied together with the code release. Neither is applied yet.
+
+### Location omissions observed in live full feed
+
+Some DfE JobPosting rows have valid GB country codes but omit both locality
+and region. The importer retains these adverts using the provided postcode
+if available; otherwise it displays “England (specific location not
+provided)”. Do not infer a town, or incorrectly exclude a legitimate
+publisher's posting. Saved-job cards refresh on closing-time timers and
+browser focus, so old tabs do not retain active Apply links indefinitely.

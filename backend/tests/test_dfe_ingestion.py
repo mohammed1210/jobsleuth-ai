@@ -68,6 +68,17 @@ def test_date_only_fields_from_real_dfe_api_are_supported():
         read_date("2026-11-22T09:30:00", "validThrough")
 
 
+def test_official_gb_vacancy_without_town_uses_honest_fallback():
+    post = item()
+    address = post["jobLocation"]["address"]
+    address["addressLocality"] = None
+    address["addressRegion"] = None
+    address["postalCode"] = "UB7 9XX"
+    assert record(post, NOW)["location"] == "UB7 9XX"
+    address["postalCode"] = None
+    assert record(post, NOW)["location"] == "England (specific location not provided)"
+
+
 def test_closed_source_job_is_immediately_inactive():
     assert record(item(date="2026-11-20T16:00:00Z"), NOW)["is_active"] is False
 

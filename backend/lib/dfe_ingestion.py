@@ -109,7 +109,13 @@ def record(raw: object, seen_at: datetime) -> dict:
     place = [address.get("addressLocality"), address.get("addressRegion")]
     pieces = [str(x).strip() for x in place if isinstance(x, str) and x.strip()]
     if not pieces:
-        raise FeedError("DfE record missing location details")
+        postcode = address.get("postalCode")
+        if isinstance(postcode, str) and postcode.strip():
+            pieces = [postcode.strip()]
+        else:
+            # DfE publishes only GB/England vacancies, and the verified
+            # country is GB. Label missing locality honestly; never guess it.
+            pieces = ["England (specific location not provided)"]
     published = read_date(raw.get("datePosted"), "datePosted")
     closes = read_date(raw.get("validThrough"), "validThrough")
     # Source expiration is authoritative: show closed immediately even if the
