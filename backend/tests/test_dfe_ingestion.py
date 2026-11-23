@@ -116,6 +116,23 @@ def test_publisher_written_annual_salary_range_and_grade_are_preserved():
     }}) == (None, None, None)
 
 
+def test_full_publisher_description_is_not_truncated_at_600_chars():
+    from lib.dfe_ingestion import publisher_description
+    paragraph = "Teach mathematics and support pupils. " * 65
+    raw = "<h2>Role responsibilities</h2><p>" + paragraph + "</p>" + (
+        "<script>DO NOT EXECUTE</script><p>Safeguarding knowledge is essential.</p>"
+    )
+    result = publisher_description(raw)
+    assert result is not None
+    assert len(result) > 600
+    assert "Role responsibilities" in result
+    assert "Safeguarding knowledge is essential." in result
+    assert "DO NOT EXECUTE" not in result
+    post = item()
+    post["description"] = raw
+    assert len(record(post, NOW)["description"]) > 600
+
+
 def test_page_scan_complete_before_any_write():
     with client_with_pages([[item("one-posting")],
                             [item("another-posting")]]) as client:
