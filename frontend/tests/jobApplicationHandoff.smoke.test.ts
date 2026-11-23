@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { advertForApplication, applicationPath, safeLoginReturnPath, signInPathForJob } from '../lib/jobApplicationHandoff';
+import { detectApplicationInstructions } from '../lib/applicationInstructions';
 
 const job = {
   id: 100,
@@ -29,10 +30,16 @@ test('JobSleuth application route is local and preserves the selected job', () =
 
 test('source job details prefill Apply with correct role, pay, source and complete description', () => {
   const advert = advertForApplication(job);
-  assert.match(advert, /Job title: Cleaner/);
-  assert.match(advert, /Employer: Fixture School/);
+  assert.match(advert, /Job title\s+Cleaner/);
+  assert.match(advert, /Employer\s+Fixture School/);
   assert.match(advert, /£12,500 - £14,000/);
   assert.match(advert, /https:\/\/teaching-vacancies.service.gov.uk\/jobs\/fixture-cleaner/);
   assert.match(advert, /Full publisher text with responsibilities/);
   assert.doesNotMatch(advert, /85%|AI match/i);
+});
+
+test('handoff metadata is understood by the same application-builder parser', () => {
+  const parsed = detectApplicationInstructions(advertForApplication(job));
+  assert.equal(parsed.roleTitle, 'Cleaner');
+  assert.equal(parsed.organisation, 'Fixture School');
 });
