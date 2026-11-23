@@ -100,7 +100,7 @@ About You
 
 test('explicit employer requirements are distinguished from generic statements', () => {
   const result = detectApplicationInstructions(
-    'Operations Manager\\nPlease submit your CV and a personal statement. Maximum 750 words.'
+    'Operations Manager\nPlease submit your CV and a personal statement. Maximum 750 words.'
   );
   assert.equal(result.applicationFormatConfirmed, true);
   assert.equal(result.wordLimitConfirmed, true);
@@ -118,7 +118,7 @@ test('passing mention of personal statements cannot imply employer has requested
 
 test('optional cover letter field is known optional, not an employer requirement', () => {
   const result = detectApplicationInstructions(
-    'Role\\n* indicates a required field\\nResume/CV*\\nCover Letter\\nSubmit application'
+    'Role\n* indicates a required field\nResume/CV*\nCover Letter\nSubmit application'
   );
   assert.equal(result.applicationFormatConfirmed, true);
   assert.ok(!result.requiredDocuments.includes('Cover Letter'));
