@@ -640,6 +640,13 @@ export default function VacancyApplyPage() {
   );
   const careerCriteriaCount = lines(essential).length + lines(desirable).length + lines(trainable).length;
   const hasAnalysableCriteria = careerCriteriaCount + lines(eligibility).length > 0;
+  // An imported source is authoritative for the current draft only while
+  // its exact text remains in the editor. Manual replacements retire the
+  // ownership claim without overwriting or discarding the applicant's work.
+  const sourceJobOwnsDraft = Boolean(
+    sourceJob && sourceJobLoadedIntoDraft
+    && vacancyText.trim() === advertForApplication(sourceJob).trim(),
+  );
   const shortPublisherExcerpt = Boolean(
     sourceJob?.source === 'dfe_teaching_vacancies'
       && (sourceJob.description?.length ?? 0) <= 600,
@@ -686,7 +693,7 @@ export default function VacancyApplyPage() {
                 </a>
               )}
             </div>
-            {sourceJobLoadedIntoDraft ? (
+            {sourceJobOwnsDraft ? (
               <p role="status" className="mt-3 text-sm font-medium text-emerald-800">
                 The publisher's vacancy information is loaded below. Review it, then select Extract vacancy.
               </p>
@@ -970,7 +977,7 @@ export default function VacancyApplyPage() {
                 </p>
               </section>
             ) : (
-              session && <ApplicationDraftPanel session={session} analysis={analysis} evidence={evidence} vacancyText={vacancyText} originalAdvertUrl={sourceJobLoadedIntoDraft ? sourceJob?.url : null} />
+              session && <ApplicationDraftPanel session={session} analysis={analysis} evidence={evidence} vacancyText={vacancyText} originalAdvertUrl={sourceJobOwnsDraft ? sourceJob?.url : null} />
             )}
           </>
         )}
