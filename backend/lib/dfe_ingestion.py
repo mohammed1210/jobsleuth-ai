@@ -75,22 +75,54 @@ def read_date(value: object, field: str) -> datetime:
     return result.astimezone(timezone.utc)
 
 
-def annual_salary(value: object) -> tuple[int | None, str | None]:
+def annual_salary(value: object) -> tuple[int | None, int | None, str | None]:
+    """Keep the publisher's GBP annual salary text; infer bounds only if explicit.
+
+    Teaching Vacancies provides a salary field as either a number or a
+    publisher-authored string such as "£68,691 - £77,676 Annually (Actual)".
+    Reject unsupported currencies/units; never invent a pay band.
+    """
     if not isinstance(value, dict) or value.get("currency") != "GBP":
-        return None, None
+        return None, None, None
     raw = value.get("value")
     if not isinstance(raw, dict) or raw.get("unitText") != "YEAR":
-        return None, None
+        return None, None, None
     number = raw.get("value")
     if isinstance(number, bool) or not isinstance(number, (int, float, str)):
-        return None, None
+        return None, None, None
+
+    if isinstance(number, (int, float)):
+        text = str(number)
+    else:
+        text = " ".join(number.split())
+    if not text or len(text) > 200 or "<" in text or ">" in text:
+        return None, None, None
     try:
-        amount = Decimal(str(number))
+        amount = Decimal(text)
     except InvalidOperation:
-        return None, None
-    if not amount.is_finite() or amount <= 0 or amount > 500_000:
-        return None, None
-    return int(amount), f"£{amount:,.0f} per year"
+        amount = None
+    if amount is not None:
+        if not amount.is_finite() or not 0 < amount <= 500_000:
+            return None, None, None
+        return int(amount), int(amount), f"£{amount:,.0f} per year"
+
+    # For free-form salary text, preserve the advertised wording and extract
+    # only explicit £ amounts, not misleading grade numbers such as SCP 11-16.
+    # No implied lower bound or amount is created for grade-only adverts.
+    pounds = re.findall(
+        r"£\\s*(\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\.\\d{1,2})?(?![\\d,.])", text
+    )
+    try:
+        values = [int(x.replace(",", "")) for x in pounds]
+    except ValueError:
+        return None, None, None
+    if any(not 0 < x <= 500_000 for x in values):
+        return None, None, None
+    if len(values) == 1:
+        return values[0], values[0], text
+    if len(values) == 2 and values[0] <= values[1]:
+        return values[0], values[1], text
+    return None, None, text
 
 
 def record(raw: object, seen_at: datetime) -> dict:
@@ -121,7 +153,7 @@ def record(raw: object, seen_at: datetime) -> dict:
     # Source expiration is authoritative: show closed immediately even if the
     # DfE endpoint returns it briefly during indexing.
     is_active = closes > seen_at
-    salary_min, salary = annual_salary(raw.get("baseSalary"))
+    salary_min, salary_max, salary = annual_salary(raw.get("baseSalary"))
     job_type = raw.get("employmentType")
     if isinstance(job_type, list):
         kinds = [x for x in job_type if x in ("FULL_TIME", "PART_TIME", "CONTRACTOR")]
@@ -133,7 +165,7 @@ def record(raw: object, seen_at: datetime) -> dict:
         "title": title.strip(), "company": employer["name"].strip()[:200],
         "location": ", ".join(pieces)[:250], "url": link[1],
         "description": excerpt(raw.get("description")),
-        "salary": salary, "salary_min": salary_min, "salary_max": salary_min,
+        "salary": salary, "salary_min": salary_min, "salary_max": salary_max,
         "role_type": role_type, "is_active": is_active,
         "last_seen_at": seen_at.isoformat(),
         "source_updated_at": None,  # DfE datePosted is NOT last-edited timestamp.
