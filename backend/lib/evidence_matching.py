@@ -211,9 +211,9 @@ def requires_school_setting_experience(requirement: str) -> bool:
     cannot be fulfilled by unrelated operations leadership.
     """
     return bool(
-        re.search(r"\b(?:experience|worked|working|leadership|leading|teaching)\b", requirement, re.I)
+        re.search(r"\b(?:experience|worked|working|employed|taught)\b", requirement, re.I)
         and re.search(
-            r"\b(?:within|in|at)\s+(?:(?:a|an|the)\s+)?(?:primary|secondary)\s+school\b",
+            r"\b(?:within|in|at)\s+(?:(?:a|an|the)\s+)?(?:primary|secondary)\s+schools?\b",
             requirement, re.I,
         )
     )
@@ -224,15 +224,22 @@ def has_school_setting_experience(card: Any) -> bool:
     title = str(getattr(card, "title", "") or "")
     task = str(getattr(card, "task", "") or "")
     actions = [str(v) for v in (getattr(card, "actions", []) or [])]
+    situation = str(getattr(card, "situation", "") or "")
+    authority = str(getattr(card, "authority_context", "") or "")
     # A school is named as the candidate's role/workplace, or their actions
     # explicitly describe working in that type of school.
     if re.search(r"\b(?:primary|secondary)\s+school\b", title, re.I):
         return True
     workplace_action = re.compile(
         r"\b(?:worked|working|taught|teaching|led|managed|supervised|coached|supported)\b"
-        r".{0,100}\b(?:primary|secondary)\s+school\b", re.I,
+        r".{0,100}\b(?:primary|secondary)\s+schools?\b", re.I,
     )
-    return bool(workplace_action.search(task) or any(workplace_action.search(v) for v in actions))
+    personal_role = re.compile(
+        r"\b(?:I\s+(?:was|am|served|held|worked|taught|led)\b|my\s+(?:role|position)\s+(?:was|at)\b)"
+        r"[^.\n]{0,120}\b(?:primary|secondary)\s+schools?\b", re.I,
+    )
+    facts = [task, situation, authority, *actions]
+    return any(workplace_action.search(value) or personal_role.search(value) for value in facts)
 
 
 def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
