@@ -543,6 +543,22 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         if credential_optional:
             items.append(_item(line, "desirable", 0.88, explicit_blocker=False))
             continue
+
+        # A standalone professional qualification under About You / an
+        # explicit essential list is a candidate-confirmed prerequisite.
+        # Treat it as an eligibility check rather than pretending an Evidence
+        # Bank anecdote can prove possession of that qualification.
+        bare_qts_requirement = (
+            section in {"essential", "eligibility"}
+            and bool(re.fullmatch(
+                r"(?:qualified teacher status(?:\\s*\\(qts\\))?|qts)\\.?",
+                lowered,
+            ))
+        )
+        if bare_qts_requirement:
+            items.append(_item(line, "eligibility", 0.96, explicit_blocker=True))
+            continue
+
         if section != "desirable" and (any(cue in lowered for cue in eligibility_cues) or credential_mandatory):
             items.append(_item(line, "eligibility", 0.9, explicit_blocker=explicit_blocker))
             continue
