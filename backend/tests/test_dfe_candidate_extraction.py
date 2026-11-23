@@ -54,8 +54,11 @@ def test_qts_is_only_a_prerequisite_when_stated_as_required():
     desirable = deterministic_extract("Desirable criteria:\n• Qualified Teacher Status.")
     assert all(x["category"] != "eligibility" for x in desirable)
 
+    optional = deterministic_extract("About You\n• Qualified Teacher Status is desirable.")
+    assert [x["category"] for x in optional] == ["desirable"]
+
     negated = deterministic_extract("About You\n• Qualified Teacher Status is not required.")
-    assert not any(x["category"] == "eligibility" for x in negated)
+    assert not any("Teacher Status" in x["text"] for x in negated)
 
     context_only = deterministic_extract(
         "About the school\nWe provide training for colleagues seeking Qualified Teacher Status."
