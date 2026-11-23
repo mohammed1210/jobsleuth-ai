@@ -26,6 +26,9 @@ def missing_direct_school_experience(requirements: list[Any], cards_by_id: dict[
         criterion = str(getattr(requirement, "text", "")).strip()
         if not requires_school_setting_experience(criterion):
             continue
+        if str(getattr(requirement, "match_strength", "missing")).lower() not in {"strong", "partial"}:
+            missing.append(criterion)
+            continue
         linked_cards = (
             cards_by_id.get(str(evidence_id))
             for evidence_id in (getattr(requirement, "evidence_ids", []) or [])
