@@ -38,6 +38,8 @@ def school_card() -> Evidence:
 def test_primary_school_leadership_requires_explicit_primary_school_experience():
     assert requires_school_setting_experience(SCHOOL_REQUIREMENT)
     assert not requires_school_setting_experience("An understanding of the primary school curriculum")
+    assert not requires_school_setting_experience("Understanding of teaching and leadership practices in a primary school")
+    assert requires_school_setting_experience("Successful teaching experience in primary schools")
     assert not has_school_setting_experience(freight_card())
     match = deterministic_match(SCHOOL_REQUIREMENT, freight_card())
     assert match["strength"] in {"weak", "missing"}
@@ -100,3 +102,30 @@ def test_explicit_qts_no_is_skip_and_unknown_requires_confirmation(monkeypatch):
         result = response.json()
         assert result["decision"] == decision
         assert result["requirements"][0]["status"] == status
+
+
+def test_explicit_school_role_in_situation_satisfies_context_gate():
+    card = Evidence(
+        id="school-situation",
+        title="Leading a small team",
+        situation="I was Assistant Head at Meadow Primary School.",
+        actions=["I led colleagues through a curriculum improvement project."],
+        outcome="Standards improved.",
+    )
+    assert has_school_setting_experience(card)
+    match = deterministic_match(SCHOOL_REQUIREMENT, card)
+    assert not any("school setting" in gap for gap in match["gaps"])
+
+
+def test_knowledge_of_school_practices_is_not_direct_experience():
+    card = Evidence(
+        id="research",
+        title="Public policy researcher",
+        task="I researched education policy.",
+        actions=["I analysed teaching and leadership practices in a primary school."],
+        outcome="The review informed policy guidance.",
+    )
+    requirement = "Understanding of teaching and leadership practices in a primary school"
+    assert not requires_school_setting_experience(requirement)
+    # The workplace-specific guard must not artificially cap this knowledge criterion.
+    assert not any("school setting" in gap for gap in deterministic_match(requirement, card)["gaps"])
