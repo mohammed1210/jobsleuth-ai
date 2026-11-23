@@ -36,6 +36,7 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
   const [selectedPartId, setSelectedPartId] = useState('');
   const [applicationType, setApplicationType] = useState<ApplicationType>('statement_of_suitability');
   const [wordLimitInput, setWordLimitInput] = useState('500');
+  const [wordLimitEdited, setWordLimitEdited] = useState(false);
   const [draftAnyway, setDraftAnyway] = useState(false);
   const [result, setResult] = useState<ApplicationDraftResult | null>(null);
   const [draft, setDraft] = useState('');
@@ -57,6 +58,7 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
     setSelectedPartId(first?.id ?? '');
     setApplicationType(first?.kind === 'criteria' ? 'criteria_response' : first?.kind === 'cover_letter' ? 'cover_letter' : 'statement_of_suitability');
     setWordLimitInput(String(first?.wordLimit ?? instructions.wordLimit ?? 500));
+    setWordLimitEdited(false);
     setDraftAnyway(false);
     setResult(null);
     setDraft('');
@@ -72,6 +74,7 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
           : 'statement_of_suitability',
     );
     setWordLimitInput(String(selectedPart.wordLimit ?? (selectedPart.kind === 'behaviour' ? 250 : instructions.wordLimit ?? 500)));
+    setWordLimitEdited(false);
     setDraftAnyway(false);
     setResult(null);
     setDraft('');
@@ -346,7 +349,7 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
             <label className="text-sm font-medium text-gray-700">Role title<input value={roleTitle} onChange={(e) => setRoleTitle(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2" placeholder="e.g. Counter Fraud Officer" /></label>
             <label className="text-sm font-medium text-gray-700">Organisation<input value={organisation} onChange={(e) => setOrganisation(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2" placeholder="Optional" /></label>
             <label className="text-sm font-medium text-gray-700">Draft format<select value={applicationType} onChange={(e) => setApplicationType(e.target.value as ApplicationType)} className="mt-1 w-full rounded-xl border px-3 py-2"><option value="statement_of_suitability">Personal statement / statement of suitability</option><option value="cover_letter">Cover letter</option><option value="criteria_response">Criteria / behaviour response</option></select></label>
-            <label className="text-sm font-medium text-gray-700">Word limit<input inputMode="numeric" value={wordLimitInput} onChange={(e) => setWordLimitInput(e.target.value.replace(/[^0-9]/g, ''))} onBlur={() => setWordLimitInput(String(wordLimit))} className="mt-1 w-full rounded-xl border px-3 py-2" placeholder="e.g. 750" /></label>
+            <label className="text-sm font-medium text-gray-700">Word limit<input inputMode="numeric" value={wordLimitInput} onChange={(e) => { setWordLimitInput(e.target.value.replace(/[^0-9]/g, '')); setWordLimitEdited(true); }} onBlur={() => setWordLimitInput(String(wordLimit))} className="mt-1 w-full rounded-xl border px-3 py-2" placeholder="e.g. 750" /></label>
           </div>
         </div>
       </details>
@@ -355,7 +358,7 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
         <button type="button" onClick={build} disabled={building || unmetEligibility.length > 0 || (readiness.needsStrengthening && !draftAnyway)} className="btn-primary disabled:cursor-not-allowed disabled:opacity-50">
           {building ? 'Building evidence-backed draft…' : `Build ${selectedPart?.label ?? 'application'} draft`}
         </button>
-        <span className="text-xs text-gray-500">{wordLimit} words · {instructions.wordLimitConfirmed ? 'advert text (verify)' : 'editable working default'}</span>
+        <span className="text-xs text-gray-500">{wordLimit} words · {wordLimitEdited ? 'your chosen working limit (check employer cap)' : instructions.wordLimitConfirmed ? 'advert text (verify)' : 'JobSleuth working default'}</span>
       </div>
 
       {message && <div className="mt-4 rounded-xl border bg-white px-4 py-3 text-sm text-gray-700">{message}</div>}
