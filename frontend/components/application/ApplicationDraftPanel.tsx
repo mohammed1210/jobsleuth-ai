@@ -332,11 +332,23 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
             </div>
           )}
 
+          {result.provider.startsWith('deterministic-grounded') && (
+            <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <strong>Evidence excerpt — manual tailoring required.</strong> AI drafting was unavailable or did not pass grounding checks.
+              This version assembles your recorded examples; it does not itself explain why they meet the
+              advertised role, confirm professional qualifications or replace the employer's application instructions.
+            </p>
+          )}
+
           <div>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h3 className="font-semibold text-gray-900">{selectedPart?.label ?? 'Editable'} draft</h3>
-                <p className="text-xs text-gray-500">Edit freely, then check the facts before submitting.</p>
+                <h3 className="font-semibold text-gray-900">
+                  {result.provider.startsWith('deterministic-grounded')
+                    ? 'Editable evidence-based working draft'
+                    : `${selectedPart?.label ?? 'Editable'} draft`}
+                </h3>
+                <p className="text-xs text-gray-500">Edit freely, then check the facts and relevance before submitting.</p>
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-sm text-gray-600">{liveWordCount} / {wordLimit} words</span>
