@@ -78,3 +78,53 @@ We support regional operations.
   assert.equal(result.roleTitle, 'Operations Manager');
   assert.equal(result.organisation, 'Example Security Ltd');
 });
+
+
+test('DfE-style employer excerpt without application instructions labels 500 words as a draft default', () => {
+  const text = `Job title
+Head of School
+Employer
+Example Primary Academy
+Salary: £68,000–£77,000
+Applications close: 10 December
+About You
+• Qualified Teacher Status
+• Leadership experience within a primary school setting
+`;
+  const result = detectApplicationInstructions(text);
+  assert.equal(result.wordLimit, null);
+  assert.equal(result.wordLimitConfirmed, false);
+  assert.equal(result.applicationFormatConfirmed, false);
+  assert.deepEqual(result.requiredDocuments, []);
+});
+
+test('explicit employer requirements are distinguished from generic statements', () => {
+  const result = detectApplicationInstructions(
+    'Operations Manager\\nPlease submit your CV and a personal statement. Maximum 750 words.'
+  );
+  assert.equal(result.applicationFormatConfirmed, true);
+  assert.equal(result.wordLimitConfirmed, true);
+  assert.equal(result.wordLimit, 750);
+  assert.ok(result.requiredDocuments.includes('Personal Statement'));
+});
+
+test('passing mention of personal statements cannot imply employer has requested one', () => {
+  const result = detectApplicationInstructions(
+    'We help staff with personal statement coaching during their professional development. No application guidance is provided.'
+  );
+  assert.equal(result.applicationFormatConfirmed, false);
+  assert.ok(!result.requiredDocuments.includes('Personal Statement'));
+});
+
+test('optional cover letter field is known optional, not an employer requirement', () => {
+  const result = detectApplicationInstructions(
+    'Role\\n* indicates a required field\\nResume/CV*\\nCover Letter\\nSubmit application'
+  );
+  assert.equal(result.applicationFormatConfirmed, true);
+  assert.ok(!result.requiredDocuments.includes('Cover Letter'));
+});
+
+test('explicitly negated document instructions are not required documents', () => {
+  const result = detectApplicationInstructions('Do not submit a cover letter. Please send a CV only.');
+  assert.ok(!result.requiredDocuments.includes('Cover Letter'));
+});
