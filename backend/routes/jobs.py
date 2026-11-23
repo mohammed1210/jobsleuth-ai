@@ -106,7 +106,7 @@ async def list_jobs(
         if place:
             query = query.ilike("location", f"%{place}%")
         if kind:
-            query = query.ilike("role_type", kind)
+            query = query.ilike("role_type", f"%{kind}%")
         if salary_min is not None:
             # Unknown salary maxima are excluded from a minimum-salary filter.
             query = query.gte("salary_max", salary_min)
