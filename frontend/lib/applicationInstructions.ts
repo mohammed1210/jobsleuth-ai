@@ -16,6 +16,10 @@ export type ApplicationInstructions = {
   wordLimit: number | null;
   requiredDocuments: string[];
   applicationParts: ApplicationPart[];
+  /** True when an advertised document requirement or application form field was identified. */
+  applicationFormatConfirmed: boolean;
+  /** True when a word limit was actually found in the vacancy text. */
+  wordLimitConfirmed: boolean;
 };
 
 const cleanLines = (text: string) => text
@@ -130,6 +134,24 @@ function hasNegatedDocumentInstruction(text: string, documentPattern: string): b
   return sawNegatedMention && !sawPositiveAction;
 }
 
+function hasExplicitDocumentRequest(text: string, documentPattern: string): boolean {
+  // A passing mention of a CV, cover letter or statement is not an instruction.
+  const document = '(?:' + documentPattern + ')';
+  const nearAction = new RegExp(
+    '\\b(?:submit|provide|include|attach|upload|complete|prepare|write|send|supply)\\b[^.!?\\n]{0,95}' + document,
+    'i',
+  );
+  const explicitlyRequired = new RegExp(
+    document + '\\s+(?:is|will be|must be)\\s+(?:required|needed|submitted|uploaded|provided|included)\\b',
+    'i',
+  );
+  const specificallyAsked = new RegExp(
+    '\\b(?:you (?:must|should|need to|are required to)|we (?:require|ask for|expect))\\s+(?:\\w+\\s+){0,8}' + document,
+    'i',
+  );
+  return nearAction.test(text) || explicitlyRequired.test(text) || specificallyAsked.test(text);
+}
+
 function hasOptionalAtsDocumentField(text: string, documentPattern: string): boolean {
   if (!/indicates a required field/i.test(text)) return false;
   const lines = cleanLines(text);
@@ -172,13 +194,15 @@ export function detectApplicationInstructions(vacancyText: string): ApplicationI
   const personalStatementNegated = hasNegatedDocumentInstruction(text, 'personal\\s+statement');
   const personalStatementOptionalField = hasOptionalAtsDocumentField(text, 'personal\\s+statement');
   const personalStatement = personalStatementMentioned && !personalStatementNegated;
-  const personalStatementRequired = personalStatement && !personalStatementOptionalField;
+  const personalStatementRequired = personalStatement && !personalStatementOptionalField
+    && hasExplicitDocumentRequest(text, 'personal\\s+statement');
   const criteriaResponse = /essential criteria response|criteria response/i.test(text);
   const coverLetterMentioned = /cover(?:ing)? letter/i.test(text);
   const coverLetterNegated = hasNegatedDocumentInstruction(text, 'cover(?:ing)?\\s+letter');
   const coverLetterOptionalField = hasOptionalAtsDocumentField(text, 'cover(?:ing)?\\s+letter');
   const coverLetter = coverLetterMentioned && !coverLetterNegated;
-  const coverLetterRequired = coverLetter && !coverLetterOptionalField;
+  const coverLetterRequired = coverLetter && !coverLetterOptionalField
+    && hasExplicitDocumentRequest(text, 'cover(?:ing)?\\s+letter');
   const applicationType: ApplicationType = criteriaResponse
     ? 'criteria_response'
     : personalStatement
@@ -269,6 +293,11 @@ export function detectApplicationInstructions(vacancyText: string): ApplicationI
     applicationTypeLabel,
     wordLimit,
     requiredDocuments: [...new Set(requiredDocuments)],
+    applicationFormatConfirmed: Boolean(
+      personalStatementRequired || coverLetterRequired || personalStatementOptionalField ||
+      coverLetterOptionalField || (criteriaResponse && /\b(?:submit|provide|write|complete|answer)\b.{0,80}\bcriteria\b/i.test(text)),
+    ),
+    wordLimitConfirmed: wordLimit !== null,
     applicationParts: applicationParts.filter((part, index, parts) => parts.findIndex((candidate) => candidate.id === part.id) === index),
   };
 }
