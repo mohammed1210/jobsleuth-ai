@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from lib.application_ai import semantic_application_draft
 from lib.application_draft import coverage, deterministic_draft
+from lib.application_readiness import missing_direct_school_experience
 from routes.saved_jobs import verify_supabase_user
 
 router = APIRouter(prefix="/application-builder", tags=["application_builder"])
@@ -85,6 +86,33 @@ async def build_application(
     role_title = str(request.job.get("title", "the role") or "the role").strip()[:300]
     organisation = str(request.job.get("organisation", request.job.get("company", "")) or "").strip()[:300]
     cards_by_id = {card.id: card for card in request.evidence_cards if card.id}
+
+    # A school-workplace experience requirement is not met by generic
+    # transferable operations skills. Return useful gaps rather than an
+    # unrelated submission-style narrative, even if a client supplies an
+    # optimistic match_strength. Other role types remain unaffected.
+    role_experience_gaps = missing_direct_school_experience(request.requirements, cards_by_id)
+    if role_experience_gaps:
+        return {
+            "ok": True,
+            "can_generate": False,
+            "provider": "role-readiness-guard-v1",
+            "fallback_reason": "missing_direct_school_experience",
+            "application_type": request.application_type,
+            "word_limit": request.word_limit,
+            "word_count": 0,
+            "draft": "",
+            "paragraphs": [],
+            "coverage": coverage(request.requirements, []),
+            "warnings": [
+                "A full role-specific application draft is paused because direct school-setting experience "
+                "required by the vacancy is not verified in the linked Evidence Bank examples. "
+                "Transferable experience may still be useful, but it does not establish this requirement.",
+                *[f"Add a genuine, verifiable example for: {item}" for item in role_experience_gaps[:5]],
+                "You can still review the employer's instructions and strengthen your evidence; this is not "
+                "a determination of whether the employer will consider your application.",
+            ],
+        }
 
     paragraphs, semantic_status = semantic_application_draft(
         request.requirements,
