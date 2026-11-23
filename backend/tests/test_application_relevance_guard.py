@@ -91,3 +91,11 @@ def test_role_specific_gate_uses_only_linked_genuine_evidence():
         [criterion.model_copy(update={"evidence_ids": [school.id]})],
         {freight.id: freight, school.id: school},
     ) == []
+
+
+def test_school_workplace_card_with_weak_link_does_not_satisfy_readiness():
+    school = school_card()
+    requirement = ApplicationRequirement(
+        text=DIRECT, category="essential", match_strength="weak", evidence_ids=[school.id],
+    )
+    assert missing_direct_school_experience([requirement], {school.id: school}) == [DIRECT]
