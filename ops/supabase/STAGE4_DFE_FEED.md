@@ -1,6 +1,6 @@
 # UK Department for Education Teaching Vacancies (OGL v3) feed
 
-**Draft-only / not deployed / no real vacancies imported.** This is a second
+**Live pilot deployed 23 November 2026.** The 100 verified first-page DfE vacancies are in the dedicated JobSleuth Supabase database. Full-feed pagination/scheduling remains blocked (issue #100). This is a second
 source option stacked on Stage 4's Greenhouse PR #98. No API secret required.
 Source contract grounded in DfE's public GitHub repo:
 - https://github.com/DFE-Digital/teaching-vacancies/blob/main/app/controllers/api/vacancies_controller.rb
@@ -183,3 +183,30 @@ first page (which shifts), and it must not deactivate any missing postings.
   any later scheduled ingestion; issue #100's full-feed pagination remains blocked.
 - Do not expose database service keys, copied job content, API responses or
   authentication tokens in CI logs or client-side variables.
+
+
+## Production source-data repair record — 23 November 2026
+
+- Read-only official DfE individual-job API checks: 100/100 existing source IDs
+  initially verified; a later final pass returned 99/100, so the unavailable
+  record was left untouched (not closed, deleted or overwritten).
+- Verified publisher annual salary text was added only where present and
+  previously missing: **72/100** existing jobs have salary text after repair.
+  Do not infer values for the other 28; school grade-only pay may require
+  separate explicit licensing and parsing decisions.
+- **96 existing job descriptions** were safely extended beyond the original
+  600-character storage excerpt (some fully published advert bodies are
+  naturally shorter than 600 characters). Readable text is bounded, sanitised,
+  publisher-supplied and matches the exact existing external slug, official
+  URL, title, employer and source. Verified examples: Head of School
+  record 99 (now 4,500 readable characters), Cleaner record 100 (now 1,872).
+- One-time existing-row-only SQL updates were applied through Supabase with
+  strict source/ID/title/company/URL identity predicates, non-shrinking
+  description lengths and write-once null-salary guards. Encrypted transfer
+  was used for text transport; no credentials or applicant data were sent.
+- 100 job rows retained; no insert, deletion, missing-feed deactivation,
+  cron activation, user-account, Evidence Bank or billing changes.
+- This repair does not prove every DfE listing remains open or every publisher
+  detail page contains a full person specification. Use the original advert
+  for final requirements and follow the issue #100 pagination fix before
+  scheduling full-feed refreshes.

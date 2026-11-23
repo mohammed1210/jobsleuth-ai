@@ -148,6 +148,10 @@ _LEAD_INS = {
     "we'll assess you against these technical skills during the selection process",
     "we will assess you against these technical skills during the selection process",
     "to be successful in this role, you will need",
+    "you will have",
+    "you should have",
+    "the successful candidate will have",
+    "the successful applicant will have",
 }
 
 _PERSON_SPEC_CRITERION_PREFIXES = (
