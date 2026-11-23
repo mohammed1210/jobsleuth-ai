@@ -152,6 +152,163 @@ function hasExplicitDocumentRequest(text: string, documentPattern: string): bool
   return nearAction.test(text) || explicitlyRequired.test(text) || specificallyAsked.test(text);
 }
 
+function hasRequiredAtsDocumentField(text: string, documentPattern: string): boolean {
+  if (!/indicates a required field/i.test(text)) return false;
+  const requiredField = new RegExp('^(?:' + documentPattern + ')\\s*\\*\\s*
+  if (!/indicates a required field/i.test(text)) return false;
+  const lines = cleanLines(text);
+  const optionalField = new RegExp(`^(?:${documentPattern})\\s*$`, 'i');
+  const requiredField = new RegExp(`^(?:${documentPattern})\\s*\\*\\s*$`, 'i');
+  return lines.some((line) => optionalField.test(line)) && !lines.some((line) => requiredField.test(line));
+}
+
+export function detectApplicationInstructions(vacancyText: string): ApplicationInstructions {
+  const text = vacancyText.trim();
+  const lines = cleanLines(text);
+
+  const explicitTitle = firstMatch(text, [
+    /(?:^|\n)Job title\s*\n\s*([^\n]+)/i,
+    /(?:^|\n)Role title\s*\n\s*([^\n]+)/i,
+    /\bis seeking (?:an?\s+)?(?:experienced\s+)?([^,.\n]{3,100}?)\s+to\s+join\b/i,
+  ]);
+
+  const genericLeadLine = /^(?:skip to content|job details|here['’]s how the job details align with your profile\.?|pay|job type|shift and schedule|location|estimated commute|job address|benefits|pulled from the full job description|full job description|about the role|home office logo|details|reference number|salary|contents|about the job)$/i;
+  const roleTitle = explicitTitle || lines.find((line) => !genericLeadLine.test(line)) || '';
+
+  const explicitOrganisationCandidate = firstMatch(text, [
+    /(?:^|\n)(?:Organisation|Employer|Department)\s*\n\s*([^\n]+)/i,
+    /(?:^|\n)([A-Z][^,\n]{2,100}),[^\n]{0,160}\bis seeking\b/i,
+    /(?:^|\n)At\s+([A-Z][A-Za-z0-9&'’.,\- ]{1,80}),\s+(?:our|we)\b/i,
+    /(?:^|\n)([A-Z][A-Za-z0-9&'’.,\- ]{1,80})\s+is\s+(?:the|a|an)\b/i,
+  ]);
+  const genericOrganisationSubject = /^(?:(?:the|this|our|your)\s+)?(?:role|job|position|location|team|company)$/i;
+  const explicitOrganisation = explicitOrganisationCandidate && !genericOrganisationSubject.test(explicitOrganisationCandidate.trim())
+    ? explicitOrganisationCandidate.trim()
+    : '';
+  const fallbackOrganisation = lines.find(
+    (line, index) => index > 0
+      && !genericOrganisationSubject.test(line.trim())
+      && /home office|nhs|council|university|department|agency|service|company|limited|ltd\.?$/i.test(line),
+  ) || '';
+  const organisation = explicitOrganisation || fallbackOrganisation.trim();
+
+  const personalStatementMentioned = /personal statement/i.test(text);
+  const personalStatementNegated = hasNegatedDocumentInstruction(text, 'personal\\s+statement');
+  const personalStatementOptionalField = hasOptionalAtsDocumentField(text, 'personal\\s+statement');
+  const personalStatement = personalStatementMentioned && !personalStatementNegated;
+  const personalStatementRequired = personalStatement && !personalStatementOptionalField
+    && (hasExplicitDocumentRequest(text, 'personal\\s+statement')
+      || hasRequiredAtsDocumentField(text, 'personal\\s+statement'));
+  const criteriaResponse = /essential criteria response|criteria response/i.test(text);
+  const coverLetterMentioned = /cover(?:ing)? letter/i.test(text);
+  const coverLetterNegated = hasNegatedDocumentInstruction(text, 'cover(?:ing)?\\s+letter');
+  const coverLetterOptionalField = hasOptionalAtsDocumentField(text, 'cover(?:ing)?\\s+letter');
+  const coverLetter = coverLetterMentioned && !coverLetterNegated;
+  const coverLetterRequired = coverLetter && !coverLetterOptionalField
+    && (hasExplicitDocumentRequest(text, 'cover(?:ing)?\\s+letter')
+      || hasRequiredAtsDocumentField(text, 'cover(?:ing)?\\s+letter'));
+  const applicationType: ApplicationType = criteriaResponse
+    ? 'criteria_response'
+    : personalStatement
+      ? 'statement_of_suitability'
+      : coverLetter
+        ? 'cover_letter'
+        : 'statement_of_suitability';
+  const applicationTypeLabel = personalStatement
+    ? personalStatementOptionalField ? 'Personal statement (optional)' : 'Personal statement'
+    : criteriaResponse
+      ? 'Essential criteria response'
+      : coverLetter
+        ? coverLetterOptionalField ? 'Cover letter (optional)' : 'Cover letter'
+        : 'Statement of suitability';
+
+  const wordLimitText = firstMatch(text, [
+    /personal statement[^\n]{0,120}?maximum\s+(\d{2,4})\s+words/i,
+    /personal statement[^\n]{0,120}?up to\s+(\d{2,4})\s+words/i,
+    /statement of suitability[^\n]{0,120}?maximum\s+(\d{2,4})\s+words/i,
+    /cover(?:ing)? letter[^\n]{0,120}?maximum\s+(\d{2,4})\s+words/i,
+    /cover(?:ing)? letter[^\n]{0,120}?up to\s+(\d{2,4})\s+words/i,
+    /maximum\s+(\d{2,4})\s+words/i,
+    /word limit\s*[:\-]?\s*(\d{2,4})/i,
+  ]);
+  const parsedLimit = wordLimitText ? Number(wordLimitText) : null;
+  const wordLimit = parsedLimit && parsedLimit >= 100 && parsedLimit <= 5000 ? parsedLimit : null;
+
+  const requiredDocuments: string[] = [];
+  const applicationParts: ApplicationPart[] = [];
+
+  applicationParts.push({
+    id: applicationType === 'criteria_response' ? 'criteria-response' : applicationType === 'cover_letter' ? 'cover-letter' : 'main-statement',
+    kind: applicationType === 'criteria_response' ? 'criteria' : applicationType === 'cover_letter' ? 'cover_letter' : 'statement',
+    label: applicationTypeLabel,
+    wordLimit,
+  });
+
+  // Some adverts request more than one drafted document. Keep each as its own
+  // selectable component instead of only listing the second document as metadata.
+  if (personalStatement && applicationType !== 'statement_of_suitability') {
+    applicationParts.push({
+      id: 'main-statement',
+      kind: 'statement',
+      label: 'Personal statement',
+      wordLimit,
+    });
+  }
+  if (coverLetter && applicationType !== 'cover_letter') {
+    applicationParts.push({
+      id: 'cover-letter',
+      kind: 'cover_letter',
+      label: 'Cover letter',
+      wordLimit: null,
+    });
+  }
+  const cvMentioned = /\b(?:a\s+)?CV\b/i.test(text);
+  const cvNegated = hasNegatedDocumentInstruction(text, '(?:a\\s+)?CV');
+  if (cvMentioned && !cvNegated && /application process|asked to complete|submit|sift|scored/i.test(text)) {
+    requiredDocuments.push('CV');
+  }
+  if (personalStatementRequired) requiredDocuments.push('Personal Statement');
+
+  if (coverLetterRequired) requiredDocuments.push('Cover Letter');
+
+  // Civil Service vacancies can require one or more separately-scored behaviour
+  // examples in addition to the CV/personal statement. Preserve the behaviour
+  // name and its own word budget so the user does not mistake it for part of the
+  // main statement allowance.
+  const behaviourPattern = /Behaviour(?:s)?\s*:\s*([^\n(]+?)\s*\(\s*maximum\s+(\d{2,4})\s+words\s*\)/gi;
+  for (const match of text.matchAll(behaviourPattern)) {
+    const behaviourName = match[1]?.trim();
+    const behaviourLimit = Number(match[2]);
+    if (!behaviourName || !Number.isFinite(behaviourLimit)) continue;
+    requiredDocuments.push(`Behaviour: ${behaviourName} (${behaviourLimit} words)`);
+    applicationParts.push({
+      id: `behaviour-${behaviourName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      kind: 'behaviour',
+      label: `Behaviour: ${behaviourName}`,
+      wordLimit: behaviourLimit,
+      behaviourName,
+    });
+  }
+
+  return {
+    roleTitle,
+    organisation,
+    applicationType,
+    applicationTypeLabel,
+    wordLimit,
+    requiredDocuments: [...new Set(requiredDocuments)],
+    applicationFormatConfirmed: Boolean(
+      personalStatementRequired || coverLetterRequired || personalStatementOptionalField ||
+      coverLetterOptionalField || (criteriaResponse && /\b(?:submit|provide|write|complete|answer)\b.{0,80}\bcriteria\b/i.test(text)),
+    ),
+    wordLimitConfirmed: wordLimit !== null,
+    applicationParts: applicationParts.filter((part, index, parts) => parts.findIndex((candidate) => candidate.id === part.id) === index),
+  };
+}
+, 'i');
+  return cleanLines(text).some((line) => requiredField.test(line));
+}
+
 function hasOptionalAtsDocumentField(text: string, documentPattern: string): boolean {
   if (!/indicates a required field/i.test(text)) return false;
   const lines = cleanLines(text);
