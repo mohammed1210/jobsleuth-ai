@@ -16,6 +16,9 @@ export default function JobCard({ job, onSave, saved = false, aiScore }: JobCard
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // Saved status may load after the card first renders.
+  useEffect(() => { setIsSaved(saved); }, [saved]);
+
   const handleSave = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -65,10 +68,16 @@ export default function JobCard({ job, onSave, saved = false, aiScore }: JobCard
   }, [expiryMillis]);
 
   const closed = job.is_active === false || (Number.isFinite(expiryMillis) && expiryMillis <= checkedAt);
+  const closingDate = Number.isFinite(expiryMillis)
+    ? new Intl.DateTimeFormat('en-GB', {
+        day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit',
+        minute: '2-digit', hour12: false, timeZone: 'Europe/London',
+      }).format(new Date(expiryMillis))
+    : null;
 
   return (
     <div 
-      className="card card-hover p-6 relative group"
+      className="card card-hover border-l-4 border-l-brand-500 p-5 sm:p-6 relative group"
       tabIndex={0}
       onKeyDown={handleKeyDown}
       role="article"
@@ -86,7 +95,7 @@ export default function JobCard({ job, onSave, saved = false, aiScore }: JobCard
         </div>
       )}
 
-      <div className="flex justify-between items-start mb-4">
+      <div className="flex justify-between items-start mb-3">
         <div className="flex-1 pr-4">
           {closed ? (
             <h3 className="text-xl font-bold text-gray-900 line-clamp-2 mb-1">{job.title}</h3>
@@ -122,7 +131,7 @@ export default function JobCard({ job, onSave, saved = false, aiScore }: JobCard
       )}
       {saveError && <p role="alert" className="mb-3 text-sm text-red-700">{saveError}</p>}
 
-      <div className="flex flex-wrap gap-2 mb-3">
+      <div className="flex flex-wrap items-center gap-2 mb-3">
         <span className="inline-flex items-center px-3 py-1.5 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg">
           <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -138,22 +147,39 @@ export default function JobCard({ job, onSave, saved = false, aiScore }: JobCard
             {job.salary}
           </span>
         )}
+        {job.role_type && (
+          <span className="inline-flex items-center rounded-lg bg-violet-50 px-3 py-1.5 text-sm font-medium text-violet-700">
+            {job.role_type}
+          </span>
+        )}
+        {closingDate && (
+          <span className="inline-flex items-center rounded-lg bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-800">
+            <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3" y="5" width="18" height="16" rx="2" /><path d="M7 3v4m10-4v4M3 10h18" />
+            </svg>
+            {closed ? 'Closed' : 'Closes'} {closingDate}
+          </span>
+        )}
         {job.source === 'dfe_teaching_vacancies' ? (
-          <span className="inline-flex flex-col gap-1 text-xs text-gray-600">
-            <span>Source: DfE Teaching Vacancies</span>
-            <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
-              target="_blank" rel="noopener noreferrer" className="underline"
-              onClick={(e) => e.stopPropagation()}>
-              Public sector information licensed under OGL v3.0
-            </a>
+          <span className="inline-flex items-center rounded-lg bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700">
+            DfE Teaching Vacancies
           </span>
         ) : job.source ? (
-          <span className="inline-flex items-center px-3 py-1.5 bg-blue-100 text-blue-700 text-sm font-medium rounded-lg">
+          <span className="inline-flex items-center rounded-lg bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700">
             {job.source}
           </span>
         ) : null}
       </div>
       
+      {job.source === 'dfe_teaching_vacancies' && (
+        <p className="mb-3 text-xs text-gray-500">
+          Contains public sector information licensed under{' '}
+          <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
+            target="_blank" rel="noopener noreferrer" className="underline hover:text-brand-600">
+            OGL v3.0
+          </a>.
+        </p>
+      )}
       {job.date_posted && (
         <p className="text-sm text-gray-500 mb-4">
           Posted {job.date_posted}
