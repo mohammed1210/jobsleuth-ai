@@ -970,7 +970,7 @@ export default function VacancyApplyPage() {
                 </p>
               </section>
             ) : (
-              session && <ApplicationDraftPanel session={session} analysis={analysis} evidence={evidence} vacancyText={vacancyText} />
+              session && <ApplicationDraftPanel session={session} analysis={analysis} evidence={evidence} vacancyText={vacancyText} originalAdvertUrl={sourceJob?.url} />
             )}
           </>
         )}
