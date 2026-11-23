@@ -3,8 +3,8 @@
 import { FormEvent, useEffect, useState } from 'react';
 import HeaderClient from '@/components/HeaderClient';
 import JobCard from '@/components/JobCard';
-import { fetchJobs as fetchJobsFromApi, saveJob, type Job } from '@/lib/api';
-import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { fetchJobs as fetchJobsFromApi, fetchSavedJobs, saveJob, deleteSavedJob, type Job } from '@/lib/api';
+import { getFreshSession, isSupabaseConfigured } from '@/lib/supabaseClient';
 
 export default function JobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -18,6 +18,7 @@ export default function JobsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalJobs, setTotalJobs] = useState(0);
   const [loadedSuccessfully, setLoadedSuccessfully] = useState(false);
+  const [savedJobIds, setSavedJobIds] = useState<number[]>([]);
   const perPage = 10;
 
   async function loadJobs() {
@@ -53,6 +54,22 @@ export default function JobsPage() {
     loadJobs();
   }, [page]);
 
+  useEffect(() => {
+    let active = true;
+    if (!isSupabaseConfigured()) return;
+    void (async () => {
+      try {
+        const session = await getFreshSession();
+        if (!session) return;
+        const rows = await fetchSavedJobs(session);
+        if (active) setSavedJobIds(rows.map((row) => row.job_id));
+      } catch {
+        // Listings stay usable if saved-job status is temporarily unavailable.
+      }
+    })();
+    return () => { active = false; };
+  }, []);
+
   function handleSearch(event: FormEvent) {
     event.preventDefault();
     if (page !== 1) {
@@ -67,13 +84,18 @@ export default function JobsPage() {
       setError('Sign in is not configured.');
       throw new Error('Sign in is not configured.');
     }
-    const supabase = getSupabaseClient();
-    const { data } = await supabase.auth.getSession();
-    if (!data.session) {
+    const session = await getFreshSession();
+    if (!session) {
       setError('Sign in to save jobs.');
       throw new Error('Sign in to save jobs.');
     }
-    await saveJob(jobId, data.session);
+    if (savedJobIds.includes(jobId)) {
+      await deleteSavedJob(jobId, session);
+      setSavedJobIds((current) => current.filter((id) => id !== jobId));
+    } else {
+      await saveJob(jobId, session);
+      setSavedJobIds((current) => [...current, jobId]);
+    }
   }
 
   return (
@@ -123,9 +145,9 @@ export default function JobsPage() {
               </label>
               <select id="roleType" value={roleType} onChange={(event) => setRoleType(event.target.value)} className="input-modern">
                 <option value="">Any type</option>
-                <option value="Remote">Remote</option>
-                <option value="Hybrid">Hybrid</option>
-                <option value="Full-time">Full-time</option>
+                <option value="Full Time">Full time</option>
+                <option value="Part Time">Part time</option>
+                <option value="Contractor">Contractor</option>
               </select>
             </div>
             <div>
@@ -176,7 +198,7 @@ export default function JobsPage() {
             </div>
             <div className="space-y-6 mb-12">
               {jobs.map((job) => (
-                <JobCard key={job.id} job={job} onSave={handleSaveJob} aiScore={job.ai_score ?? undefined} />
+                <JobCard key={job.id} job={job} onSave={handleSaveJob} saved={savedJobIds.includes(job.id)} aiScore={job.ai_score ?? undefined} />
               ))}
               {loadedSuccessfully && jobs.length === 0 && (
                 <div className="card p-8 text-center text-gray-600">
