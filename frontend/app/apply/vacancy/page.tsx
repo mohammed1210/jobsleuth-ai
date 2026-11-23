@@ -16,6 +16,7 @@ import { fetchCandidateProfile, type CandidateProfile } from '@/lib/candidatePro
 import { getFreshSession, getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { extractVacancyIntelligence, type IntelligenceItem } from '@/lib/vacancyIntelligenceApi';
 import { parseVacancyText } from '@/lib/vacancyParser';
+import { createExtractionGate } from '@/lib/extractionGate';
 
 const lines = (value: string) => value.split('\n').map((item) => item.trim()).filter(Boolean);
 const VACANCY_DRAFT_KEY = 'jobsleuth.apply.vacancyDraft.v2';
@@ -84,7 +85,7 @@ export default function VacancyApplyPage() {
   const [analysisProfileFingerprintValue, setAnalysisProfileFingerprintValue] = useState<string | null>(null);
   const [analysisValidated, setAnalysisValidated] = useState(false);
   const sessionUserIdRef = useRef<string | null>(null);
-  const extractionGenerationRef = useRef(0);
+  const extractionGenerationRef = useRef(createExtractionGate());
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [draftStateReady, setDraftStateReady] = useState(false);
@@ -129,7 +130,7 @@ export default function VacancyApplyPage() {
 
   const clearDraftFields = () => {
     // Discard any in-flight response for a previous vacancy or user.
-    extractionGenerationRef.current += 1;
+    extractionGenerationRef.current.invalidate();
     setExtracting(false);
     setVacancyText('');
     setEligibility('');
@@ -454,9 +455,9 @@ export default function VacancyApplyPage() {
   };
 
   const extract = async () => {
-    const generation = ++extractionGenerationRef.current;
+    const generation = extractionGenerationRef.current.begin();
     const activeSession = await currentSession();
-    if (!activeSession || generation !== extractionGenerationRef.current) return;
+    if (!activeSession || !extractionGenerationRef.current.isCurrent(generation)) return;
     if (vacancyText.trim().length < 40) {
       setMessage('Paste more of the vacancy advert before extracting.');
       return;
@@ -470,7 +471,7 @@ export default function VacancyApplyPage() {
     setMessage(null);
     try {
       const result = await extractVacancyIntelligence(activeSession, vacancyText);
-      if (generation !== extractionGenerationRef.current ||
+      if (!extractionGenerationRef.current.isCurrent(generation) ||
           sessionUserIdRef.current !== activeSession.user.id) return;
       const items = [...result.eligibility, ...result.requirements, ...result.practical];
       applyRequirements(items);
@@ -479,13 +480,13 @@ export default function VacancyApplyPage() {
       const lowConfidence = result.summary.low_confidence ? ` ${result.summary.low_confidence} item(s) need extra review.` : '';
       setMessage(`Extracted ${result.summary.items} grounded item(s). Review and edit before analysing.${lowConfidence}`);
     } catch {
-      if (generation !== extractionGenerationRef.current ||
+      if (!extractionGenerationRef.current.isCurrent(generation) ||
           sessionUserIdRef.current !== activeSession.user.id) return;
       const count = localFallback();
       if (!count) setShowManualDetails(true);
       setMessage(count ? `The intelligence service was unavailable, so JobSleuth used the local fallback and found ${count} item(s). Review carefully.` : 'No clear criteria found. Open the vacancy details and enter the criteria manually.');
     } finally {
-      if (generation === extractionGenerationRef.current) setExtracting(false);
+      if (extractionGenerationRef.current.isCurrent(generation)) setExtracting(false);
     }
   };
 
