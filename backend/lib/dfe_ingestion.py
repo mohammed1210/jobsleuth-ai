@@ -8,8 +8,10 @@ No production job writes or scheduling are enabled by default.
 """
 from __future__ import annotations
 
+import html
 import os
 import re
+from html.parser import HTMLParser
 import time as sleeper
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -18,7 +20,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
-from lib.greenhouse_ingestion import excerpt, FeedError
+from lib.greenhouse_ingestion import FeedError
 
 SOURCE = "dfe_teaching_vacancies"
 BOARD = "england"
@@ -31,6 +33,50 @@ MAX_PAGES = 200
 MAX_PAGE_BYTES = 1_500_000
 MAX_TOTAL = 20_000
 GRACE_HOURS = 72
+MAX_DFE_DESCRIPTION_CHARS = 40_000
+
+class _PublisherTextParser(HTMLParser):
+    """Preserve readable paragraph breaks without retaining publisher HTML."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self.hidden = 0
+
+    def handle_starttag(self, tag: str, attrs):
+        if tag in ("script", "style", "noscript"):
+            self.hidden += 1
+        elif not self.hidden and tag in ("p", "div", "br", "li", "h1", "h2", "h3", "h4", "ul", "ol"):
+            self.parts.append("\\n" if tag == "br" else "\\n\\n")
+            if tag == "li":
+                self.parts.append("• ")
+
+    def handle_endtag(self, tag: str):
+        if tag in ("script", "style", "noscript"):
+            self.hidden = max(0, self.hidden - 1)
+        elif not self.hidden and tag in ("p", "div", "li", "h1", "h2", "h3", "h4", "ul", "ol"):
+            self.parts.append("\\n")
+
+    def handle_data(self, data: str):
+        if not self.hidden:
+            self.parts.append(data)
+
+
+def publisher_description(value: object) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    # DfE's JobPosting.description is the source-provided advert content,
+    # which may omit parts of the publisher's rendered vacancy page.
+    # Never silently truncate to Greenhouse's 600-character preview length.
+    parser = _PublisherTextParser()
+    parser.feed(html.unescape(html.unescape(value[:80_000])))
+    text = "".join(parser.parts).replace("\\r", "").strip()
+    text = re.sub(r"[ \\t]+", " ", text)
+    text = re.sub(r"\\n[ \\t]*\\n(?:[ \\t]*\\n)+", "\\n\\n", text)
+    if len(text) > MAX_DFE_DESCRIPTION_CHARS:
+        return text[:MAX_DFE_DESCRIPTION_CHARS].rstrip() + (
+            "\\n\\n[Description shortened for display; see the original vacancy for full details.]"
+        )
+    return text or None
 
 
 def official_job_url(value: object) -> tuple[str, str] | None:
@@ -164,7 +210,7 @@ def record(raw: object, seen_at: datetime) -> dict:
         "source": SOURCE, "source_board": BOARD, "external_id": link[0],
         "title": title.strip(), "company": employer["name"].strip()[:200],
         "location": ", ".join(pieces)[:250], "url": link[1],
-        "description": excerpt(raw.get("description")),
+        "description": publisher_description(raw.get("description")),
         "salary": salary, "salary_min": salary_min, "salary_max": salary_max,
         "role_type": role_type, "is_active": is_active,
         "last_seen_at": seen_at.isoformat(),
