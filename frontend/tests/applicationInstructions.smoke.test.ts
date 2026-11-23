@@ -128,3 +128,27 @@ test('explicitly negated document instructions are not required documents', () =
   const result = detectApplicationInstructions('Do not submit a cover letter. Please send a CV only.');
   assert.ok(!result.requiredDocuments.includes('Cover Letter'));
 });
+
+
+test('starred ATS cover letter and statement fields are required without action verbs', () => {
+  const required = detectApplicationInstructions(`Office Administrator
+* indicates a required field
+Resume/CV*
+Cover Letter*
+Personal Statement*
+Submit application`);
+  assert.equal(required.applicationFormatConfirmed, true);
+  assert.ok(required.requiredDocuments.includes('Cover Letter'));
+  assert.ok(required.requiredDocuments.includes('Personal Statement'));
+  assert.ok(required.requiredDocuments.includes('CV'));
+});
+
+test('unstarred ATS document field stays optional alongside starred CV', () => {
+  const optional = detectApplicationInstructions(`Operations Coordinator
+* indicates a required field
+Resume/CV*
+Personal Statement
+Submit application`);
+  assert.equal(optional.applicationFormatConfirmed, true);
+  assert.ok(!optional.requiredDocuments.includes('Personal Statement'));
+});
