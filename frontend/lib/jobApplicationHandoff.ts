@@ -21,9 +21,12 @@ export function safeLoginReturnPath(value: string | null): string {
 /** Facts from the official feed, not a generated application or match score. */
 export function advertForApplication(job: Job): string {
   const fields = [
-    `Job title: ${job.title}`,
-    `Employer: ${job.company}`,
-    `Location: ${job.location}`,
+    'Job title',
+    job.title,
+    'Employer',
+    job.company,
+    'Location',
+    job.location,
     job.role_type ? `Working pattern: ${job.role_type}` : '',
     job.salary ? `Advertised salary: ${job.salary}` : '',
     job.expires_at ? `Applications close: ${job.expires_at}` : '',
