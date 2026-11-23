@@ -7,7 +7,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Header
 from pydantic import BaseModel, Field
 
-from lib.evidence_matching import deterministic_match, has_personal_management_scope, rank_evidence, requires_personal_management_scope
+from lib.evidence_matching import (deterministic_match, has_personal_management_scope, has_school_setting_experience, rank_evidence, requires_personal_management_scope, requires_school_setting_experience)
 from lib.evidence_semantic_batch import semantic_assess_batch
 from routes.candidate_profile import CandidateProfileData
 from routes.saved_jobs import verify_supabase_user
@@ -305,6 +305,22 @@ async def vacancy_analysis(request: AnalysisRequest, authorization: str | None =
                 assessment["why"] = (
                     "Related operational evidence is recorded, but the candidate's own management or supervisory responsibility is not demonstrated."
                 )
+            if (
+                requires_school_setting_experience(requirement.text)
+                and not has_school_setting_experience(card)
+                and assessment.get("strength") in {"strong", "partial"}
+            ):
+                # Semantic matching must not override an explicit workplace
+                # context requirement with generic operational skills.
+                assessment = dict(assessment)
+                assessment["strength"] = "weak"
+                assessment["score"] = min(float(assessment.get("score", 0.0)), 39.0)
+                gaps = list(assessment.get("gaps", []))
+                sector_gap = "The evidence does not establish experience working in the required primary or secondary school setting."
+                if sector_gap not in gaps:
+                    gaps.append(sector_gap)
+                assessment["gaps"] = gaps[:3]
+                assessment["why"] = "Transferable experience is recorded, but the required school-setting background is not evidenced."
             merged.append((card, assessment))
         merged.sort(key=lambda item: item[1]["score"], reverse=True)
 
