@@ -33,7 +33,9 @@ MAX_PAGES = 200
 MAX_PAGE_BYTES = 1_500_000
 MAX_TOTAL = 20_000
 GRACE_HOURS = 72
-MAX_DFE_DESCRIPTION_CHARS = 40_000
+# The Apply extraction endpoint accepts at most 30k characters including
+# publisher metadata, so keep a safe margin without the old 600-char clipping.
+MAX_DFE_DESCRIPTION_CHARS = 25_000
 
 class _PublisherTextParser(HTMLParser):
     """Preserve readable paragraph breaks without retaining publisher HTML."""
