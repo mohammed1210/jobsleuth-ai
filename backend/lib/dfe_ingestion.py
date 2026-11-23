@@ -110,7 +110,7 @@ def annual_salary(value: object) -> tuple[int | None, int | None, str | None]:
     # only explicit £ amounts, not misleading grade numbers such as SCP 11-16.
     # No implied lower bound or amount is created for grade-only adverts.
     pounds = re.findall(
-        r"£\\s*(\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\.\\d{1,2})?(?![\\d,.])", text
+        r"£\s*(\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?(?![\d,.])", text
     )
     try:
         values = [int(x.replace(",", "")) for x in pounds]
