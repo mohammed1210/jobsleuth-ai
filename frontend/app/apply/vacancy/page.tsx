@@ -84,6 +84,7 @@ export default function VacancyApplyPage() {
   const [analysisProfileFingerprintValue, setAnalysisProfileFingerprintValue] = useState<string | null>(null);
   const [analysisValidated, setAnalysisValidated] = useState(false);
   const sessionUserIdRef = useRef<string | null>(null);
+  const extractionGenerationRef = useRef(0);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [draftStateReady, setDraftStateReady] = useState(false);
@@ -127,6 +128,9 @@ export default function VacancyApplyPage() {
   }, []);
 
   const clearDraftFields = () => {
+    // Discard any in-flight response for a previous vacancy or user.
+    extractionGenerationRef.current += 1;
+    setExtracting(false);
     setVacancyText('');
     setEligibility('');
     setEligibilityAnswers({});
@@ -450,8 +454,9 @@ export default function VacancyApplyPage() {
   };
 
   const extract = async () => {
+    const generation = ++extractionGenerationRef.current;
     const activeSession = await currentSession();
-    if (!activeSession) return;
+    if (!activeSession || generation !== extractionGenerationRef.current) return;
     if (vacancyText.trim().length < 40) {
       setMessage('Paste more of the vacancy advert before extracting.');
       return;
@@ -465,7 +470,8 @@ export default function VacancyApplyPage() {
     setMessage(null);
     try {
       const result = await extractVacancyIntelligence(activeSession, vacancyText);
-      if (sessionUserIdRef.current !== activeSession.user.id) return;
+      if (generation !== extractionGenerationRef.current ||
+          sessionUserIdRef.current !== activeSession.user.id) return;
       const items = [...result.eligibility, ...result.requirements, ...result.practical];
       applyRequirements(items);
       setExtractedItems(items);
@@ -473,12 +479,13 @@ export default function VacancyApplyPage() {
       const lowConfidence = result.summary.low_confidence ? ` ${result.summary.low_confidence} item(s) need extra review.` : '';
       setMessage(`Extracted ${result.summary.items} grounded item(s). Review and edit before analysing.${lowConfidence}`);
     } catch {
-      if (sessionUserIdRef.current !== activeSession.user.id) return;
+      if (generation !== extractionGenerationRef.current ||
+          sessionUserIdRef.current !== activeSession.user.id) return;
       const count = localFallback();
       if (!count) setShowManualDetails(true);
       setMessage(count ? `The intelligence service was unavailable, so JobSleuth used the local fallback and found ${count} item(s). Review carefully.` : 'No clear criteria found. Open the vacancy details and enter the criteria manually.');
     } finally {
-      setExtracting(false);
+      if (generation === extractionGenerationRef.current) setExtracting(false);
     }
   };
 
@@ -679,7 +686,8 @@ export default function VacancyApplyPage() {
                   You have a draft in progress. To protect it, the selected vacancy has not overwritten your work.
                 </p>
                 <button type="button" onClick={replaceDraftWithSourceJob}
-                  className="btn-primary px-4 py-2 text-sm">Replace draft with this vacancy</button>
+                  disabled={analysing}
+                  className="btn-primary px-4 py-2 text-sm disabled:opacity-50">Replace draft with this vacancy</button>
               </div>
             )}
             <p className="mt-2 text-xs text-gray-600">
