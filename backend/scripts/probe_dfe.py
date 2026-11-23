@@ -9,12 +9,15 @@ from datetime import datetime, timezone
 import httpx
 
 from lib.dfe_ingestion import FeedError, _page, fetch_all
+from lib.dfe_backfill import fetch_one
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--full", action="store_true",
                         help="Check the entire official DfE feed without writing any data")
+    parser.add_argument("--individual", action="store_true",
+                        help="Read-only check of one DfE publisher detail record")
     args = parser.parse_args()
     try:
         now = datetime.now(timezone.utc)
@@ -23,7 +26,15 @@ def main():
             headers={"User-Agent": "JobSleuth-SourceContractCheck/1.0"},
             timeout=15,
         ) as client:
-            if args.full:
+            if args.individual:
+                rows, _, _ = _page(client, 1, now)
+                detail = fetch_one(client, rows[0]["external_id"], now)
+                if detail is None:
+                    raise FeedError("Selected DfE detail endpoint not available")
+                print(f"DfE per-vacancy JSON passed: publisher ID verified, "
+                      f"salary provided={bool(detail['salary'])}, "
+                      f"description length={len(detail['description'] or '')}. NO DATA WRITTEN.")
+            elif args.full:
                 rows = fetch_all(client, now)
                 print(f"DfE FULL live feed validated: unique jobs={len(rows)}. NO DATA WRITTEN.")
             else:

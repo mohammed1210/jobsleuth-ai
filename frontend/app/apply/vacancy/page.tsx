@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { fetchJobDetail, type Job } from '@/lib/api';
+import { advertForApplication, signInPathForJob } from '@/lib/jobApplicationHandoff';
 import type { Session } from '@supabase/supabase-js';
 
 import ApplicationDraftPanel from '@/components/application/ApplicationDraftPanel';
@@ -86,6 +88,43 @@ export default function VacancyApplyPage() {
   const [loading, setLoading] = useState(true);
   const [draftStateReady, setDraftStateReady] = useState(false);
   const [showManualDetails, setShowManualDetails] = useState(false);
+  const [requestedJobId, setRequestedJobId] = useState<number | null>(null);
+  const [sourceJob, setSourceJob] = useState<Job | null>(null);
+  const [sourceJobError, setSourceJobError] = useState<string | null>(null);
+  const [loadingSourceJob, setLoadingSourceJob] = useState(false);
+  const [sourceJobLoadedIntoDraft, setSourceJobLoadedIntoDraft] = useState(false);
+
+  // A public job ID is carried in the URL, not arbitrary advert text or an
+  // external redirect. Always load the official record from our backend.
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get('job');
+    if (requested === null) return;
+    if (!/^[1-9][0-9]{0,14}$/.test(requested)) {
+      setSourceJobError('Invalid vacancy link. Return to Jobs and choose a listing.');
+      return;
+    }
+    const id = Number(requested);
+    if (!Number.isSafeInteger(id)) {
+      setSourceJobError('Invalid vacancy link.');
+      return;
+    }
+    let active = true;
+    setRequestedJobId(id);
+    setLoadingSourceJob(true);
+    void fetchJobDetail(id).then((job) => {
+      if (!active) return;
+      if (!job) {
+        setSourceJobError('The selected vacancy is no longer available. Please choose another.');
+      } else {
+        setSourceJob(job);
+      }
+    }).catch(() => {
+      if (active) setSourceJobError('Could not load this vacancy. Try again from the Jobs page.');
+    }).finally(() => {
+      if (active) setLoadingSourceJob(false);
+    });
+    return () => { active = false; };
+  }, []);
 
   const clearDraftFields = () => {
     setVacancyText('');
@@ -103,6 +142,7 @@ export default function VacancyApplyPage() {
     setAnalysisProfileFingerprintValue(null);
     setAnalysisValidated(false);
     setShowManualDetails(false);
+    setSourceJobLoadedIntoDraft(false);
   };
 
   const restoreDraftForUser = (userId: string) => {
@@ -155,6 +195,29 @@ export default function VacancyApplyPage() {
       window.sessionStorage.removeItem(VACANCY_DRAFT_KEY);
       clearDraftFields();
     }
+  };
+
+  // Once the current user's existing draft has been restored, prefill only
+  // a genuinely empty workspace. Never silently overwrite saved work.
+  useEffect(() => {
+    if (!sourceJob || !session || !draftStateReady || sourceJobLoadedIntoDraft) return;
+    const hasExistingWork = Boolean(
+      vacancyText.trim() || eligibility.trim() || essential.trim() || desirable.trim()
+      || trainable.trim() || practical.trim() || extractedItems.length || analysis
+    );
+    if (!hasExistingWork) {
+      setVacancyText(advertForApplication(sourceJob));
+      setSourceJobLoadedIntoDraft(true);
+    }
+  }, [sourceJob, session, draftStateReady, sourceJobLoadedIntoDraft,
+      vacancyText, eligibility, essential, desirable, trainable, practical, extractedItems, analysis]);
+
+  const replaceDraftWithSourceJob = () => {
+    if (!sourceJob) return;
+    clearDraftFields();
+    setVacancyText(advertForApplication(sourceJob));
+    setSourceJobLoadedIntoDraft(true);
+    setMessage(null);
   };
 
   useEffect(() => {
@@ -552,7 +615,8 @@ export default function VacancyApplyPage() {
         <main className="max-w-3xl mx-auto px-6 py-12">
           <div className="card p-10 text-center">
             <h1 className="text-3xl font-bold text-gray-900 mb-3">Sign in to analyse a vacancy</h1>
-            <Link href="/login" className="btn-primary inline-flex">Sign in</Link>
+            <Link href={requestedJobId ? signInPathForJob(requestedJobId) : '/login'}
+              className="btn-primary inline-flex">Sign in and continue</Link>
           </div>
         </main>
       </div>
@@ -572,10 +636,57 @@ export default function VacancyApplyPage() {
           <div>
             <p className="text-sm font-semibold text-brand-700">JobSleuth Apply</p>
             <h1 className="mt-1 text-3xl font-bold tracking-tight text-gray-900">Check the fit. Build the application.</h1>
-            <p className="mt-2 max-w-2xl text-sm text-gray-600">Paste the vacancy once. JobSleuth turns it into a focused fit check, with deeper evidence available only when you want it.</p>
+            <p className="mt-2 max-w-2xl text-sm text-gray-600">
+              Select a vacancy from Jobs or paste your own advert. JobSleuth checks eligibility
+              and matches real evidence before helping you draft an application.
+            </p>
           </div>
           <Link href="/apply" className="btn-secondary px-4 py-2 text-sm">Evidence Bank</Link>
         </div>
+
+        {loadingSourceJob && (
+          <p role="status" className="rounded-xl border bg-white p-4 text-sm text-gray-700">
+            Loading selected vacancy from JobSleuth…
+          </p>
+        )}
+        {sourceJobError && (
+          <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            {sourceJobError} <Link href="/jobs" className="underline">Browse jobs</Link>
+          </div>
+        )}
+        {sourceJob && (
+          <section className="rounded-xl border border-brand-200 bg-brand-50 px-5 py-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">Selected real vacancy</p>
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">{sourceJob.title}</h2>
+                <p className="text-sm text-gray-600">{sourceJob.company} · {sourceJob.location}</p>
+              </div>
+              {sourceJob.url && (
+                <a href={sourceJob.url} target="_blank" rel="noopener noreferrer"
+                  className="text-sm font-semibold text-brand-700 underline">
+                  Read full original advert
+                </a>
+              )}
+            </div>
+            {sourceJobLoadedIntoDraft ? (
+              <p role="status" className="mt-3 text-sm font-medium text-emerald-800">
+                The publisher's vacancy information is loaded below. Review it, then select Extract vacancy.
+              </p>
+            ) : (
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <p className="text-sm text-amber-900">
+                  You have a draft in progress. To protect it, the selected vacancy has not overwritten your work.
+                </p>
+                <button type="button" onClick={replaceDraftWithSourceJob}
+                  className="btn-primary px-4 py-2 text-sm">Replace draft with this vacancy</button>
+              </div>
+            )}
+            <p className="mt-2 text-xs text-gray-600">
+              Publisher-supplied data may not contain every application requirement. Check the original listing before submitting.
+            </p>
+          </section>
+        )}
 
         {message && <div className="rounded-xl border bg-white px-4 py-3 text-sm text-gray-700 shadow-sm">{message}</div>}
 

@@ -134,3 +134,52 @@ if available; otherwise it displays “England (specific location not
 provided)”. Do not infer a town, or incorrectly exclude a legitimate
 publisher's posting. Saved-job cards refresh on closing-time timers and
 browser focus, so old tabs do not retain active Apply links indefinitely.
+
+
+## 23 November 2026 — licensed vacancy UX and source enrichment
+
+- Active job cards now offer **Help me apply** directly into JobSleuth's existing
+  `/apply/vacancy?job=<ID>` workflow, in addition to the always-free original
+  application link. Source data is fetched by ID from our own public API,
+  not accepted as untrusted query-string HTML or third-party redirect targets.
+- After sign-in, the job's employer, location, salary (when provided),
+  closing date, official URL and DfE-supplied description prefill the vacancy
+  workspace. Existing unsaved/saved draft work is never overwritten without
+  an explicit replace action. The user must review and extract before analysis;
+  **no fictitious AI percentage or auto-submission**.
+- DfE's published `JobPosting.description` is now HTML-stripped and kept up
+  to a clearly disclosed bounded 40,000 characters rather than silently clipped
+  at 600. DfE's JSON may not include the entire rendered job page; the official
+  original remains the authoritative place for all instructions.
+- DfE `baseSalary.value.value` may be employer-authored GBP annual text
+  (e.g. "£68,691.00 - £77,676.00 Annually (Actual)"). Preserve that text
+  and infer amounts only when explicitly written; do not estimate or create
+  an AI-generated pay band.
+
+### One-time backfill of the *existing* 100 source records
+
+The 22 November pilot imported 100 jobs using the old 600-character cap
+and numeric-only salary parser. Updating the code alone **does not change**
+those existing rows. Backfill must not be confused with importing a fresh
+first page (which shifts), and it must not deactivate any missing postings.
+
+- Use `python -m scripts.backfill_dfe_existing --max-records 100` as a **dry run**
+  from a private, configured JobSleuth backend environment. It selects only
+  already-imported DfE IDs and checks the DfE *individual* job API for each.
+  It reports aggregate counts and changes no data.
+- A real individual-job API read check is enforced by the Backend CI job
+  on PR #101. This is not proof that all 100 old URLs remain accessible.
+- To apply *after* a successful dry run and separate release review:
+  `JOBSLEUTH_INGEST_ENABLED=true`,
+  `JOBSLEUTH_DFE_INGEST_ENABLED=true`,
+  `JOBSLEUTH_DFE_OGL_TERMS_ACK=true` and
+  `JOBSLEUTH_DFE_BACKFILL_ENABLED=true`, with the command's `--apply`
+  flag, in a controlled one-off operator process.
+- The backfill performs only guarded updates to existing DfE jobs' salary
+  and description fields. It inserts **zero** new jobs, changes **zero**
+  users/saved-jobs/applications, never deactivates missing IDs and never
+  schedules itself. Any individual publisher identity mismatch refuses writes.
+- Confirm aggregate coverage and handoff functionality before considering
+  any later scheduled ingestion; issue #100's full-feed pagination remains blocked.
+- Do not expose database service keys, copied job content, API responses or
+  authentication tokens in CI logs or client-side variables.

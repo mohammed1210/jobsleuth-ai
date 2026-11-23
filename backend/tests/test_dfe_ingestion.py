@@ -49,6 +49,7 @@ def test_official_source_and_salary():
     assert r["external_id"] == "school-support-worker-567"
     assert r["location"] == "West Drayton, London"
     assert r["salary_min"] == 34000 and r["salary_max"] == 34000
+    assert r["salary"] == "£34,000 per year"
     assert r["role_type"] == "Part Time"
     assert r["description"] == "Help children learn."
     assert r["is_active"] is True
@@ -93,7 +94,48 @@ def test_malformed_countries_urls_and_nonfinite_salary():
     with pytest.raises(FeedError):
         record(bad, NOW)
     assert annual_salary({"currency": "GBP",
-                          "value": {"unitText": "YEAR", "value": "NaN"}}) == (None, None)
+                          "value": {"unitText": "YEAR", "value": "NaN"}}) == (None, None, None)
+
+
+def test_publisher_written_annual_salary_range_and_grade_are_preserved():
+    post = item()
+    advertised = "£68,691.00 - £77,676.00 Annually (Actual) Leadership SCP 11-16"
+    post["baseSalary"]["value"]["value"] = advertised
+    parsed = record(post, NOW)
+    assert parsed["salary"] == advertised
+    assert parsed["salary_min"] == 68691
+    assert parsed["salary_max"] == 77676
+    assert annual_salary({"currency": "GBP", "value": {
+        "unitText": "YEAR", "value": "Main pay range MPS/UPS",
+    }}) == (None, None, "Main pay range MPS/UPS")
+    assert annual_salary({"currency": "GBP", "value": {
+        "unitText": "HOUR", "value": "£22.00 per hour",
+    }}) == (None, None, None)
+    assert annual_salary({"currency": "USD", "value": {
+        "unitText": "YEAR", "value": "$60,000",
+    }}) == (None, None, None)
+
+
+def test_full_publisher_description_is_not_truncated_at_600_chars():
+    from lib.dfe_ingestion import publisher_description
+    paragraph = "Teach mathematics and support pupils. " * 65
+    raw = "<h2>Role responsibilities</h2><p>" + paragraph + "</p>" + (
+        "<script>DO NOT EXECUTE</script><p>Safeguarding knowledge is essential.</p>"
+    )
+    result = publisher_description(raw)
+    assert result is not None
+    assert len(result) > 600
+    assert "Role responsibilities" in result
+    assert "Safeguarding knowledge is essential." in result
+    assert "DO NOT EXECUTE" not in result
+    post = item()
+    post["description"] = raw
+    assert len(record(post, NOW)["description"]) > 600
+    large = publisher_description("<p>" + ("Detailed requirement. " * 2500) + "</p>")
+    assert large is not None
+    assert 600 < len(large) < 30_000
+    assert "Description shortened for display" in large
+
 
 
 def test_page_scan_complete_before_any_write():
