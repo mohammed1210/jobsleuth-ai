@@ -6,6 +6,7 @@ import Link from 'next/link';
 import HeaderClient from '@/components/HeaderClient';
 import { fetchJobDetail, fetchSavedJobs, saveJob, deleteSavedJob, type Job } from '@/lib/api';
 import { getFreshSession, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { applicationPath } from '@/lib/jobApplicationHandoff';
 
 type SavedState = 'signed-out' | 'saved' | 'unsaved' | 'unknown';
 
@@ -238,6 +239,12 @@ export default function JobDetailPage() {
                 </p>
               )}
               <div className="flex flex-wrap gap-3">
+                {!closed && (
+                  <Link href={applicationPath(job.id)} className="btn-primary inline-flex items-center"
+                    aria-label={`Prepare an application for ${job.title} with JobSleuth`}>
+                    Help me apply with JobSleuth
+                  </Link>
+                )}
                 <button type="button" onClick={handleSave}
                   disabled={saving || savedState === 'unknown' || (closed && savedState !== 'saved')}
                   className="btn-secondary disabled:opacity-50">
@@ -247,7 +254,7 @@ export default function JobDetailPage() {
                 </button>
                 {applyUrl && (
                   <a href={applyUrl} target="_blank" rel="noopener noreferrer"
-                    className="btn-primary inline-flex">View original vacancy</a>
+                    className="btn-secondary inline-flex">View original vacancy</a>
                 )}
                 <button type="button" onClick={handleShare}
                   className="rounded-xl px-4 py-3 bg-gray-100 text-gray-700 hover:bg-gray-200">
@@ -258,6 +265,7 @@ export default function JobDetailPage() {
 
             <section className="card p-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-5">Job Description</h2>
+              <p className="mb-4 text-sm text-gray-500">Description supplied by the publisher. Check the original advert for the complete criteria and application instructions.</p>
               <div className="whitespace-pre-wrap break-words text-gray-700 leading-relaxed">
                 {plainDescription(job.description)}
               </div>
