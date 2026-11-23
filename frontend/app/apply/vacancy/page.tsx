@@ -16,6 +16,7 @@ import { fetchCandidateProfile, type CandidateProfile } from '@/lib/candidatePro
 import { getFreshSession, getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { extractVacancyIntelligence, type IntelligenceItem } from '@/lib/vacancyIntelligenceApi';
 import { parseVacancyText } from '@/lib/vacancyParser';
+import { createExtractionGate } from '@/lib/extractionGate';
 
 const lines = (value: string) => value.split('\n').map((item) => item.trim()).filter(Boolean);
 const VACANCY_DRAFT_KEY = 'jobsleuth.apply.vacancyDraft.v2';
@@ -84,6 +85,7 @@ export default function VacancyApplyPage() {
   const [analysisProfileFingerprintValue, setAnalysisProfileFingerprintValue] = useState<string | null>(null);
   const [analysisValidated, setAnalysisValidated] = useState(false);
   const sessionUserIdRef = useRef<string | null>(null);
+  const extractionGenerationRef = useRef(createExtractionGate());
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [draftStateReady, setDraftStateReady] = useState(false);
@@ -127,6 +129,9 @@ export default function VacancyApplyPage() {
   }, []);
 
   const clearDraftFields = () => {
+    // Discard any in-flight response for a previous vacancy or user.
+    extractionGenerationRef.current.invalidate();
+    setExtracting(false);
     setVacancyText('');
     setEligibility('');
     setEligibilityAnswers({});
@@ -450,8 +455,9 @@ export default function VacancyApplyPage() {
   };
 
   const extract = async () => {
+    const generation = extractionGenerationRef.current.begin();
     const activeSession = await currentSession();
-    if (!activeSession) return;
+    if (!activeSession || !extractionGenerationRef.current.isCurrent(generation)) return;
     if (vacancyText.trim().length < 40) {
       setMessage('Paste more of the vacancy advert before extracting.');
       return;
@@ -465,20 +471,26 @@ export default function VacancyApplyPage() {
     setMessage(null);
     try {
       const result = await extractVacancyIntelligence(activeSession, vacancyText);
-      if (sessionUserIdRef.current !== activeSession.user.id) return;
+      if (!extractionGenerationRef.current.isCurrent(generation) ||
+          sessionUserIdRef.current !== activeSession.user.id) return;
       const items = [...result.eligibility, ...result.requirements, ...result.practical];
       applyRequirements(items);
       setExtractedItems(items);
       setExtractionProvider(result.provider);
       const lowConfidence = result.summary.low_confidence ? ` ${result.summary.low_confidence} item(s) need extra review.` : '';
-      setMessage(`Extracted ${result.summary.items} grounded item(s). Review and edit before analysing.${lowConfidence}`);
+      if (!result.summary.requirements && !result.summary.eligibility) {
+        setMessage('The imported advert contains no verified candidate criteria yet. Read the complete employer advert or paste the person specification before analysing your fit.');
+      } else {
+        setMessage(`Extracted ${result.summary.items} grounded item(s). Review and edit before analysing.${lowConfidence}`);
+      }
     } catch {
-      if (sessionUserIdRef.current !== activeSession.user.id) return;
+      if (!extractionGenerationRef.current.isCurrent(generation) ||
+          sessionUserIdRef.current !== activeSession.user.id) return;
       const count = localFallback();
       if (!count) setShowManualDetails(true);
       setMessage(count ? `The intelligence service was unavailable, so JobSleuth used the local fallback and found ${count} item(s). Review carefully.` : 'No clear criteria found. Open the vacancy details and enter the criteria manually.');
     } finally {
-      setExtracting(false);
+      if (extractionGenerationRef.current.isCurrent(generation)) setExtracting(false);
     }
   };
 
@@ -627,6 +639,11 @@ export default function VacancyApplyPage() {
     eligibility.trim() || essential.trim() || desirable.trim() || trainable.trim() || practical.trim() || extractedItems.length,
   );
   const careerCriteriaCount = lines(essential).length + lines(desirable).length + lines(trainable).length;
+  const hasAnalysableCriteria = careerCriteriaCount + lines(eligibility).length > 0;
+  const shortPublisherExcerpt = Boolean(
+    sourceJob?.source === 'dfe_teaching_vacancies'
+      && (sourceJob.description?.length ?? 0) <= 600,
+  );
 
   return (
     <div className="min-h-screen">
@@ -679,8 +696,15 @@ export default function VacancyApplyPage() {
                   You have a draft in progress. To protect it, the selected vacancy has not overwritten your work.
                 </p>
                 <button type="button" onClick={replaceDraftWithSourceJob}
-                  className="btn-primary px-4 py-2 text-sm">Replace draft with this vacancy</button>
+                  disabled={analysing}
+                  className="btn-primary px-4 py-2 text-sm disabled:opacity-50">Replace draft with this vacancy</button>
               </div>
+            )}
+            {shortPublisherExcerpt && (
+              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                This listing currently contains a short publisher excerpt rather than the full person specification.
+                For accurate evidence matching, open the original advert and add the missing criteria below.
+              </p>
             )}
             <p className="mt-2 text-xs text-gray-600">
               Publisher-supplied data may not contain every application requirement. Check the original listing before submitting.
@@ -698,7 +722,11 @@ export default function VacancyApplyPage() {
               <p className="mt-1 text-sm text-gray-500">Paste the full advert so requirements, practical constraints and application instructions stay grounded in the source.</p>
             </div>
             {hasVacancyDetails && (
-              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Vacancy structured</span>
+              <span className={`rounded-full px-3 py-1 text-xs font-semibold ${hasAnalysableCriteria
+                ? 'bg-emerald-50 text-emerald-700'
+                : 'bg-amber-50 text-amber-800'}`}>
+                {hasAnalysableCriteria ? 'Vacancy criteria found' : 'More criteria needed'}
+              </span>
             )}
           </div>
 
@@ -721,6 +749,15 @@ export default function VacancyApplyPage() {
           </div>
         </section>
 
+        {hasVacancyDetails && !hasAnalysableCriteria && (
+          <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            No essential, desirable or eligibility criteria have been verified from the available advert.
+            A work pattern alone cannot support an AI suitability assessment. Open the original listing
+            and add its person specification using “Review or edit extracted vacancy details” below.
+            You can also paste the full vacancy text above and re-extract.
+          </p>
+        )}
+
         {(hasVacancyDetails || showManualDetails) && (
           <section className="card p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -729,7 +766,7 @@ export default function VacancyApplyPage() {
                 <h2 className="mt-1 text-xl font-bold text-gray-900">Vacancy snapshot</h2>
                 <p className="mt-1 text-sm text-gray-500">The essentials stay visible. Editing and audit detail are tucked away until you need them.</p>
               </div>
-              <button type="button" onClick={analyse} disabled={analysing} className="btn-primary disabled:cursor-wait disabled:opacity-60">
+              <button type="button" onClick={analyse} disabled={analysing || !hasAnalysableCriteria} className="btn-primary disabled:cursor-not-allowed disabled:opacity-60">
                 {analysing ? 'Analysing…' : 'Analyse my fit'}
               </button>
             </div>
