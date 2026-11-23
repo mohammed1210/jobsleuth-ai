@@ -544,6 +544,15 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
             items.append(_item(line, "desirable", 0.88, explicit_blocker=False))
             continue
 
+        # Explicitly negated or optional qualifications should not turn
+        # into mandatory checks or automatic essential evidence criteria.
+        qts_mentioned = bool(re.search(r"\b(?:qualified teacher status|qts)\b", lowered))
+        if qts_mentioned and re.search(r"\bnot\s+(?:required|essential|mandatory|needed)\b", lowered):
+            continue
+        if qts_mentioned and re.search(r"\b(?:desirable|preferred|optional|advantageous)\b", lowered):
+            items.append(_item(line, "desirable", 0.88, explicit_blocker=False))
+            continue
+
         # A standalone professional qualification under About You / an
         # explicit essential list is a candidate-confirmed prerequisite.
         # Treat it as an eligibility check rather than pretending an Evidence
