@@ -46,7 +46,7 @@ class _PublisherTextParser(HTMLParser):
         if tag in ("script", "style", "noscript"):
             self.hidden += 1
         elif not self.hidden and tag in ("p", "div", "br", "li", "h1", "h2", "h3", "h4", "ul", "ol"):
-            self.parts.append("\\n" if tag == "br" else "\\n\\n")
+            self.parts.append("\n" if tag == "br" else "\n\n")
             if tag == "li":
                 self.parts.append("• ")
 
@@ -54,7 +54,7 @@ class _PublisherTextParser(HTMLParser):
         if tag in ("script", "style", "noscript"):
             self.hidden = max(0, self.hidden - 1)
         elif not self.hidden and tag in ("p", "div", "li", "h1", "h2", "h3", "h4", "ul", "ol"):
-            self.parts.append("\\n")
+            self.parts.append("\n")
 
     def handle_data(self, data: str):
         if not self.hidden:
@@ -69,12 +69,12 @@ def publisher_description(value: object) -> str | None:
     # Never silently truncate to Greenhouse's 600-character preview length.
     parser = _PublisherTextParser()
     parser.feed(html.unescape(html.unescape(value[:80_000])))
-    text = "".join(parser.parts).replace("\\r", "").strip()
-    text = re.sub(r"[ \\t]+", " ", text)
-    text = re.sub(r"\\n[ \\t]*\\n(?:[ \\t]*\\n)+", "\\n\\n", text)
+    text = "".join(parser.parts).replace("\r", "").strip()
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n[ \t]*\n(?:[ \t]*\n)+", "\n\n", text)
     if len(text) > MAX_DFE_DESCRIPTION_CHARS:
         return text[:MAX_DFE_DESCRIPTION_CHARS].rstrip() + (
-            "\\n\\n[Description shortened for display; see the original vacancy for full details.]"
+            "\n\n[Description shortened for display; see the original vacancy for full details.]"
         )
     return text or None
 
