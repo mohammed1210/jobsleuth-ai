@@ -102,6 +102,7 @@ def test_deterministic_builder_uses_supported_evidence_and_reports_gap(monkeypat
     assert data["can_generate"] is True
     assert data["provider"] == "deterministic-grounded-v2"
     assert data["fallback_reason"] == "openai_RateLimitError"
+    assert any("not a submission-ready application" in warning for warning in data["warnings"])
     assert card.actions[0] in data["draft"]
     assert data["coverage"][0]["status"] == "covered"
     assert data["coverage"][1]["status"] == "evidence-gap"
@@ -176,6 +177,7 @@ def test_successful_semantic_draft_has_no_fallback_reason(monkeypatch):
     data = client.post("/application-builder", headers=HEADERS, json=payload).json()
     assert data["provider"] == "openai-grounded-v1"
     assert data["fallback_reason"] is None
+    assert not any("not a submission-ready application" in warning for warning in data["warnings"])
     assert any("uses only" in warning for warning in data["warnings"])
 
 

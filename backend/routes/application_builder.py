@@ -134,6 +134,12 @@ async def build_application(
     total_words = len(draft.split()) if draft else 0
 
     warnings: list[str] = []
+    if fallback_used and paragraphs:
+        warnings.append(
+            "This fallback assembles recorded Evidence Bank facts rather than writing a role-tailored statement. "
+            "It is a working excerpt, not a submission-ready application: review relevance to the advertised role, "
+            "mandatory qualifications and employer instructions before using it."
+        )
     for item in requirement_coverage:
         if item["category"] == "essential" and item["status"] == "evidence-gap":
             warnings.append(f"Essential requirement not drafted because supporting evidence is insufficient: {item['requirement']}")

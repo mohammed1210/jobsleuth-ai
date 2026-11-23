@@ -543,6 +543,52 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         if credential_optional:
             items.append(_item(line, "desirable", 0.88, explicit_blocker=False))
             continue
+
+        # Explicitly negated or optional qualifications should not turn
+        # into mandatory checks or automatic essential evidence criteria.
+        qts_mentioned = bool(re.search(r"\b(?:qualified teacher status|qts)\b", lowered))
+        if qts_mentioned and re.search(r"\bnot\s+(?:required|essential|mandatory|needed)\b", lowered):
+            # Reject only the *negated qualification*, not a separate essential
+            # criterion in the same publisher sentence (for example:
+            # "QTS is not required, but experience supporting pupils is essential").
+            for clause in re.split(r"\b(?:but|however|whereas)\b|;", line, flags=re.IGNORECASE):
+                candidate = clause.strip(" ,;:")
+                if not candidate or re.search(
+                    r"\b(?:qualified teacher status|qts)\b", candidate, re.IGNORECASE
+                ):
+                    continue
+                if not re.search(
+                    r"\b(?:experience|knowledge|ability|skills?|qualification|essential|required|must|should|desirable)\b",
+                    candidate, re.IGNORECASE,
+                ):
+                    continue
+                if section in {"essential", "desirable"} or re.search(
+                    r"\b(?:is essential|is required|must|is desirable)\b", candidate, re.IGNORECASE
+                ):
+                    category = "desirable" if "desirable" in candidate.lower() else (
+                        section if section == "desirable" else "essential"
+                    )
+                    items.append(_item(candidate, category, 0.86))
+            continue
+        if qts_mentioned and re.search(r"\b(?:desirable|preferred|optional|advantageous)\b", lowered):
+            items.append(_item(line, "desirable", 0.88, explicit_blocker=False))
+            continue
+
+        # A standalone professional qualification under About You / an
+        # explicit essential list is a candidate-confirmed prerequisite.
+        # Treat it as an eligibility check rather than pretending an Evidence
+        # Bank anecdote can prove possession of that qualification.
+        bare_qts_requirement = (
+            section in {"essential", "eligibility"}
+            and bool(re.fullmatch(
+                r"(?:qualified teacher status(?:\s*\(qts\))?|qts)\.?",
+                lowered,
+            ))
+        )
+        if bare_qts_requirement:
+            items.append(_item(line, "eligibility", 0.96, explicit_blocker=True))
+            continue
+
         if section != "desirable" and (any(cue in lowered for cue in eligibility_cues) or credential_mandatory):
             items.append(_item(line, "eligibility", 0.9, explicit_blocker=explicit_blocker))
             continue

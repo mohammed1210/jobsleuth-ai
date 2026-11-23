@@ -124,6 +124,10 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
   }, [analysis.requirements, evidence, selectedPart]);
 
   const liveWordCount = useMemo(() => draft.trim() ? draft.trim().split(/\s+/).length : 0, [draft]);
+  const unmetEligibility = useMemo(
+    () => analysis.requirements.filter((item) => item.category === 'eligibility' && item.status === 'not-met'),
+    [analysis.requirements],
+  );
 
   const readiness = useMemo(() => {
     const essential = activeRequirements.filter((item) => item.category === 'essential');
@@ -149,6 +153,10 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
   }, [activeRequirements]);
 
   const build = async () => {
+    if (unmetEligibility.length) {
+      setMessage('A mandatory eligibility requirement is marked not met. Review your answers and re-analyse before building this vacancy application.');
+      return;
+    }
     if (readiness.needsStrengthening && !draftAnyway) {
       setMessage('Review the evidence-readiness warning first. Strengthen your Evidence Bank or explicitly choose to draft with current evidence.');
       return;
@@ -266,6 +274,13 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
         </div>
       )}
 
+      {unmetEligibility.length > 0 && (
+        <div role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+          <strong>Mandatory eligibility not met.</strong> You marked {unmetEligibility.length} required check(s) as not met.
+          This vacancy's draft action is paused. Revisit Eligibility checks in Step 2 and re-analyse only if your answer changes.
+        </div>
+      )}
+
       {readiness.needsStrengthening ? (
         <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
           <p className="font-semibold text-amber-950">Some essential evidence needs strengthening</p>
@@ -315,7 +330,7 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
       </details>
 
       <div className="mt-5 flex flex-wrap items-center gap-3">
-        <button type="button" onClick={build} disabled={building || (readiness.needsStrengthening && !draftAnyway)} className="btn-primary disabled:cursor-not-allowed disabled:opacity-50">
+        <button type="button" onClick={build} disabled={building || unmetEligibility.length > 0 || (readiness.needsStrengthening && !draftAnyway)} className="btn-primary disabled:cursor-not-allowed disabled:opacity-50">
           {building ? 'Building evidence-backed draft…' : `Build ${selectedPart?.label ?? 'application'} draft`}
         </button>
         <span className="text-xs text-gray-500">{wordLimit} word limit</span>
@@ -332,11 +347,23 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
             </div>
           )}
 
+          {result.provider.startsWith('deterministic-grounded') && (
+            <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <strong>Evidence excerpt — manual tailoring required.</strong> AI drafting was unavailable or did not pass grounding checks.
+              This version assembles your recorded examples; it does not itself explain why they meet the
+              advertised role, confirm professional qualifications or replace the employer's application instructions.
+            </p>
+          )}
+
           <div>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h3 className="font-semibold text-gray-900">{selectedPart?.label ?? 'Editable'} draft</h3>
-                <p className="text-xs text-gray-500">Edit freely, then check the facts before submitting.</p>
+                <h3 className="font-semibold text-gray-900">
+                  {result.provider.startsWith('deterministic-grounded')
+                    ? 'Editable evidence-based working draft'
+                    : `${selectedPart?.label ?? 'Editable'} draft`}
+                </h3>
+                <p className="text-xs text-gray-500">Edit freely, then check the facts and relevance before submitting.</p>
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-sm text-gray-600">{liveWordCount} / {wordLimit} words</span>
