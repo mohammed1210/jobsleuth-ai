@@ -131,6 +131,11 @@ def test_full_publisher_description_is_not_truncated_at_600_chars():
     post = item()
     post["description"] = raw
     assert len(record(post, NOW)["description"]) > 600
+    large = publisher_description("<p>" + ("Detailed requirement. " * 2500) + "</p>")
+    assert large is not None
+    assert 600 < len(large) < 30_000
+    assert "Description shortened for display" in large
+
 
 
 def test_page_scan_complete_before_any_write():
