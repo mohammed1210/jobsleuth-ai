@@ -142,6 +142,7 @@ export default function VacancyApplyPage() {
     setAnalysisProfileFingerprintValue(null);
     setAnalysisValidated(false);
     setShowManualDetails(false);
+    setSourceJobLoadedIntoDraft(false);
   };
 
   const restoreDraftForUser = (userId: string) => {
