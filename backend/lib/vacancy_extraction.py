@@ -551,7 +551,7 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         bare_qts_requirement = (
             section in {"essential", "eligibility"}
             and bool(re.fullmatch(
-                r"(?:qualified teacher status(?:\\s*\\(qts\\))?|qts)\\.?",
+                r"(?:qualified teacher status(?:\s*\(qts\))?|qts)\.?",
                 lowered,
             ))
         )
