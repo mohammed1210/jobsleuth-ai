@@ -124,6 +124,10 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
   }, [analysis.requirements, evidence, selectedPart]);
 
   const liveWordCount = useMemo(() => draft.trim() ? draft.trim().split(/\s+/).length : 0, [draft]);
+  const unmetEligibility = useMemo(
+    () => analysis.requirements.filter((item) => item.category === 'eligibility' && item.status === 'not-met'),
+    [analysis.requirements],
+  );
 
   const readiness = useMemo(() => {
     const essential = activeRequirements.filter((item) => item.category === 'essential');
@@ -149,6 +153,10 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
   }, [activeRequirements]);
 
   const build = async () => {
+    if (unmetEligibility.length) {
+      setMessage('A mandatory eligibility requirement is marked not met. Review your answers and re-analyse before building this vacancy application.');
+      return;
+    }
     if (readiness.needsStrengthening && !draftAnyway) {
       setMessage('Review the evidence-readiness warning first. Strengthen your Evidence Bank or explicitly choose to draft with current evidence.');
       return;
@@ -266,6 +274,13 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
         </div>
       )}
 
+      {unmetEligibility.length > 0 && (
+        <div role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+          <strong>Mandatory eligibility not met.</strong> You marked {unmetEligibility.length} required check(s) as not met.
+          This vacancy's draft action is paused. Revisit Eligibility checks in Step 2 and re-analyse only if your answer changes.
+        </div>
+      )}
+
       {readiness.needsStrengthening ? (
         <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
           <p className="font-semibold text-amber-950">Some essential evidence needs strengthening</p>
@@ -315,7 +330,7 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
       </details>
 
       <div className="mt-5 flex flex-wrap items-center gap-3">
-        <button type="button" onClick={build} disabled={building || (readiness.needsStrengthening && !draftAnyway)} className="btn-primary disabled:cursor-not-allowed disabled:opacity-50">
+        <button type="button" onClick={build} disabled={building || unmetEligibility.length > 0 || (readiness.needsStrengthening && !draftAnyway)} className="btn-primary disabled:cursor-not-allowed disabled:opacity-50">
           {building ? 'Building evidence-backed draft…' : `Build ${selectedPart?.label ?? 'application'} draft`}
         </button>
         <span className="text-xs text-gray-500">{wordLimit} word limit</span>
