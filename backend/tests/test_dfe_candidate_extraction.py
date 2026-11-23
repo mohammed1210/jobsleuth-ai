@@ -64,3 +64,19 @@ def test_qts_is_only_a_prerequisite_when_stated_as_required():
         "About the school\nWe provide training for colleagues seeking Qualified Teacher Status."
     )
     assert not any(x["category"] == "eligibility" for x in context_only)
+
+
+def test_negated_qts_does_not_hide_other_mandatory_criteria_on_same_line():
+    examples = [
+        "Qualified Teacher Status is not required, but experience supporting children is essential",
+        "Experience supporting children is essential, but QTS is not required",
+    ]
+    for sentence in examples:
+        items = deterministic_extract("About You\n• " + sentence)
+        assert not any(x["category"] == "eligibility" for x in items)
+        assert any(
+            x["category"] == "essential"
+            and "experience supporting children is essential" in x["text"].lower()
+            for x in items
+        )
+        assert all("not required" not in x["text"].lower() for x in items)
