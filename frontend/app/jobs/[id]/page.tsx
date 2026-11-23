@@ -41,6 +41,19 @@ export default function JobDetailPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [savedState, setSavedState] = useState<SavedState>('signed-out');
   const [saving, setSaving] = useState(false);
+  const [checkedAt, setCheckedAt] = useState(() => Date.now());
+
+  useEffect(() => {
+    const refresh = () => setCheckedAt(Date.now());
+    const interval = window.setInterval(refresh, 60_000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -172,7 +185,15 @@ export default function JobDetailPage() {
     );
   }
 
-  const applyUrl = safeApplyUrl(job.url);
+  const deadline = job.expires_at ? Date.parse(job.expires_at) : NaN;
+  const closed = job.is_active === false || (Number.isFinite(deadline) && checkedAt >= deadline);
+  const closingDate = Number.isFinite(deadline)
+    ? new Intl.DateTimeFormat('en-GB', {
+        day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit',
+        minute: '2-digit', hour12: false, timeZone: 'Europe/London',
+      }).format(new Date(deadline))
+    : null;
+  const applyUrl = !closed ? safeApplyUrl(job.url) : null;
   return (
     <div className="min-h-screen">
       <HeaderClient />
@@ -189,8 +210,11 @@ export default function JobDetailPage() {
 
               <div className="flex flex-wrap gap-3 mb-6 text-sm text-gray-700">
                 <span className="rounded-lg bg-gray-100 px-4 py-2">{job.location}</span>
-                {job.salary && <span className="rounded-lg bg-gray-100 px-4 py-2">{job.salary}</span>}
-                {job.role_type && <span className="rounded-lg bg-gray-100 px-4 py-2">{job.role_type}</span>}
+                {job.salary && <span className="rounded-lg bg-emerald-50 px-4 py-2 font-medium text-emerald-800">{job.salary}</span>}
+                {job.role_type && <span className="rounded-lg bg-violet-50 px-4 py-2 text-violet-700">{job.role_type}</span>}
+                {closingDate && <span className="rounded-lg bg-amber-50 px-4 py-2 text-amber-800">
+                  {closed ? 'Closed' : 'Closes'} {closingDate}
+                </span>}
                 {job.source === 'dfe_teaching_vacancies' ? (
                   <span className="rounded-lg bg-gray-100 px-4 py-2">
                     Source: DfE Teaching Vacancies —{' '}
@@ -208,9 +232,14 @@ export default function JobDetailPage() {
                 <p role="status" className="text-sm text-amber-800 mb-4">{actionError}</p>
               )}
 
+              {closed && (
+                <p role="status" className="mb-4 rounded-lg bg-amber-50 p-3 text-amber-800">
+                  This vacancy has closed. The original application link is no longer offered.
+                </p>
+              )}
               <div className="flex flex-wrap gap-3">
                 <button type="button" onClick={handleSave}
-                  disabled={saving || savedState === 'unknown'}
+                  disabled={saving || savedState === 'unknown' || (closed && savedState !== 'saved')}
                   className="btn-secondary disabled:opacity-50">
                   {saving ? 'Updating…' :
                     savedState === 'saved' ? 'Remove saved job' :
@@ -236,13 +265,50 @@ export default function JobDetailPage() {
           </div>
 
           <aside className="lg:col-span-1">
-            <div className="card p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-3">Vacancy details</h2>
-              <p className="text-sm text-gray-600">
-                Information shown here comes from the selected job record. An AI match
-                percentage will only appear when a verified assessment is available.
-              </p>
-              {job.source && <p className="mt-4 text-sm text-gray-700">Listed via: {job.source}</p>}
+            <div className="card">
+              <div className="bg-gradient-ai px-6 py-6 text-white">
+                <h2 className="text-xl font-bold">Vacancy overview</h2>
+                <p className="mt-2 text-sm text-white/90">Facts from the original job advert</p>
+              </div>
+              <dl className="divide-y divide-gray-100 px-6">
+                <div className="py-4">
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Employer</dt>
+                  <dd className="mt-1 font-semibold text-gray-900">{job.company}</dd>
+                </div>
+                {closingDate && (
+                  <div className="py-4">
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Application deadline</dt>
+                    <dd className="mt-1 font-semibold text-gray-900">{closingDate}</dd>
+                  </div>
+                )}
+                {job.salary && (
+                  <div className="py-4">
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Advertised salary</dt>
+                    <dd className="mt-1 font-semibold text-emerald-700">{job.salary}</dd>
+                  </div>
+                )}
+                {job.role_type && (
+                  <div className="py-4">
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Working pattern</dt>
+                    <dd className="mt-1 font-semibold text-gray-900">{job.role_type}</dd>
+                  </div>
+                )}
+                {job.source && (
+                  <div className="py-4">
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Original source</dt>
+                    <dd className="mt-1 text-sm font-medium text-gray-900">
+                      {job.source === 'dfe_teaching_vacancies' ? 'DfE Teaching Vacancies' : job.source}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+              <div className="mx-6 mb-6 rounded-xl border border-brand-100 bg-brand-50 p-4">
+                <p className="font-semibold text-brand-800">AI suitability match</p>
+                <p className="mt-1 text-sm text-gray-600">
+                  Not assessed yet. A percentage will only appear after a verified
+                  comparison with your profile or Evidence Bank.
+                </p>
+              </div>
             </div>
           </aside>
         </div>
