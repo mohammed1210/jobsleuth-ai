@@ -670,6 +670,15 @@ export default function VacancyApplyPage() {
     }
   }, [activeStage, hasCriteriaForGuide, hasAnalysisForGuide, draftStateReady]);
 
+  // A long assessment may leave the viewport near the bottom. Bring each
+  // new task and its heading into view, including for keyboard users.
+  useEffect(() => {
+    if (!draftStateReady) return;
+    const heading = document.getElementById('guided-apply-stage');
+    heading?.focus({ preventScroll: true });
+    heading?.scrollIntoView({ block: 'start', behavior: 'auto' });
+  }, [activeStage, draftStateReady]);
+
   const shortPublisherExcerpt = Boolean(
     sourceJob?.source === 'dfe_teaching_vacancies'
       && (sourceJob.description?.length ?? 0) <= 600,
