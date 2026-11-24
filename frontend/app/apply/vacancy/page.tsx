@@ -1186,7 +1186,7 @@ export default function VacancyApplyPage() {
                 <div className="mt-5 flex flex-wrap gap-3">
                   <button type="button" onClick={() => openStage(2)} className="btn-primary">Review my answer</button>
                   <Link href="/jobs" className="btn-secondary">Find another job</Link>
-                  {sourceJob?.url && (
+                  {sourceJobOwnsDraft && sourceJob?.url && (
                     <a href={sourceJob.url} target="_blank" rel="noopener noreferrer"
                       className="btn-secondary">View employer advert</a>
                   )}
