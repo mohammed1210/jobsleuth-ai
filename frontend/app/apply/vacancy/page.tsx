@@ -504,7 +504,10 @@ export default function VacancyApplyPage() {
       applyRequirements(items);
       setExtractedItems(items);
       setExtractionProvider(result.provider);
-      if (items.length) setActiveStage(2);
+      if (items.length) {
+        setNeedsReExtraction(false);
+        setActiveStage(2);
+      }
       const lowConfidence = result.summary.low_confidence ? ` ${result.summary.low_confidence} requirement(s) may need checking against the original advert.` : '';
       if (!result.summary.requirements && !result.summary.eligibility) {
         setMessage('We could not find enough information about what the employer requires. Open the original advert or add the person specification before continuing.');
@@ -516,7 +519,10 @@ export default function VacancyApplyPage() {
           sessionUserIdRef.current !== activeSession.user.id) return;
       const count = localFallback();
       if (!count) setShowManualDetails(true);
-      if (count) setActiveStage(2);
+      if (count) {
+        setNeedsReExtraction(false);
+        setActiveStage(2);
+      }
       setMessage(count ? `We could not complete the usual advert check. We found ${count} possible requirements; confirm these against the employer’s advert before continuing.` : 'We could not identify the requirements. Open the original advert and add them manually before checking your match.');
     } finally {
       if (extractionGenerationRef.current.isCurrent(generation)) setExtracting(false);
@@ -553,6 +559,14 @@ export default function VacancyApplyPage() {
   };
 
   const analyse = async () => {
+    if (needsReExtraction) {
+      setMessage('The advert was edited. Return to Your job and read the updated advert before checking your match.');
+      return false;
+    }
+    if (lines(eligibility).some((item) => !Object.prototype.hasOwnProperty.call(eligibilityAnswers, item))) {
+      setMessage('Please choose Yes, No or Not sure for every mandatory requirement first.');
+      return false;
+    }
     const activeSession = await currentSession();
     if (!activeSession) return;
 
@@ -674,8 +688,18 @@ export default function VacancyApplyPage() {
     hasSavedWork: Boolean(vacancyText.trim() || hasVacancyDetails || analysis),
   });
   const hasCriteriaForGuide = Boolean((hasVacancyDetails || showManualDetails) && !needsReExtraction);
-  const hasAnalysisForGuide = Boolean(analysis && analysisValidated);
+  const hasAnalysisForGuide = Boolean(analysis && analysisValidated && !needsReExtraction);
+  const unansweredEligibility = lines(eligibility).filter((item) => !Object.prototype.hasOwnProperty.call(eligibilityAnswers, item));
   const guideProgress = { hasCriteria: hasCriteriaForGuide, hasAnalysis: hasAnalysisForGuide };
+
+  const editVacancyText = (nextText: string) => {
+    if (nextText === vacancyText) return;
+    // Preserve the origin ID even if the text is edited in the same render.
+    if (sourceJob && sourceJobOwnsDraft) setLinkedSourceJobId(sourceJob.id);
+    setVacancyText(nextText);
+    setNeedsReExtraction(true);
+    setMessage('The advert has changed. Read the updated text again before checking your match.');
+  };
 
   const openStage = (stage: ApplyStage) => {
     if (!canOpenApplyStage(stage, guideProgress)) return;
