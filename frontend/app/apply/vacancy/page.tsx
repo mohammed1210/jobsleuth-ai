@@ -795,15 +795,30 @@ export default function VacancyApplyPage() {
               <p role="status" className="mt-3 text-sm font-medium text-emerald-800">
                 The publisher's vacancy information is loaded below. Review it, then select Extract vacancy.
               </p>
-            ) : (
-              <div className="mt-3 flex flex-wrap items-center gap-3">
-                <p className="text-sm text-amber-900">
-                  You have a draft in progress. To protect it, the selected vacancy has not overwritten your work.
+            ) : sourceJobConflict ? (
+              <div role="alert" className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
+                <p className="font-semibold text-amber-950">Which vacancy do you want to work on?</p>
+                <p className="mt-1 text-sm text-amber-900">
+                  You opened {sourceJob.title}, but your saved draft contains a different advert.
+                  We have not overwritten your work or changed its match results.
                 </p>
-                <button type="button" onClick={replaceDraftWithSourceJob}
-                  disabled={analysing}
-                  className="btn-primary px-4 py-2 text-sm disabled:opacity-50">Replace draft with this vacancy</button>
+                <div className="mt-3 flex flex-wrap gap-3">
+                  <button type="button" onClick={replaceDraftWithSourceJob} disabled={analysing}
+                    className="btn-primary px-4 py-2 text-sm disabled:opacity-50">
+                    Use {sourceJob.title} and replace saved draft
+                  </button>
+                  <button type="button" onClick={() => { setContinueExistingDraft(true); setActiveStage(resumeApplyStage(guideProgress)); }}
+                    className="btn-secondary px-4 py-2 text-sm">
+                    Keep my existing draft instead
+                  </button>
+                </div>
               </div>
+            ) : sourceJobLoadedIntoDraft ? (
+              <p role="status" className="mt-3 text-sm text-amber-900">
+                You edited the imported advert. Check your changes against the employer's original text before continuing.
+              </p>
+            ) : (
+              <p className="mt-3 text-sm text-gray-600">Loading the selected advert without replacing any saved work…</p>
             )}
             {shortPublisherExcerpt && (
               <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
@@ -821,6 +836,12 @@ export default function VacancyApplyPage() {
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm shadow-sm">
             <span className="font-semibold text-gray-800">Working on: {sourceJob?.title} · {sourceJob?.company}</span>
             <button type="button" onClick={() => openStage(1)} className="font-semibold text-brand-700 underline">View vacancy</button>
+          </div>
+        )}
+        {sourceJobConflict && continueExistingDraft && activeStage !== 1 && (
+          <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-5 py-3 text-sm text-amber-950">
+            <p><strong>Working on your saved application.</strong> The newly selected {sourceJob?.title} vacancy has not replaced it.</p>
+            <button type="button" onClick={() => openStage(1)} className="font-semibold underline">Review job choice</button>
           </div>
         )}
         {message && <div role="status" className="rounded-xl border bg-white px-4 py-3 text-sm text-gray-700 shadow-sm">{message}</div>}
