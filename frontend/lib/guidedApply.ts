@@ -47,3 +47,27 @@ export function needsApplyStageDowngrade(
   if (stage > 2 && !progress.hasAnalysis) return true;
   return stage === 2 && !progress.hasCriteria;
 }
+
+/** Keep the same imported-advert editor mounted after the applicant types. */
+export function isImportedAdvertEditor({
+  sourceJobId,
+  linkedSourceJobId,
+  importedThisSession,
+  exactSourceMatch,
+}: {
+  sourceJobId: number | null;
+  linkedSourceJobId: number | null;
+  importedThisSession: boolean;
+  exactSourceMatch: boolean;
+}): boolean {
+  return sourceJobId !== null
+    && (linkedSourceJobId === sourceJobId || importedThisSession || exactSourceMatch);
+}
+
+/** An explicit 'Not sure' is a valid answer, but must not be treated as meeting the requirement. */
+export function unansweredMandatoryQuestions(
+  requirements: string[],
+  answers: Record<string, 'yes' | 'no' | 'unsure'>,
+): string[] {
+  return requirements.filter((requirement) => !Object.prototype.hasOwnProperty.call(answers, requirement));
+}
