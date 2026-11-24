@@ -741,11 +741,6 @@ export default function VacancyApplyPage() {
     heading?.scrollIntoView({ block: 'start', behavior: 'auto' });
   }, [activeStage, draftStateReady]);
 
-  const shortPublisherExcerpt = Boolean(
-    sourceJob?.source === 'dfe_teaching_vacancies'
-      && (sourceJob.description?.length ?? 0) <= 600,
-  );
-
   if (!loading && !session) {
     return (
       <div className="min-h-screen">
@@ -837,9 +832,9 @@ export default function VacancyApplyPage() {
             </div>
             {sourceJobOwnsDraft ? (
               <p role="status" className="mt-3 text-sm font-medium text-emerald-800">
-                {hasVacancyDetails && !needsReExtraction
+                {hasAnalysableCriteria && !needsReExtraction
                   ? 'We’ve identified the available requirements. Continue to the next step.'
-                  : 'We’ve loaded this vacancy. Select “Read this advert” to find the requirements.'}
+                  : 'We’ve loaded this vacancy. Read or recheck the advert to identify the requirements.'}
               </p>
             ) : sourceJobConflict ? (
               <div role="alert" className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
@@ -866,12 +861,6 @@ export default function VacancyApplyPage() {
             ) : (
               <p className="mt-3 text-sm text-gray-600">Loading the selected advert without replacing any saved work…</p>
             )}
-            {shortPublisherExcerpt && (
-              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                This listing currently contains a short publisher excerpt rather than the full person specification.
-                For accurate evidence matching, open the original advert and add the missing criteria below.
-              </p>
-            )}
             <p className="mt-2 text-xs text-gray-600">
               Publisher-supplied data may not contain every application requirement. Check the original listing before submitting.
             </p>
@@ -890,7 +879,9 @@ export default function VacancyApplyPage() {
             <button type="button" onClick={() => openStage(1)} className="font-semibold underline">Review job choice</button>
           </div>
         )}
-        {message && <div role="status" className="rounded-xl border bg-white px-4 py-3 text-sm text-gray-700 shadow-sm">{message}</div>}
+        {message && !(activeStage === 2 && hasVacancyDetails && !hasAnalysableCriteria && message.startsWith('We could not find enough information about what the employer requires.')) && (
+          <div role="status" className="rounded-xl border bg-white px-4 py-3 text-sm text-gray-700 shadow-sm">{message}</div>
+        )}
 
         {activeStage === 1 && (
         <section className="card p-6">
@@ -924,11 +915,14 @@ export default function VacancyApplyPage() {
           )}
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <button type="button" onClick={extract} disabled={extracting} className="btn-primary disabled:opacity-60">
-              {extracting ? 'Reading the advert…' : needsReExtraction ? 'Read updated advert' : hasVacancyDetails ? 'Read advert again' : 'Read this advert'}
+            {hasAnalysableCriteria && !needsReExtraction && (
+              <button type="button" onClick={() => openStage(2)} disabled={extracting} className="btn-primary disabled:opacity-60">Continue to requirements →</button>
+            )}
+            <button type="button" onClick={extract} disabled={extracting} className={`${hasAnalysableCriteria && !needsReExtraction ? 'btn-secondary' : 'btn-primary'} disabled:opacity-60`}>
+              {extracting ? 'Reading the advert…' : needsReExtraction ? 'Read updated advert' : hasVacancyDetails ? 'Recheck job requirements' : 'Read this advert'}
             </button>
-            {hasVacancyDetails && !needsReExtraction && (
-              <button type="button" onClick={() => openStage(2)} className="btn-secondary text-sm">Continue to requirements →</button>
+            {hasVacancyDetails && !hasAnalysableCriteria && !needsReExtraction && (
+              <button type="button" onClick={() => openStage(2)} className="btn-secondary text-sm">Add missing requirements →</button>
             )}
             {needsReExtraction && <p role="status" className="w-full text-sm font-medium text-amber-800">Read the updated advert to refresh the requirements before continuing.</p>}
             {!hasVacancyDetails && (
@@ -941,12 +935,14 @@ export default function VacancyApplyPage() {
         )}
 
         {activeStage === 2 && hasVacancyDetails && !hasAnalysableCriteria && (
-          <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            We could not identify enough of the employer’s requirements to compare your experience accurately.
-            A working pattern alone is not enough. Open the original listing
-            and add its person specification using “Review or edit extracted vacancy details” below.
-            You can also paste the full vacancy text above and re-extract.
-          </p>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            <p role="status" className="font-semibold">We need more information to check your match.</p>
+            <p className="mt-1">Recheck the advert, or add the employer’s missing requirements below. We won’t guess what the employer needs.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" onClick={extract} disabled={extracting} className="btn-primary text-sm disabled:opacity-60">{extracting ? 'Rechecking…' : 'Recheck job requirements'}</button>
+              <button type="button" onClick={() => openStage(1)} className="btn-secondary text-sm">View or edit advert</button>
+            </div>
+          </div>
         )}
 
         {activeStage === 2 && (hasVacancyDetails || showManualDetails) && (
@@ -998,10 +994,10 @@ export default function VacancyApplyPage() {
               </div>
             )}
 
-            <details className="mt-5 rounded-xl border bg-white">
+            <details className="mt-5 rounded-xl border bg-white" open={!hasAnalysableCriteria || undefined}>
               <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-gray-800">
-                Review or edit extracted vacancy details
-                <span className="ml-2 text-xs font-normal text-gray-500">Optional</span>
+                {hasAnalysableCriteria ? 'Review job requirements' : 'Add missing job requirements'}
+                <span className="ml-2 text-xs font-normal text-gray-500">{hasAnalysableCriteria ? 'Optional' : 'Needed to continue'}</span>
               </summary>
               <div className="border-t p-4">
                 <div className="grid gap-5 md:grid-cols-2">
