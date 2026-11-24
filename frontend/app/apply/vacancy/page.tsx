@@ -867,27 +867,18 @@ export default function VacancyApplyPage() {
               </button>
             </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-xl bg-gray-50 px-4 py-3">
-                <p className="text-2xl font-bold text-gray-900">{careerCriteriaCount}</p>
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Career criteria</p>
-              </div>
-              <div className="rounded-xl bg-gray-50 px-4 py-3">
-                <p className="text-2xl font-bold text-gray-900">{lines(eligibility).length}</p>
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Eligibility checks</p>
-              </div>
-              <div className="rounded-xl bg-gray-50 px-4 py-3">
-                <p className="text-2xl font-bold text-gray-900">{lines(practical).length}</p>
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Practical points</p>
-              </div>
+            <div className="mt-5 flex flex-wrap gap-2 text-sm">
+              <span className="rounded-full bg-brand-50 px-3 py-2 font-medium text-brand-800">{careerCriteriaCount} experience requirements</span>
+              <span className="rounded-full bg-gray-100 px-3 py-2 font-medium text-gray-700">{lines(eligibility).length} mandatory questions</span>
+              <span className="rounded-full bg-gray-100 px-3 py-2 font-medium text-gray-700">{lines(practical).length} practical considerations</span>
             </div>
 
             {lines(eligibility).length > 0 && (
               <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="font-semibold text-gray-900">Confirm mandatory eligibility</p>
-                    <p className="mt-1 text-sm text-gray-600">These checks affect the Apply / Consider / Skip recommendation. JobSleuth will not assume you hold a licence or clearance just because it is absent from your CV.</p>
+                    <p className="font-semibold text-gray-900">Do you meet these mandatory requirements?</p>
+                    <p className="mt-1 text-sm text-gray-600">Choose an answer for each requirement. If you're unsure, leave it unconfirmed; we'll never assume you have a qualification.</p>
                   </div>
                   <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-amber-800">
                     {lines(eligibility).filter((item) => eligibilityAnswers[item] && eligibilityAnswers[item] !== 'unsure').length} / {lines(eligibility).length} answered · {lines(eligibility).filter((item) => eligibilityAnswers[item] === 'yes').length} met
@@ -975,17 +966,15 @@ export default function VacancyApplyPage() {
                 <span className="rounded-full bg-gray-900 px-4 py-2 text-sm font-bold text-white">{analysis.decision === 'SKIP' ? 'Eligibility concern' : analysis.decision === 'APPLY' ? 'Promising match' : 'Worth reviewing'}</span>
               </div>
 
-              <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
+              <div className="mt-5 grid gap-3 sm:grid-cols-3">
                 {([
-                  ['Strong', analysis.requirements.filter((item) => item.category !== 'eligibility' && item.match_strength === 'strong').length],
-                  ['Partial', analysis.requirements.filter((item) => item.category !== 'eligibility' && item.match_strength === 'partial').length],
-                  ['Weak', analysis.requirements.filter((item) => item.category !== 'eligibility' && item.match_strength === 'weak').length],
-                  ['Missing', analysis.requirements.filter((item) => item.category !== 'eligibility' && item.match_strength === 'missing').length],
-                  ['Trainable', analysis.requirements.filter((item) => item.category !== 'eligibility' && item.match_strength === 'trainable').length],
+                  ['Strong evidence', analysis.requirements.filter((item) => item.category !== 'eligibility' && item.match_strength === 'strong').length],
+                  ['Needs review', analysis.requirements.filter((item) => item.category !== 'eligibility' && ['partial', 'weak'].includes(item.match_strength)).length],
+                  ['Not evidenced', analysis.requirements.filter((item) => item.category !== 'eligibility' && item.match_strength === 'missing').length],
                 ] as const).map(([label, count]) => (
-                  <div key={label} className="rounded-xl bg-gray-50 px-4 py-3">
-                    <p className="text-xl font-bold text-gray-900">{count}</p>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
+                  <div key={label} className="rounded-xl bg-gray-50 px-4 py-4">
+                    <p className="text-2xl font-bold text-gray-900">{count}</p>
+                    <p className="text-sm font-medium text-gray-600">{label}</p>
                   </div>
                 ))}
               </div>
