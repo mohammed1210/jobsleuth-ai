@@ -135,6 +135,8 @@ export default function VacancyApplyPage() {
   }, []);
 
   const clearDraftFields = () => {
+    setActiveStage(1);
+    setBuilderVisited(false);
     // Discard any in-flight response for a previous vacancy or user.
     extractionGenerationRef.current.invalidate();
     setExtracting(false);
@@ -629,21 +631,6 @@ export default function VacancyApplyPage() {
     }
   }, [analysis, analysisProfileFingerprintValue, candidateProfile, candidateProfileLoaded]);
 
-  if (!loading && !session) {
-    return (
-      <div className="min-h-screen">
-        <HeaderClient />
-        <main className="max-w-3xl mx-auto px-6 py-12">
-          <div className="card p-10 text-center">
-            <h1 className="text-3xl font-bold text-gray-900 mb-3">Sign in to analyse a vacancy</h1>
-            <Link href={requestedJobId ? signInPathForJob(requestedJobId) : '/login'}
-              className="btn-primary inline-flex">Sign in and continue</Link>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
   const hasVacancyDetails = Boolean(
     eligibility.trim() || essential.trim() || desirable.trim() || trainable.trim() || practical.trim() || extractedItems.length,
   );
@@ -687,6 +674,21 @@ export default function VacancyApplyPage() {
     sourceJob?.source === 'dfe_teaching_vacancies'
       && (sourceJob.description?.length ?? 0) <= 600,
   );
+
+  if (!loading && !session) {
+    return (
+      <div className="min-h-screen">
+        <HeaderClient />
+        <main className="max-w-3xl mx-auto px-6 py-12">
+          <div className="card p-10 text-center">
+            <h1 className="text-3xl font-bold text-gray-900 mb-3">Sign in to analyse a vacancy</h1>
+            <Link href={requestedJobId ? signInPathForJob(requestedJobId) : '/login'}
+              className="btn-primary inline-flex">Sign in and continue</Link>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">
