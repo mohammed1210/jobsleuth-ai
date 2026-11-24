@@ -504,10 +504,8 @@ export default function VacancyApplyPage() {
       applyRequirements(items);
       setExtractedItems(items);
       setExtractionProvider(result.provider);
-      if (items.length) {
-        setNeedsReExtraction(false);
-        setActiveStage(2);
-      }
+      setNeedsReExtraction(false);
+      if (items.length) setActiveStage(2);
       const lowConfidence = result.summary.low_confidence ? ` ${result.summary.low_confidence} requirement(s) may need checking against the original advert.` : '';
       if (!result.summary.requirements && !result.summary.eligibility) {
         setMessage('We could not find enough information about what the employer requires. Open the original advert or add the person specification before continuing.');
@@ -519,10 +517,8 @@ export default function VacancyApplyPage() {
           sessionUserIdRef.current !== activeSession.user.id) return;
       const count = localFallback();
       if (!count) setShowManualDetails(true);
-      if (count) {
-        setNeedsReExtraction(false);
-        setActiveStage(2);
-      }
+      setNeedsReExtraction(false);
+      if (count) setActiveStage(2);
       setMessage(count ? `We could not complete the usual advert check. We found ${count} possible requirements; confirm these against the employer’s advert before continuing.` : 'We could not identify the requirements. Open the original advert and add them manually before checking your match.');
     } finally {
       if (extractionGenerationRef.current.isCurrent(generation)) setExtracting(false);
@@ -694,6 +690,9 @@ export default function VacancyApplyPage() {
 
   const editVacancyText = (nextText: string) => {
     if (nextText === vacancyText) return;
+    // Ignore any older extraction completing after a new edit.
+    extractionGenerationRef.current.invalidate();
+    setExtracting(false);
     // Preserve the origin ID even if the text is edited in the same render.
     if (sourceJob && sourceJobOwnsDraft) setLinkedSourceJobId(sourceJob.id);
     setVacancyText(nextText);
@@ -954,10 +953,7 @@ export default function VacancyApplyPage() {
                    <h2 className="mt-1 text-xl font-bold text-gray-900">Check the key requirements</h2>
                 <p className="mt-1 text-sm text-gray-500">Confirm mandatory qualifications and practical conditions. We’ll compare your experience with the other criteria.</p>
               </div>
-              <button type="button" onClick={analyse} disabled={analysing || !hasAnalysableCriteria} className="btn-primary disabled:cursor-not-allowed disabled:opacity-60">
-                {analysing ? 'Checking your experience…' : 'Show my match →'}
-              </button>
-            </div>
+             </div>
 
             <div className="mt-5 flex flex-wrap gap-2 text-sm">
               <span className="rounded-full bg-brand-50 px-3 py-2 font-medium text-brand-800">{careerCriteriaCount} job requirements</span>
@@ -970,10 +966,10 @@ export default function VacancyApplyPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="font-semibold text-gray-900">Do you meet these mandatory requirements?</p>
-                    <p className="mt-1 text-sm text-gray-600">Choose an answer for each requirement. If you're unsure, leave it unconfirmed; we'll never assume you have a qualification.</p>
+                    <p className="mt-1 text-sm text-gray-600">Choose Yes, No or Not sure for each question. We won't assume you have a qualification or clearance.</p>
                   </div>
                   <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-amber-800">
-                    {lines(eligibility).filter((item) => eligibilityAnswers[item] && eligibilityAnswers[item] !== 'unsure').length} / {lines(eligibility).length} answered · {lines(eligibility).filter((item) => eligibilityAnswers[item] === 'yes').length} met
+                    {lines(eligibility).length - unansweredEligibility.length} / {lines(eligibility).length} answered · {lines(eligibility).filter((item) => eligibilityAnswers[item] === 'yes').length} met
                   </span>
                 </div>
                 <div className="mt-4 space-y-3">
@@ -981,16 +977,17 @@ export default function VacancyApplyPage() {
                     <div key={item} className="rounded-lg bg-white p-3">
                       <p className="text-sm font-medium text-gray-900">{item}</p>
                       <select
-                        value={eligibilityAnswers[item] ?? 'unsure'}
+                        value={eligibilityAnswers[item] ?? ''}
                         onChange={(event) => setEligibilityAnswers((current) => ({
                           ...current,
                           [item]: event.target.value as EligibilityAnswer,
                         }))}
                         className="mt-2 w-full rounded-lg border px-3 py-2 text-sm sm:max-w-xs"
                       >
-                        <option value="unsure">Not confirmed yet</option>
+                        <option value="" disabled>Choose an answer</option>
                         <option value="yes">Yes — I meet this</option>
                         <option value="no">No — I do not meet this</option>
+                        <option value="unsure">Not sure — I need to check</option>
                       </select>
                     </div>
                   ))}
@@ -1036,6 +1033,21 @@ export default function VacancyApplyPage() {
                 </div>
               </div>
             </details>
+            <div className="mt-6 flex flex-col items-start gap-3 border-t border-gray-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
+              <button type="button" onClick={() => openStage(1)} className="btn-secondary">← Back to the job</button>
+              <div className="flex flex-col items-start gap-2 sm:items-end">
+                {unansweredEligibility.length > 0 && (
+                  <p role="status" className="text-sm font-medium text-amber-800">
+                    Answer {unansweredEligibility.length} mandatory {unansweredEligibility.length === 1 ? 'question' : 'questions'} to continue.
+                  </p>
+                )}
+                <button type="button" onClick={analyse}
+                  disabled={analysing || !hasAnalysableCriteria || unansweredEligibility.length > 0}
+                  className="btn-primary disabled:cursor-not-allowed disabled:opacity-50">
+                  {analysing ? 'Checking your experience…' : 'Show my match →'}
+                </button>
+              </div>
+            </div>
           </section>
         )}
 
