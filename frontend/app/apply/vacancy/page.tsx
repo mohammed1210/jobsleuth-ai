@@ -47,6 +47,9 @@ const analysisInputFingerprint = (
 
 type VacancyDraftState = {
   userId: string;
+  /** Identifies the imported job even after its text is edited or restored. */
+  linkedSourceJobId: number | null;
+  needsReExtraction: boolean;
   vacancyText: string;
   eligibility: string;
   essential: string;
@@ -96,6 +99,8 @@ export default function VacancyApplyPage() {
   const [sourceJobError, setSourceJobError] = useState<string | null>(null);
   const [loadingSourceJob, setLoadingSourceJob] = useState(false);
   const [sourceJobLoadedIntoDraft, setSourceJobLoadedIntoDraft] = useState(false);
+  const [linkedSourceJobId, setLinkedSourceJobId] = useState<number | null>(null);
+  const [needsReExtraction, setNeedsReExtraction] = useState(false);
   // Display state only: source evidence, eligibility and drafts are preserved
   // independently of which customer-facing step is visible.
   const [activeStage, setActiveStage] = useState<ApplyStage>(1);
@@ -158,6 +163,8 @@ export default function VacancyApplyPage() {
     setAnalysisValidated(false);
     setShowManualDetails(false);
     setSourceJobLoadedIntoDraft(false);
+    setLinkedSourceJobId(null);
+    setNeedsReExtraction(false);
   };
 
   const restoreDraftForUser = (userId: string) => {
@@ -171,6 +178,8 @@ export default function VacancyApplyPage() {
         return;
       }
       if (typeof saved.vacancyText === 'string') setVacancyText(saved.vacancyText);
+      setLinkedSourceJobId(Number.isSafeInteger(saved.linkedSourceJobId) && (saved.linkedSourceJobId ?? 0) > 0 ? saved.linkedSourceJobId! : null);
+      setNeedsReExtraction(saved.needsReExtraction === true);
       if (typeof saved.eligibility === 'string') setEligibility(saved.eligibility);
       if (saved.eligibilityAnswers && typeof saved.eligibilityAnswers === 'object') {
         setEligibilityAnswers(saved.eligibilityAnswers as Record<string, EligibilityAnswer>);
@@ -223,6 +232,8 @@ export default function VacancyApplyPage() {
     if (!hasExistingWork) {
       setVacancyText(advertForApplication(sourceJob));
       setSourceJobLoadedIntoDraft(true);
+      setLinkedSourceJobId(sourceJob.id);
+      setNeedsReExtraction(false);
     }
   }, [sourceJob, session, draftStateReady, sourceJobLoadedIntoDraft,
       vacancyText, eligibility, essential, desirable, trainable, practical, extractedItems, analysis]);
@@ -232,6 +243,8 @@ export default function VacancyApplyPage() {
     clearDraftFields();
     setVacancyText(advertForApplication(sourceJob));
     setSourceJobLoadedIntoDraft(true);
+    setLinkedSourceJobId(sourceJob.id);
+    setNeedsReExtraction(false);
     setMessage(null);
   };
 
@@ -239,6 +252,8 @@ export default function VacancyApplyPage() {
     if (!draftStateReady || !session) return;
     const snapshot: VacancyDraftState = {
       userId: session.user.id,
+      linkedSourceJobId,
+      needsReExtraction,
       vacancyText,
       eligibility,
       eligibilityAnswers,
@@ -260,7 +275,7 @@ export default function VacancyApplyPage() {
       return;
     }
     window.sessionStorage.setItem(VACANCY_DRAFT_KEY, JSON.stringify(snapshot));
-  }, [draftStateReady, session, vacancyText, eligibility, eligibilityAnswers, essential, desirable, trainable, practical, extractedItems, extractionProvider, analysis, analysisEvidenceFingerprint, analysisInputFingerprintValue, analysisProfileFingerprintValue]);
+  }, [draftStateReady, session, vacancyText, eligibility, eligibilityAnswers, essential, desirable, trainable, practical, extractedItems, extractionProvider, analysis, analysisEvidenceFingerprint, analysisInputFingerprintValue, analysisProfileFingerprintValue, linkedSourceJobId, needsReExtraction]);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
@@ -649,13 +664,16 @@ export default function VacancyApplyPage() {
   // An incoming link may be for job B while sessionStorage contains job A.
   // Do not hide this conflict behind a resumed analysis of the old advert.
   // An intentional edit to an already loaded job is not a new-job conflict.
+  const sourceJobImportedToWorkspace = Boolean(
+    sourceJob && (linkedSourceJobId === sourceJob.id || sourceJobLoadedIntoDraft || sourceJobOwnsDraft),
+  );
   const sourceJobConflict = hasUnresolvedJobSwitch({
     selectedJobPresent: Boolean(sourceJob),
     exactSourceMatch: sourceJobOwnsDraft,
-    importedThisJob: sourceJobLoadedIntoDraft,
+    importedThisJob: sourceJobImportedToWorkspace,
     hasSavedWork: Boolean(vacancyText.trim() || hasVacancyDetails || analysis),
   });
-  const hasCriteriaForGuide = Boolean(hasVacancyDetails || showManualDetails);
+  const hasCriteriaForGuide = Boolean((hasVacancyDetails || showManualDetails) && !needsReExtraction);
   const hasAnalysisForGuide = Boolean(analysis && analysisValidated);
   const guideProgress = { hasCriteria: hasCriteriaForGuide, hasAnalysis: hasAnalysisForGuide };
 
