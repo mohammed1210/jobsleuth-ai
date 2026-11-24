@@ -486,11 +486,11 @@ export default function VacancyApplyPage() {
       setExtractedItems(items);
       setExtractionProvider(result.provider);
       if (items.length) setActiveStage(2);
-      const lowConfidence = result.summary.low_confidence ? ` ${result.summary.low_confidence} item(s) need extra review.` : '';
+      const lowConfidence = result.summary.low_confidence ? ` ${result.summary.low_confidence} requirement(s) may need checking against the original advert.` : '';
       if (!result.summary.requirements && !result.summary.eligibility) {
-        setMessage('The imported advert contains no verified candidate criteria yet. Read the complete employer advert or paste the person specification before analysing your fit.');
+        setMessage('We could not find enough information about what the employer requires. Open the original advert or add the person specification before continuing.');
       } else {
-        setMessage(`Extracted ${result.summary.items} grounded item(s). Review and edit before analysing.${lowConfidence}`);
+        setMessage(`We found ${result.summary.items} potential requirements in the advert. Check the mandatory questions below before continuing.${lowConfidence}`);
       }
     } catch {
       if (!extractionGenerationRef.current.isCurrent(generation) ||
@@ -498,7 +498,7 @@ export default function VacancyApplyPage() {
       const count = localFallback();
       if (!count) setShowManualDetails(true);
       if (count) setActiveStage(2);
-      setMessage(count ? `The intelligence service was unavailable, so JobSleuth used the local fallback and found ${count} item(s). Review carefully.` : 'No clear criteria found. Open the vacancy details and enter the criteria manually.');
+      setMessage(count ? `We could not complete the usual advert check. We found ${count} possible requirements; confirm these against the employer’s advert before continuing.` : 'We could not identify the requirements. Open the original advert and add them manually before checking your match.');
     } finally {
       if (extractionGenerationRef.current.isCurrent(generation)) setExtracting(false);
     }
@@ -856,8 +856,8 @@ export default function VacancyApplyPage() {
 
         {activeStage === 2 && hasVacancyDetails && !hasAnalysableCriteria && (
           <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            No essential, desirable or eligibility criteria have been verified from the available advert.
-            A work pattern alone cannot support an AI suitability assessment. Open the original listing
+            We could not identify enough of the employer’s requirements to compare your experience accurately.
+            A working pattern alone is not enough. Open the original listing
             and add its person specification using “Review or edit extracted vacancy details” below.
             You can also paste the full vacancy text above and re-extract.
           </p>
@@ -877,7 +877,7 @@ export default function VacancyApplyPage() {
             </div>
 
             <div className="mt-5 flex flex-wrap gap-2 text-sm">
-              <span className="rounded-full bg-brand-50 px-3 py-2 font-medium text-brand-800">{careerCriteriaCount} experience requirements</span>
+              <span className="rounded-full bg-brand-50 px-3 py-2 font-medium text-brand-800">{careerCriteriaCount} job requirements</span>
               <span className="rounded-full bg-gray-100 px-3 py-2 font-medium text-gray-700">{lines(eligibility).length} mandatory questions</span>
               <span className="rounded-full bg-gray-100 px-3 py-2 font-medium text-gray-700">{lines(practical).length} practical considerations</span>
             </div>
