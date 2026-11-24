@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { APPLY_STAGES, canOpenApplyStage, hasUnresolvedJobSwitch, needsApplyStageDowngrade, resumeApplyStage } from '../lib/guidedApply';
+import { APPLY_STAGES, canOpenApplyStage, hasUnresolvedJobSwitch, isImportedAdvertEditor, needsApplyStageDowngrade, resumeApplyStage, unansweredMandatoryQuestions } from '../lib/guidedApply';
 
 test('the customer sees four short task labels without internal terminology', () => {
   assert.deepEqual(APPLY_STAGES.map((stage) => stage.label), [
@@ -49,4 +49,19 @@ test('temporarily unvalidated assessment does not downgrade a step during auth r
   assert.equal(needsApplyStageDowngrade(4, temporarilyPending, true), true);
   assert.equal(needsApplyStageDowngrade(3, { hasCriteria: true, hasAnalysis: true }, true), false);
   assert.equal(needsApplyStageDowngrade(2, { hasCriteria: false, hasAnalysis: false }, true), true);
+});
+
+test('editing the imported advert keeps the same editor mounted', () => {
+  assert.equal(isImportedAdvertEditor({ sourceJobId: 99, linkedSourceJobId: 99, importedThisSession: false, exactSourceMatch: false }), true);
+  assert.equal(isImportedAdvertEditor({ sourceJobId: 99, linkedSourceJobId: null, importedThisSession: true, exactSourceMatch: false }), true);
+  assert.equal(isImportedAdvertEditor({ sourceJobId: 99, linkedSourceJobId: null, importedThisSession: false, exactSourceMatch: true }), true);
+  assert.equal(isImportedAdvertEditor({ sourceJobId: 100, linkedSourceJobId: 99, importedThisSession: false, exactSourceMatch: false }), false);
+});
+
+test('mandatory qualification is an explicit answer; not sure is not an assumed yes', () => {
+  const q = ['Qualified Teacher Status.', 'Required safeguarding certificate'];
+  assert.deepEqual(unansweredMandatoryQuestions(q, {}), q);
+  assert.deepEqual(unansweredMandatoryQuestions(q, { [q[0]]: 'no' }), [q[1]]);
+  assert.deepEqual(unansweredMandatoryQuestions(q, { [q[0]]: 'unsure', [q[1]]: 'yes' }), []);
+  assert.deepEqual(unansweredMandatoryQuestions([], {}), []);
 });
