@@ -305,7 +305,6 @@ export default function VacancyApplyPage() {
 
       setEvidence(nextEvidence);
       setCandidateProfile(nextProfile);
-      setCandidateProfileLoaded(true);
       if (!profileAvailable) {
         setMessage('Evidence Bank loaded, but your CV profile could not be loaded. Vacancy matching will continue without CV signals.');
       }
@@ -347,6 +346,9 @@ export default function VacancyApplyPage() {
         setAnalysisEvidenceFingerprint(null);
         setAnalysisValidated(false);
       }
+      // Only mark profile/evidence hydration complete after any saved
+      // assessment has been revalidated against those same records.
+      setCandidateProfileLoaded(true);
     };
 
     const load = async () => {
@@ -656,19 +658,19 @@ export default function VacancyApplyPage() {
   // Restore only after draft and matching state have finished hydration.
   // Do not change the user's step again after their first manual navigation.
   useEffect(() => {
-    if (!draftStateReady || loading || stageRestoreRef.current) return;
+    if (!draftStateReady || loading || !candidateProfileLoaded || stageRestoreRef.current) return;
     stageRestoreRef.current = true;
     setActiveStage(resumeApplyStage(guideProgress));
-  }, [draftStateReady, loading, hasCriteriaForGuide, hasAnalysisForGuide]);
+  }, [draftStateReady, loading, candidateProfileLoaded, hasCriteriaForGuide, hasAnalysisForGuide]);
 
   useEffect(() => {
-    if (!draftStateReady) return;
+    if (!draftStateReady || !candidateProfileLoaded) return;
     if ((activeStage === 3 || activeStage === 4) && !hasAnalysisForGuide) {
       setActiveStage(hasCriteriaForGuide ? 2 : 1);
     } else if (activeStage === 2 && !hasCriteriaForGuide) {
       setActiveStage(1);
     }
-  }, [activeStage, hasCriteriaForGuide, hasAnalysisForGuide, draftStateReady]);
+  }, [activeStage, hasCriteriaForGuide, hasAnalysisForGuide, draftStateReady, candidateProfileLoaded]);
 
   // A long assessment may leave the viewport near the bottom. Bring each
   // new task and its heading into view, including for keyboard users.
