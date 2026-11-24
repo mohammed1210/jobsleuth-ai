@@ -24,3 +24,26 @@ export function resumeApplyStage(progress: ApplyProgress): ApplyStage {
   if (progress.hasAnalysis) return 3;
   return progress.hasCriteria ? 2 : 1;
 }
+
+/** Prevent a link for job B from silently applying to saved work for job A. */
+export function hasUnresolvedJobSwitch({
+  selectedJobPresent, exactSourceMatch, importedThisJob, hasSavedWork,
+}: {
+  selectedJobPresent: boolean;
+  exactSourceMatch: boolean;
+  importedThisJob: boolean;
+  hasSavedWork: boolean;
+}): boolean {
+  return selectedJobPresent && hasSavedWork && !exactSourceMatch && !importedThisJob;
+}
+
+/** A temporarily unvalidated assessment must not push users backwards during hydration. */
+export function needsApplyStageDowngrade(
+  stage: ApplyStage,
+  progress: ApplyProgress,
+  revalidationComplete: boolean,
+): boolean {
+  if (!revalidationComplete) return false;
+  if (stage > 2 && !progress.hasAnalysis) return true;
+  return stage === 2 && !progress.hasCriteria;
+}
