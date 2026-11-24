@@ -17,6 +17,7 @@ import { getFreshSession, getSupabaseClient, isSupabaseConfigured } from '@/lib/
 import { extractVacancyIntelligence, type IntelligenceItem } from '@/lib/vacancyIntelligenceApi';
 import { parseVacancyText } from '@/lib/vacancyParser';
 import { createExtractionGate } from '@/lib/extractionGate';
+import { APPLY_STAGES, canOpenApplyStage, resumeApplyStage, type ApplyStage } from '@/lib/guidedApply';
 
 const lines = (value: string) => value.split('\n').map((item) => item.trim()).filter(Boolean);
 const VACANCY_DRAFT_KEY = 'jobsleuth.apply.vacancyDraft.v2';
@@ -95,6 +96,11 @@ export default function VacancyApplyPage() {
   const [sourceJobError, setSourceJobError] = useState<string | null>(null);
   const [loadingSourceJob, setLoadingSourceJob] = useState(false);
   const [sourceJobLoadedIntoDraft, setSourceJobLoadedIntoDraft] = useState(false);
+  // Display state only: source evidence, eligibility and drafts are preserved
+  // independently of which customer-facing step is visible.
+  const [activeStage, setActiveStage] = useState<ApplyStage>(1);
+  const [builderVisited, setBuilderVisited] = useState(false);
+  const stageRestoreRef = useRef(false);
 
   // A public job ID is carried in the URL, not arbitrary advert text or an
   // external redirect. Always load the official record from our backend.
@@ -477,6 +483,7 @@ export default function VacancyApplyPage() {
       applyRequirements(items);
       setExtractedItems(items);
       setExtractionProvider(result.provider);
+      if (items.length) setActiveStage(2);
       const lowConfidence = result.summary.low_confidence ? ` ${result.summary.low_confidence} item(s) need extra review.` : '';
       if (!result.summary.requirements && !result.summary.eligibility) {
         setMessage('The imported advert contains no verified candidate criteria yet. Read the complete employer advert or paste the person specification before analysing your fit.');
@@ -488,6 +495,7 @@ export default function VacancyApplyPage() {
           sessionUserIdRef.current !== activeSession.user.id) return;
       const count = localFallback();
       if (!count) setShowManualDetails(true);
+      if (count) setActiveStage(2);
       setMessage(count ? `The intelligence service was unavailable, so JobSleuth used the local fallback and found ${count} item(s). Review carefully.` : 'No clear criteria found. Open the vacancy details and enter the criteria manually.');
     } finally {
       if (extractionGenerationRef.current.isCurrent(generation)) setExtracting(false);
@@ -558,6 +566,7 @@ export default function VacancyApplyPage() {
       setAnalysisInputFingerprintValue(analysisInputFingerprint(eligibility, eligibilityAnswers, essential, desirable, trainable, practical));
       setAnalysisProfileFingerprintValue(candidateProfileFingerprint(candidateProfile));
       setAnalysisValidated(true);
+      setActiveStage(3);
       setMessage(null);
       return true;
     } catch (error) {
@@ -647,6 +656,33 @@ export default function VacancyApplyPage() {
     sourceJob && sourceJobLoadedIntoDraft
     && vacancyText.trim() === advertForApplication(sourceJob).trim(),
   );
+  const hasCriteriaForGuide = Boolean(hasVacancyDetails || showManualDetails);
+  const hasAnalysisForGuide = Boolean(analysis && analysisValidated);
+  const guideProgress = { hasCriteria: hasCriteriaForGuide, hasAnalysis: hasAnalysisForGuide };
+
+  const openStage = (stage: ApplyStage) => {
+    if (!canOpenApplyStage(stage, guideProgress)) return;
+    if (stage === 4) setBuilderVisited(true);
+    setActiveStage(stage);
+  };
+
+  // Restore only after draft and matching state have finished hydration.
+  // Do not change the user's step again after their first manual navigation.
+  useEffect(() => {
+    if (!draftStateReady || loading || stageRestoreRef.current) return;
+    stageRestoreRef.current = true;
+    setActiveStage(resumeApplyStage(guideProgress));
+  }, [draftStateReady, loading, hasCriteriaForGuide, hasAnalysisForGuide]);
+
+  useEffect(() => {
+    if (!draftStateReady) return;
+    if ((activeStage === 3 || activeStage === 4) && !hasAnalysisForGuide) {
+      setActiveStage(hasCriteriaForGuide ? 2 : 1);
+    } else if (activeStage === 2 && !hasCriteriaForGuide) {
+      setActiveStage(1);
+    }
+  }, [activeStage, hasCriteriaForGuide, hasAnalysisForGuide, draftStateReady]);
+
   const shortPublisherExcerpt = Boolean(
     sourceJob?.source === 'dfe_teaching_vacancies'
       && (sourceJob.description?.length ?? 0) <= 600,
