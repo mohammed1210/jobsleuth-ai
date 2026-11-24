@@ -17,7 +17,7 @@ import { getFreshSession, getSupabaseClient, isSupabaseConfigured } from '@/lib/
 import { extractVacancyIntelligence, type IntelligenceItem } from '@/lib/vacancyIntelligenceApi';
 import { parseVacancyText } from '@/lib/vacancyParser';
 import { createExtractionGate } from '@/lib/extractionGate';
-import { APPLY_STAGES, canOpenApplyStage, resumeApplyStage, type ApplyStage } from '@/lib/guidedApply';
+import { APPLY_STAGES, canOpenApplyStage, hasUnresolvedJobSwitch, needsApplyStageDowngrade, resumeApplyStage, type ApplyStage } from '@/lib/guidedApply';
 
 const lines = (value: string) => value.split('\n').map((item) => item.trim()).filter(Boolean);
 const VACANCY_DRAFT_KEY = 'jobsleuth.apply.vacancyDraft.v2';
@@ -649,10 +649,12 @@ export default function VacancyApplyPage() {
   // An incoming link may be for job B while sessionStorage contains job A.
   // Do not hide this conflict behind a resumed analysis of the old advert.
   // An intentional edit to an already loaded job is not a new-job conflict.
-  const sourceJobConflict = Boolean(
-    sourceJob && !sourceJobOwnsDraft && !sourceJobLoadedIntoDraft
-    && (vacancyText.trim() || hasVacancyDetails || analysis),
-  );
+  const sourceJobConflict = hasUnresolvedJobSwitch({
+    selectedJobPresent: Boolean(sourceJob),
+    exactSourceMatch: sourceJobOwnsDraft,
+    importedThisJob: sourceJobLoadedIntoDraft,
+    hasSavedWork: Boolean(vacancyText.trim() || hasVacancyDetails || analysis),
+  });
   const hasCriteriaForGuide = Boolean(hasVacancyDetails || showManualDetails);
   const hasAnalysisForGuide = Boolean(analysis && analysisValidated);
   const guideProgress = { hasCriteria: hasCriteriaForGuide, hasAnalysis: hasAnalysisForGuide };
@@ -674,10 +676,8 @@ export default function VacancyApplyPage() {
 
   useEffect(() => {
     if (!draftStateReady || !candidateProfileLoaded) return;
-    if ((activeStage === 3 || activeStage === 4) && !hasAnalysisForGuide) {
+    if (needsApplyStageDowngrade(activeStage, guideProgress, candidateProfileLoaded)) {
       setActiveStage(hasCriteriaForGuide ? 2 : 1);
-    } else if (activeStage === 2 && !hasCriteriaForGuide) {
-      setActiveStage(1);
     }
   }, [activeStage, hasCriteriaForGuide, hasAnalysisForGuide, draftStateReady, candidateProfileLoaded]);
 
