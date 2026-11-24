@@ -17,7 +17,7 @@ import { getFreshSession, getSupabaseClient, isSupabaseConfigured } from '@/lib/
 import { extractVacancyIntelligence, type IntelligenceItem } from '@/lib/vacancyIntelligenceApi';
 import { parseVacancyText } from '@/lib/vacancyParser';
 import { createExtractionGate } from '@/lib/extractionGate';
-import { APPLY_STAGES, canOpenApplyStage, hasUnresolvedJobSwitch, needsApplyStageDowngrade, resumeApplyStage, type ApplyStage } from '@/lib/guidedApply';
+import { APPLY_STAGES, canOpenApplyStage, hasUnresolvedJobSwitch, isImportedAdvertEditor, needsApplyStageDowngrade, resumeApplyStage, unansweredMandatoryQuestions, type ApplyStage } from '@/lib/guidedApply';
 
 const lines = (value: string) => value.split('\n').map((item) => item.trim()).filter(Boolean);
 const VACANCY_DRAFT_KEY = 'jobsleuth.apply.vacancyDraft.v2';
@@ -559,7 +559,7 @@ export default function VacancyApplyPage() {
       setMessage('The advert was edited. Return to Your job and read the updated advert before checking your match.');
       return false;
     }
-    if (lines(eligibility).some((item) => !Object.prototype.hasOwnProperty.call(eligibilityAnswers, item))) {
+    if (unansweredMandatoryQuestions(lines(eligibility), eligibilityAnswers).length > 0) {
       setMessage('Please choose Yes, No or Not sure for every mandatory requirement first.');
       return false;
     }
@@ -674,9 +674,12 @@ export default function VacancyApplyPage() {
   // An incoming link may be for job B while sessionStorage contains job A.
   // Do not hide this conflict behind a resumed analysis of the old advert.
   // An intentional edit to an already loaded job is not a new-job conflict.
-  const sourceJobImportedToWorkspace = Boolean(
-    sourceJob && (linkedSourceJobId === sourceJob.id || sourceJobLoadedIntoDraft || sourceJobOwnsDraft),
-  );
+  const sourceJobImportedToWorkspace = isImportedAdvertEditor({
+    sourceJobId: sourceJob?.id ?? null,
+    linkedSourceJobId,
+    importedThisSession: sourceJobLoadedIntoDraft,
+    exactSourceMatch: sourceJobOwnsDraft,
+  });
   const sourceJobConflict = hasUnresolvedJobSwitch({
     selectedJobPresent: Boolean(sourceJob),
     exactSourceMatch: sourceJobOwnsDraft,
@@ -685,7 +688,7 @@ export default function VacancyApplyPage() {
   });
   const hasCriteriaForGuide = Boolean((hasVacancyDetails || showManualDetails) && !needsReExtraction);
   const hasAnalysisForGuide = Boolean(analysis && analysisValidated && !needsReExtraction);
-  const unansweredEligibility = lines(eligibility).filter((item) => !Object.prototype.hasOwnProperty.call(eligibilityAnswers, item));
+  const unansweredEligibility = unansweredMandatoryQuestions(lines(eligibility), eligibilityAnswers);
   const guideProgress = { hasCriteria: hasCriteriaForGuide, hasAnalysis: hasAnalysisForGuide };
 
   const editVacancyText = (nextText: string) => {
