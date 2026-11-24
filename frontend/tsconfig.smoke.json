@@ -7,7 +7,9 @@
     "outDir": ".test-dist",
     "incremental": false,
     "isolatedModules": false,
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
   "include": [
     "lib/applicationInstructions.ts",
@@ -24,6 +26,8 @@
     "tests/evidenceImportUpload.smoke.test.ts",
     "tests/jobDetailsApi.smoke.test.ts",
     "tests/jobApplicationHandoff.smoke.test.ts",
-    "tests/extractionGate.smoke.test.ts"
+    "tests/extractionGate.smoke.test.ts",
+    "lib/guidedApply.ts",
+    "tests/guidedApply.smoke.test.ts"
   ]
 }
