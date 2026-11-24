@@ -819,7 +819,7 @@ export default function VacancyApplyPage() {
         )}
         {sourceJob && activeStage === 1 && (
           <section className="rounded-xl border border-brand-200 bg-brand-50 px-5 py-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">Selected real vacancy</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">Selected vacancy</p>
             <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-bold text-gray-900">{sourceJob.title}</h2>
@@ -894,7 +894,7 @@ export default function VacancyApplyPage() {
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
                <h2 className="mt-1 text-xl font-bold text-gray-900">Start with the job</h2>
-              <p className="mt-1 text-sm text-gray-500">{sourceJobOwnsDraft ? 'We’ve loaded the advert for you. Review the employer and continue.' : 'Paste a vacancy advert, or choose a job from the Jobs page.'}</p>
+              <p className="mt-1 text-sm text-gray-500">{sourceJobImportedToWorkspace ? 'The job advert is loaded. Read it to identify requirements, then continue.' : 'Paste a vacancy advert, or choose a job from the Jobs page.'}</p>
             </div>
             {hasVacancyDetails && !needsReExtraction && (
               <span className={`rounded-full px-3 py-1 text-xs font-semibold ${hasAnalysableCriteria
@@ -1173,17 +1173,25 @@ export default function VacancyApplyPage() {
           <div className={activeStage === 4 ? 'space-y-4' : 'hidden'} aria-hidden={activeStage !== 4}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <button type="button" onClick={() => openStage(3)} className="btn-secondary">← Back to my match</button>
-              <span className="text-sm text-gray-500">Review your words and the employer’s instructions before applying</span>
+              <span className="text-sm text-gray-500">{analysis.decision === 'SKIP' ? 'You still have options' : 'Review your draft and the employer’s instructions before applying'}</span>
             </div>
             {analysis.decision === 'SKIP' ? (
               <section className="card p-6">
-                 <h2 className="mt-1 text-xl font-bold text-gray-900">Application builder paused</h2>
+                 <h2 className="mt-1 text-xl font-bold text-gray-900">A required qualification is missing</h2>
                 <p className="mt-2 max-w-2xl text-sm text-gray-600">
-                  JobSleuth has identified a mandatory requirement that is not currently met. Drafting is paused so the app does not encourage an application that is blocked on eligibility.
+                  You marked a mandatory requirement as not met. JobSleuth won't write an application that implies you meet it.
                 </p>
                 <p className="mt-3 text-sm font-medium text-gray-800">
-                  If your situation changes, return to requirements, update the answer and check again. You can still read the original advert, but JobSleuth will not create a statement claiming a qualification you marked as unmet.
+                  You can change your answer if it was incorrect, read the employer’s advert or explore other vacancies.
                 </p>
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <button type="button" onClick={() => openStage(2)} className="btn-primary">Review my answer</button>
+                  <Link href="/jobs" className="btn-secondary">Find another job</Link>
+                  {sourceJob?.url && (
+                    <a href={sourceJob.url} target="_blank" rel="noopener noreferrer"
+                      className="btn-secondary">View employer advert</a>
+                  )}
+                </div>
               </section>
             ) : (
               session && <ApplicationDraftPanel session={session} analysis={analysis} evidence={evidence} vacancyText={vacancyText} originalAdvertUrl={sourceJobOwnsDraft ? sourceJob?.url : null} />
