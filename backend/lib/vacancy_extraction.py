@@ -26,6 +26,30 @@ def _item(text: str, category: Category, confidence: float, *, explicit_blocker:
     }
 
 
+# Informal candidate-list introductions: scope to candidate attributes.
+_CANDIDATE_LIST_HEADINGS = {
+    "we'd love to hear from someone who",
+    "we would love to hear from someone who",
+    "we'd love to hear from candidates who",
+    "we would love to hear from candidates who",
+    "we are looking for someone who",
+    "we're looking for someone who",
+}
+
+_CANDIDATE_ATTRIBUTE_PREFIX = re.compile(
+    r"^(?:has|have|demonstrates?|possesses?|shares?|is|are|can)\s+",
+    re.IGNORECASE,
+)
+
+# A stated preference about an applicant is not a hard blocker.
+_INLINE_CANDIDATE_PREFERENCE = re.compile(
+    r"^(?:the\s+)?(?:successful|ideal)\s+(?:candidate|applicant)\s+"
+    r"(?:will|would|should)\s+ideally\s+(?:have|hold|possess|demonstrate)\s+"
+    r"(?:experience|knowledge|skills?|qualifications?|a\s+qualification|"
+    r"a\s+degree|a\s+licen[cs]e|a\s+certificate)\b",
+    re.IGNORECASE,
+)
+
 _SECTION_HEADINGS: dict[str, Category] = {
     "eligibility": "eligibility",
     "who can apply": "eligibility",
@@ -202,6 +226,8 @@ def is_non_requirement_text(value: str) -> bool:
     if not text:
         return True
     lowered = text.lower().rstrip(":?!").strip()
+    if lowered.replace("’", "'").replace("‘", "'") in _CANDIDATE_LIST_HEADINGS:
+        return True
     if lowered in _IGNORED_SECTION_HEADINGS or lowered in _SECTION_HEADINGS or lowered in _LEAD_INS:
         return True
     if re.fullmatch(r"benefits(?:\s+of\s+working(?:\s+(?:for|with)\s+.+|\s+here)?)?", lowered):
@@ -222,6 +248,8 @@ def _heading_section(line: str, raw: str, is_bullet: bool) -> Category | Literal
     looks_like_heading = raw.strip().endswith(":") or len(line.split()) <= 8
     if not looks_like_heading:
         return None
+    if lowered in _CANDIDATE_LIST_HEADINGS:
+        return "essential"
     if lowered in _SECTION_HEADINGS:
         return _SECTION_HEADINGS[lowered]
     if lowered in _IGNORED_SECTION_HEADINGS or re.fullmatch(
@@ -355,6 +383,7 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     section: Category | None = None
     in_person_specification = False
+    in_candidate_list = False
 
     eligibility_cues = (
         "right to work",
@@ -478,8 +507,18 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         heading = _heading_section(line, raw, is_bullet)
         if heading is not None:
             in_person_specification = lowered == "person specification"
+            in_candidate_list = lowered in _CANDIDATE_LIST_HEADINGS
             section = None if heading == "ignore" else heading
             continue
+
+        # Blank lines commonly separate publisher bullets; prose ends scope.
+        if in_candidate_list and not (
+            is_bullet
+            or _CANDIDATE_ATTRIBUTE_PREFIX.match(line)
+            or _looks_like_person_spec_criterion(line, False)
+        ):
+            in_candidate_list = False
+            section = None
 
         if is_non_requirement_text(line):
             continue
@@ -598,6 +637,14 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
 
         if re.match(r"^(?:salary|pay|benefits?)\s*:", lowered):
             section = None
+            continue
+
+        if (
+            len(line) <= 420
+            and _INLINE_CANDIDATE_PREFERENCE.match(lowered)
+            and not re.search(r"\b(?:not|never|no)\b", lowered)
+        ):
+            items.append(_item(line, "desirable", 0.88, explicit_blocker=False))
             continue
 
         if section == "essential" and re.search(
