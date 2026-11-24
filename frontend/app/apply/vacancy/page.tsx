@@ -697,15 +697,47 @@ export default function VacancyApplyPage() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-sm font-semibold text-brand-700">JobSleuth Apply</p>
-            <h1 className="mt-1 text-3xl font-bold tracking-tight text-gray-900">Check the fit. Build the application.</h1>
+            <h1 className="mt-1 text-3xl font-bold tracking-tight text-gray-900">Your job application, made easier.</h1>
             <p className="mt-2 max-w-2xl text-sm text-gray-600">
-              Select a vacancy from Jobs or paste your own advert. JobSleuth checks eligibility
-              and matches real evidence before helping you draft an application.
+              We’ll guide you from the job advert to an evidence-backed match, then help you
+              prepare an application you can review before visiting the employer.
             </p>
           </div>
           <Link href="/apply" className="btn-secondary px-4 py-2 text-sm">Evidence Bank</Link>
         </div>
 
+        <nav aria-label="Application steps" className="rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
+          <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {APPLY_STAGES.map((stage) => {
+              const available = canOpenApplyStage(stage.id, guideProgress);
+              const current = stage.id === activeStage;
+              return (
+                <li key={stage.id}>
+                  <button type="button" onClick={() => openStage(stage.id)} disabled={!available}
+                    aria-current={current ? 'step' : undefined}
+                    className={`flex h-full w-full items-center gap-2 rounded-xl border px-3 py-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 ${
+                      current ? 'border-brand-400 bg-brand-50 text-brand-900 shadow-sm'
+                        : available ? 'border-transparent text-gray-700 hover:bg-gray-50'
+                        : 'cursor-not-allowed border-transparent text-gray-400'
+                    }`}>
+                    <span aria-hidden="true" className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                      current ? 'bg-brand-700 text-white'
+                        : available && stage.id < activeStage ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-gray-100 text-gray-500'
+                    }`}>{stage.id}</span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold">{stage.label}</span>
+                      <span className="block text-xs opacity-75">{stage.hint}</span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
+        <div id="guided-apply-stage" tabIndex={-1} className="scroll-mt-24 outline-none">
+          <p className="text-sm font-semibold text-brand-700">Step {activeStage} of 4 · {APPLY_STAGES[activeStage - 1].label}</p>
+        </div>
         {loadingSourceJob && (
           <p role="status" className="rounded-xl border bg-white p-4 text-sm text-gray-700">
             Loading selected vacancy from JobSleuth…
@@ -716,7 +748,7 @@ export default function VacancyApplyPage() {
             {sourceJobError} <Link href="/jobs" className="underline">Browse jobs</Link>
           </div>
         )}
-        {sourceJob && (
+        {sourceJob && activeStage === 1 && (
           <section className="rounded-xl border border-brand-200 bg-brand-50 px-5 py-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">Selected real vacancy</p>
             <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
@@ -757,14 +789,21 @@ export default function VacancyApplyPage() {
           </section>
         )}
 
-        {message && <div className="rounded-xl border bg-white px-4 py-3 text-sm text-gray-700 shadow-sm">{message}</div>}
+        {sourceJobOwnsDraft && activeStage !== 1 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm shadow-sm">
+            <span className="font-semibold text-gray-800">Working on: {sourceJob?.title} · {sourceJob?.company}</span>
+            <button type="button" onClick={() => openStage(1)} className="font-semibold text-brand-700 underline">View vacancy</button>
+          </div>
+        )}
+        {message && <div role="status" className="rounded-xl border bg-white px-4 py-3 text-sm text-gray-700 shadow-sm">{message}</div>}
 
+        {activeStage === 1 && (
         <section className="card p-6">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Step 1</p>
-              <h2 className="mt-1 text-xl font-bold text-gray-900">Vacancy</h2>
-              <p className="mt-1 text-sm text-gray-500">Paste the full advert so requirements, practical constraints and application instructions stay grounded in the source.</p>
+              <h2 className="mt-1 text-xl font-bold text-gray-900">Start with the job</h2>
+              <p className="mt-1 text-sm text-gray-500">{sourceJobOwnsDraft ? 'We’ve loaded the advert for you. Review the employer and continue.' : 'Paste a vacancy advert, or choose a job from the Jobs page.'}</p>
             </div>
             {hasVacancyDetails && (
               <span className={`rounded-full px-3 py-1 text-xs font-semibold ${hasAnalysableCriteria
@@ -775,26 +814,38 @@ export default function VacancyApplyPage() {
             )}
           </div>
 
-          <textarea
-            className={`w-full rounded-xl border px-4 py-3 leading-6 transition-all ${hasVacancyDetails ? 'min-h-36' : 'min-h-56'}`}
-            value={vacancyText}
-            onChange={(e) => setVacancyText(e.target.value)}
-            placeholder="Paste the full vacancy advert here"
-          />
+          {sourceJobOwnsDraft && hasVacancyDetails ? (
+            <details className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <summary className="cursor-pointer font-semibold text-gray-800">View or edit the imported advert <span className="font-normal text-gray-500">(optional)</span></summary>
+              <textarea className="mt-3 min-h-56 w-full rounded-xl border bg-white px-4 py-3 leading-6"
+                value={vacancyText} onChange={(e) => setVacancyText(e.target.value)}
+                aria-label="Imported vacancy advert" />
+            </details>
+          ) : (
+            <textarea
+              className={`w-full rounded-xl border px-4 py-3 leading-6 transition-all ${hasVacancyDetails ? 'min-h-36' : 'min-h-56'}`}
+              value={vacancyText} onChange={(e) => setVacancyText(e.target.value)}
+              placeholder="Paste the full vacancy advert here" aria-label="Vacancy advert"
+            />
+          )}
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button type="button" onClick={extract} disabled={extracting} className="btn-primary disabled:opacity-60">
-              {extracting ? 'Extracting…' : hasVacancyDetails ? 'Re-extract vacancy' : 'Extract vacancy'}
+              {extracting ? 'Reading the advert…' : hasVacancyDetails ? 'Read advert again' : 'Read this advert'}
             </button>
+            {hasVacancyDetails && (
+              <button type="button" onClick={() => openStage(2)} className="btn-secondary text-sm">Continue to requirements →</button>
+            )}
             {!hasVacancyDetails && (
-              <button type="button" onClick={() => setShowManualDetails((current) => !current)} className="btn-ghost text-sm">
+              <button type="button" onClick={() => { setShowManualDetails(true); setActiveStage(2); }} className="btn-ghost text-sm">
                 Enter criteria manually
               </button>
             )}
           </div>
         </section>
+        )}
 
-        {hasVacancyDetails && !hasAnalysableCriteria && (
+        {activeStage === 2 && hasVacancyDetails && !hasAnalysableCriteria && (
           <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
             No essential, desirable or eligibility criteria have been verified from the available advert.
             A work pattern alone cannot support an AI suitability assessment. Open the original listing
@@ -803,16 +854,16 @@ export default function VacancyApplyPage() {
           </p>
         )}
 
-        {(hasVacancyDetails || showManualDetails) && (
+        {activeStage === 2 && (hasVacancyDetails || showManualDetails) && (
           <section className="card p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Step 2</p>
-                <h2 className="mt-1 text-xl font-bold text-gray-900">Vacancy snapshot</h2>
-                <p className="mt-1 text-sm text-gray-500">The essentials stay visible. Editing and audit detail are tucked away until you need them.</p>
+                <h2 className="mt-1 text-xl font-bold text-gray-900">Check the key requirements</h2>
+                <p className="mt-1 text-sm text-gray-500">Confirm mandatory qualifications and practical conditions. We’ll compare your experience with the other criteria.</p>
               </div>
               <button type="button" onClick={analyse} disabled={analysing || !hasAnalysableCriteria} className="btn-primary disabled:cursor-not-allowed disabled:opacity-60">
-                {analysing ? 'Analysing…' : 'Analyse my fit'}
+                {analysing ? 'Checking your experience…' : 'Show my match →'}
               </button>
             </div>
 
