@@ -100,6 +100,7 @@ export default function VacancyApplyPage() {
   // independently of which customer-facing step is visible.
   const [activeStage, setActiveStage] = useState<ApplyStage>(1);
   const [builderVisited, setBuilderVisited] = useState(false);
+  const [continueExistingDraft, setContinueExistingDraft] = useState(false);
   const stageRestoreRef = useRef(false);
 
   // A public job ID is carried in the URL, not arbitrary advert text or an
@@ -137,6 +138,7 @@ export default function VacancyApplyPage() {
   const clearDraftFields = () => {
     setActiveStage(1);
     setBuilderVisited(false);
+    setContinueExistingDraft(false);
     // Discard any in-flight response for a previous vacancy or user.
     extractionGenerationRef.current.invalidate();
     setExtracting(false);
@@ -642,8 +644,14 @@ export default function VacancyApplyPage() {
   // its exact text remains in the editor. Manual replacements retire the
   // ownership claim without overwriting or discarding the applicant's work.
   const sourceJobOwnsDraft = Boolean(
-    sourceJob && sourceJobLoadedIntoDraft
-    && vacancyText.trim() === advertForApplication(sourceJob).trim(),
+    sourceJob && vacancyText.trim() === advertForApplication(sourceJob).trim(),
+  );
+  // An incoming link may be for job B while sessionStorage contains job A.
+  // Do not hide this conflict behind a resumed analysis of the old advert.
+  // An intentional edit to an already loaded job is not a new-job conflict.
+  const sourceJobConflict = Boolean(
+    sourceJob && !sourceJobOwnsDraft && !sourceJobLoadedIntoDraft
+    && (vacancyText.trim() || hasVacancyDetails || analysis),
   );
   const hasCriteriaForGuide = Boolean(hasVacancyDetails || showManualDetails);
   const hasAnalysisForGuide = Boolean(analysis && analysisValidated);
@@ -651,6 +659,7 @@ export default function VacancyApplyPage() {
 
   const openStage = (stage: ApplyStage) => {
     if (!canOpenApplyStage(stage, guideProgress)) return;
+    if (sourceJobConflict && !continueExistingDraft && stage !== 1) return;
     if (stage === 4) setBuilderVisited(true);
     setActiveStage(stage);
   };
@@ -660,8 +669,8 @@ export default function VacancyApplyPage() {
   useEffect(() => {
     if (!draftStateReady || loading || !candidateProfileLoaded || stageRestoreRef.current) return;
     stageRestoreRef.current = true;
-    setActiveStage(resumeApplyStage(guideProgress));
-  }, [draftStateReady, loading, candidateProfileLoaded, hasCriteriaForGuide, hasAnalysisForGuide]);
+    setActiveStage(sourceJobConflict && !continueExistingDraft ? 1 : resumeApplyStage(guideProgress));
+  }, [draftStateReady, loading, candidateProfileLoaded, hasCriteriaForGuide, hasAnalysisForGuide, sourceJobConflict, continueExistingDraft]);
 
   useEffect(() => {
     if (!draftStateReady || !candidateProfileLoaded) return;
@@ -671,6 +680,13 @@ export default function VacancyApplyPage() {
       setActiveStage(1);
     }
   }, [activeStage, hasCriteriaForGuide, hasAnalysisForGuide, draftStateReady, candidateProfileLoaded]);
+
+  useEffect(() => {
+    if (!draftStateReady || !candidateProfileLoaded) return;
+    if (sourceJobConflict && !continueExistingDraft && activeStage !== 1) {
+      setActiveStage(1);
+    }
+  }, [draftStateReady, candidateProfileLoaded, sourceJobConflict, continueExistingDraft, activeStage]);
 
   // A long assessment may leave the viewport near the bottom. Bring each
   // new task and its heading into view, including for keyboard users.
@@ -720,7 +736,8 @@ export default function VacancyApplyPage() {
         <nav aria-label="Application steps" className="rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
           <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {APPLY_STAGES.map((stage) => {
-              const available = canOpenApplyStage(stage.id, guideProgress);
+              const available = canOpenApplyStage(stage.id, guideProgress)
+                && (stage.id === 1 || !sourceJobConflict || continueExistingDraft);
               const current = stage.id === activeStage;
               return (
                 <li key={stage.id}>
