@@ -956,17 +956,23 @@ export default function VacancyApplyPage() {
           </section>
         )}
 
-        <ExtractionAudit items={extractedItems} provider={extractionProvider} />
+        {activeStage === 2 && extractedItems.length > 0 && (
+          <details className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <summary className="cursor-pointer font-semibold text-gray-800">How did JobSleuth find these requirements? <span className="font-normal text-gray-500">(advanced)</span></summary>
+            <p className="mt-2 text-sm text-gray-600">See the source wording and confidence behind each requirement. You do not need these technical details to continue.</p>
+            <div className="mt-3"><ExtractionAudit items={extractedItems} provider={extractionProvider} /></div>
+          </details>
+        )}
 
-        {analysis && analysisValidated && (
-          <>
+        {analysis && analysisValidated && activeStage === 3 && (
             <section className="card p-6">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Step 3</p>
-                  <h2 className="mt-1 text-xl font-bold text-gray-900">Fit summary</h2>
+                  <h2 className="mt-1 text-xl font-bold text-gray-900">Here's how your experience compares</h2>
+                    <p className="mt-1 text-sm text-gray-600">An evidence-based guide, not an employer’s hiring decision.</p>
                 </div>
-                <span className="rounded-full bg-gray-900 px-4 py-2 text-sm font-bold text-white">{analysis.decision}</span>
+                <span className="rounded-full bg-gray-900 px-4 py-2 text-sm font-bold text-white">{analysis.decision === 'SKIP' ? 'Eligibility concern' : analysis.decision === 'APPLY' ? 'Promising match' : 'Worth reviewing'}</span>
               </div>
 
               <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
@@ -986,7 +992,7 @@ export default function VacancyApplyPage() {
 
               {analysis.decision_reasons && analysis.decision_reasons.length > 0 && (
                 <div className="mt-5 rounded-xl bg-gray-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Why</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Why we reached this recommendation</p>
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-700">
                     {analysis.decision_reasons.map((reason) => <li key={reason}>{reason}</li>)}
                   </ul>
