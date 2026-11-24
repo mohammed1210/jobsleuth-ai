@@ -1039,15 +1039,24 @@ export default function VacancyApplyPage() {
                 </div>
               )}
 
-              <div className="mt-5">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h3 className="font-semibold text-gray-900">Criteria match</h3>
-                    <p className="text-sm text-gray-500">Scan the result, then expand only the criteria you want to inspect.</p>
-                  </div>
-                  <span className="text-xs text-gray-400">{analysis.analysis_provider}</span>
+              <div className="mt-5 rounded-xl border border-gray-200 p-4">
+                <h3 className="font-semibold text-gray-900">What may need attention</h3>
+                <div className="mt-3 space-y-2">
+                  {analysis.requirements.filter((item) => item.category === 'essential' && ['missing', 'weak'].includes(item.match_strength)).slice(0,3).map((item) => (
+                    <p key={item.requirement} className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">{item.requirement}</p>
+                  ))}
+                  {!analysis.requirements.some((item) => item.category === 'essential' && ['missing', 'weak'].includes(item.match_strength)) && (
+                    <p className="text-sm text-gray-600">No essential requirements are marked weak or missing, but partial matches still need checking.</p>
+                  )}
                 </div>
-                <div className="space-y-2">
+              </div>
+
+              <details className="mt-5 rounded-xl border border-gray-200 bg-white p-4">
+                <summary className="cursor-pointer font-semibold text-gray-800">
+                  Review all requirements and matched evidence <span className="font-normal text-gray-500">(optional)</span>
+                </summary>
+                <p className="mt-2 text-sm text-gray-600">Expand an individual requirement to see the supporting evidence and gaps.</p>
+                <div className="mt-3 space-y-2">
                   {analysis.requirements.filter((item) => item.category !== 'eligibility').map((item, index) => (
                     <RequirementMatchCard
                       key={`${item.requirement}-${index}`}
@@ -1057,9 +1066,23 @@ export default function VacancyApplyPage() {
                     />
                   ))}
                 </div>
+              </details>
+
+              <div className="mt-6 flex flex-wrap justify-between gap-3 border-t pt-5">
+                <button type="button" onClick={() => openStage(2)} className="btn-secondary">← Review requirements</button>
+                <button type="button" onClick={() => openStage(4)} className="btn-primary">
+                  {analysis.decision === 'SKIP' ? 'See my next options →' : 'Continue to my application →'}
+                </button>
               </div>
             </section>
+        )}
 
+        {analysis && analysisValidated && (activeStage === 4 || builderVisited) && (
+          <div className={activeStage === 4 ? 'space-y-4' : 'hidden'} aria-hidden={activeStage !== 4}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <button type="button" onClick={() => openStage(3)} className="btn-secondary">← Back to my match</button>
+              <span className="text-sm text-gray-500">Review your words and the employer’s instructions before applying</span>
+            </div>
             {analysis.decision === 'SKIP' ? (
               <section className="card p-6">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Step 4</p>
@@ -1068,13 +1091,13 @@ export default function VacancyApplyPage() {
                   JobSleuth has identified a mandatory requirement that is not currently met. Drafting is paused so the app does not encourage an application that is blocked on eligibility.
                 </p>
                 <p className="mt-3 text-sm font-medium text-gray-800">
-                  Update the eligibility answer if your circumstances change, then analyse the vacancy again.
+                  If your situation changes, return to requirements, update the answer and check again. You can still read the original advert, but JobSleuth will not create a statement claiming a qualification you marked as unmet.
                 </p>
               </section>
             ) : (
               session && <ApplicationDraftPanel session={session} analysis={analysis} evidence={evidence} vacancyText={vacancyText} originalAdvertUrl={sourceJobOwnsDraft ? sourceJob?.url : null} />
             )}
-          </>
+          </div>
         )}
       </main>
     </div>
