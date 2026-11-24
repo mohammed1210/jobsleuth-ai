@@ -835,7 +835,9 @@ export default function VacancyApplyPage() {
             </div>
             {sourceJobOwnsDraft ? (
               <p role="status" className="mt-3 text-sm font-medium text-emerald-800">
-                The publisher's vacancy information is loaded below. Review it, then select Extract vacancy.
+                {hasVacancyDetails && !needsReExtraction
+                  ? 'We’ve identified the available requirements. Continue to the next step.'
+                  : 'We’ve loaded this vacancy. Select “Read this advert” to find the requirements.'}
               </p>
             ) : sourceJobConflict ? (
               <div role="alert" className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
@@ -855,7 +857,7 @@ export default function VacancyApplyPage() {
                   </button>
                 </div>
               </div>
-            ) : sourceJobLoadedIntoDraft ? (
+            ) : sourceJobImportedToWorkspace ? (
               <p role="status" className="mt-3 text-sm text-amber-900">
                 You edited the imported advert. Check your changes against the employer's original text before continuing.
               </p>
@@ -874,7 +876,7 @@ export default function VacancyApplyPage() {
           </section>
         )}
 
-        {sourceJobOwnsDraft && activeStage !== 1 && (
+        {sourceJobImportedToWorkspace && activeStage !== 1 && !sourceJobConflict && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm shadow-sm">
             <span className="font-semibold text-gray-800">Working on: {sourceJob?.title} · {sourceJob?.company}</span>
             <button type="button" onClick={() => openStage(1)} className="font-semibold text-brand-700 underline">View vacancy</button>
@@ -892,11 +894,10 @@ export default function VacancyApplyPage() {
         <section className="card p-6">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Step 1</p>
-              <h2 className="mt-1 text-xl font-bold text-gray-900">Start with the job</h2>
+               <h2 className="mt-1 text-xl font-bold text-gray-900">Start with the job</h2>
               <p className="mt-1 text-sm text-gray-500">{sourceJobOwnsDraft ? 'We’ve loaded the advert for you. Review the employer and continue.' : 'Paste a vacancy advert, or choose a job from the Jobs page.'}</p>
             </div>
-            {hasVacancyDetails && (
+            {hasVacancyDetails && !needsReExtraction && (
               <span className={`rounded-full px-3 py-1 text-xs font-semibold ${hasAnalysableCriteria
                 ? 'bg-emerald-50 text-emerald-700'
                 : 'bg-amber-50 text-amber-800'}`}>
@@ -905,30 +906,31 @@ export default function VacancyApplyPage() {
             )}
           </div>
 
-          {sourceJobOwnsDraft && hasVacancyDetails ? (
+          {sourceJobImportedToWorkspace ? (
             <details className="rounded-xl border border-gray-200 bg-gray-50 p-4">
               <summary className="cursor-pointer font-semibold text-gray-800">View or edit the imported advert <span className="font-normal text-gray-500">(optional)</span></summary>
               <textarea className="mt-3 min-h-56 w-full rounded-xl border bg-white px-4 py-3 leading-6"
-                value={vacancyText} onChange={(e) => setVacancyText(e.target.value)}
+                value={vacancyText} onChange={(e) => editVacancyText(e.target.value)}
                 aria-label="Imported vacancy advert" />
             </details>
           ) : (
             <textarea
               className={`w-full rounded-xl border px-4 py-3 leading-6 transition-all ${hasVacancyDetails ? 'min-h-36' : 'min-h-56'}`}
-              value={vacancyText} onChange={(e) => setVacancyText(e.target.value)}
+              value={vacancyText} onChange={(e) => editVacancyText(e.target.value)}
               placeholder="Paste the full vacancy advert here" aria-label="Vacancy advert"
             />
           )}
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button type="button" onClick={extract} disabled={extracting} className="btn-primary disabled:opacity-60">
-              {extracting ? 'Reading the advert…' : hasVacancyDetails ? 'Read advert again' : 'Read this advert'}
+              {extracting ? 'Reading the advert…' : needsReExtraction ? 'Read updated advert' : hasVacancyDetails ? 'Read advert again' : 'Read this advert'}
             </button>
-            {hasVacancyDetails && (
+            {hasVacancyDetails && !needsReExtraction && (
               <button type="button" onClick={() => openStage(2)} className="btn-secondary text-sm">Continue to requirements →</button>
             )}
+            {needsReExtraction && <p role="status" className="w-full text-sm font-medium text-amber-800">Read the updated advert to refresh the requirements before continuing.</p>}
             {!hasVacancyDetails && (
-              <button type="button" onClick={() => { setShowManualDetails(true); setActiveStage(2); }} className="btn-ghost text-sm">
+              <button type="button" onClick={() => { setShowManualDetails(true); setNeedsReExtraction(false); setActiveStage(2); }} className="btn-ghost text-sm">
                 Enter criteria manually
               </button>
             )}
@@ -949,8 +951,7 @@ export default function VacancyApplyPage() {
           <section className="card p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Step 2</p>
-                <h2 className="mt-1 text-xl font-bold text-gray-900">Check the key requirements</h2>
+                   <h2 className="mt-1 text-xl font-bold text-gray-900">Check the key requirements</h2>
                 <p className="mt-1 text-sm text-gray-500">Confirm mandatory qualifications and practical conditions. We’ll compare your experience with the other criteria.</p>
               </div>
               <button type="button" onClick={analyse} disabled={analysing || !hasAnalysableCriteria} className="btn-primary disabled:cursor-not-allowed disabled:opacity-60">
@@ -1050,8 +1051,7 @@ export default function VacancyApplyPage() {
             <section className="card p-6">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Step 3</p>
-                  <h2 className="mt-1 text-xl font-bold text-gray-900">Here's how your experience compares</h2>
+                   <h2 className="mt-1 text-xl font-bold text-gray-900">Here's how your experience compares</h2>
                     <p className="mt-1 text-sm text-gray-600">An evidence-based guide, not an employer’s hiring decision.</p>
                 </div>
                 <span className="rounded-full bg-gray-900 px-4 py-2 text-sm font-bold text-white">{analysis.decision === 'SKIP' ? 'Eligibility concern' : analysis.decision === 'APPLY' ? 'Promising match' : 'Worth reviewing'}</span>
@@ -1165,8 +1165,7 @@ export default function VacancyApplyPage() {
             </div>
             {analysis.decision === 'SKIP' ? (
               <section className="card p-6">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Step 4</p>
-                <h2 className="mt-1 text-xl font-bold text-gray-900">Application builder paused</h2>
+                 <h2 className="mt-1 text-xl font-bold text-gray-900">Application builder paused</h2>
                 <p className="mt-2 max-w-2xl text-sm text-gray-600">
                   JobSleuth has identified a mandatory requirement that is not currently met. Drafting is paused so the app does not encourage an application that is blocked on eligibility.
                 </p>
