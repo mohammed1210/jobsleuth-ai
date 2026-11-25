@@ -62,7 +62,8 @@ def _is_non_requirement_heading(item: dict[str, Any]) -> bool:
         return True
     # Even an otherwise grounded model output can mislabel perks or process
     # copy as Essential. Reject those lines before hybrid reconciliation.
-    if is_non_requirement_text(text) or is_non_requirement_text(str(item.get("source_text", ""))):
+    source = str(item.get("source_text", "")).strip()
+    if is_non_requirement_text(text) or (source and is_non_requirement_text(source)):
         return True
     return bool(
         text.endswith("?")
