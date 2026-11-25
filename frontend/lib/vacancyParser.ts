@@ -41,7 +41,7 @@ export function parseVacancyText(text: string): ParsedVacancy {
       section = 'essential';
       continue;
     }
-    if (line.length <= 90 && ['working pattern', 'working arrangements', 'hours', 'location', 'travel requirements'].some((cue) => lowered.includes(cue))) {
+    if (line.length <= 90 && /^(?:working pattern|working arrangements|hours|location|travel requirements)(?:\s*:\s*.*)?$/.test(lowered)) {
       section = 'practical';
       continue;
     }
