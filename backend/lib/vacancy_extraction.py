@@ -225,6 +225,14 @@ def is_non_requirement_text(value: str) -> bool:
         return True
     if any(lowered.startswith(prefix) for prefix in _NON_REQUIREMENT_PREFIXES):
         return True
+    # "Staff benefits administration experience is essential" is a real
+    # candidate requirement, not an employer benefit. Only exempt explicit
+    # qualification/skill assertions, not generic employer marketing.
+    if re.search(
+        r"\b(?:experience|skills?|knowledge|ability|competenc(?:y|ies)|qualifications?|certification)\s+(?:is|are)\s+(?:essential|required|mandatory|desirable)\b",
+        lowered,
+    ):
+        return False
     if any(pattern.search(text) for pattern in _NON_CANDIDATE_COPY):
         return True
     if "@" in lowered and ("contact" in lowered or "email" in lowered or "problems" in lowered):
@@ -481,6 +489,14 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "dbs clearance",
     )
 
+    # Advert exporters often join a benefit sentence and a genuine criterion
+    # on one line. Split at a new, clearly candidate-oriented sentence so a
+    # preceding "We offer..." cannot swallow its actual requirement.
+    vacancy_text = re.sub(
+        r"(?i)(?<=\.)\s+(?=(?:experience|ability|knowledge|skills?|strong\s+|previous\s+experience|qualified\s+)\b)",
+        "\n",
+        vacancy_text,
+    )
     vacancy_text = re.sub(
         r"(?i)(?<=[.!?])\s+(requirements?\s+of\s+the\s+role\s*:)",
         r"\n\1",
