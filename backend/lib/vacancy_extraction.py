@@ -195,6 +195,23 @@ _NON_REQUIREMENT_PREFIXES = (
 )
 
 
+# Candidate requirements and employer-provided benefits/process information often
+# appear in one unstructured "About you" block. These highly specific patterns
+# avoid marking perks, dates and recruitment contacts as essential criteria.
+# Do not use generic words such as "support", "training" or "transport" here:
+# those can also occur in genuine applicant requirements.
+_NON_CANDIDATE_COPY = (
+    re.compile(r"^(?:applications?\s+(?:close|closing|deadline)|closing\s+date(?:\s+for\s+applications)?|application\s+deadline|interviews?\s*[:–—-]|interview\s+dates?|interviews?\s+(?:will|are|take))\b", re.I),
+    re.compile(r"^(?:if\s+you\s+(?:would\s+like|wish|want)\s+to\s+discuss\s+the\s+role|for\s+(?:further|more)\s+(?:details|information)(?:\s+about\s+the\s+role)?[,:\s]|please\s+contact\b|contact\s+(?:us|hr|recruitment)\b)", re.I),
+    re.compile(r"^(?:we\s+reserve\s+the\s+right\b|early\s+applications?\s+are\s+(?:advised|encouraged)|we\s+may\s+appoint\s+before\s+the\s+closing\s+date\b)", re.I),
+    re.compile(r"^(?:heavily\s+)?(?:subsidised|subsidized|free|discounted|complimentary)\s+(?:(?:staff|employee|on-site|onsite)\s+)?(?:gym\s+membership|childcare|nursery\s+(?:places|fees)|parking|meals?|healthcare|medical\s+insurance|eye\s+care)\b", re.I),
+    re.compile(r"^(?:bike\s*(?:2|to)\s*work\s*scheme|cycle\s+to\s+work\s*scheme|eye\s+care\s+voucher\s+scheme|employee\s+assistance\s+programme\b|staff\s+benefits?\b)", re.I),
+    re.compile(r"^(?:transport\s+links?\s+(?:are|is)\s+(?:excellent|good|convenient)|(?:located|situated)\s+(?:close|near|within)\s+.*\b(?:m1|m25|a1|a41|station)\b)", re.I),
+    re.compile(r"^(?:we|our\s+(?:school|trust|organisation|organization|company))\s+(?:offer|provide)\s+(?:(?:staff|employees?)\s+)?(?:support\s+and\s+training|a\s+range\s+of\s+benefits|subsidised\s+childcare|a\s+supportive\s+environment)\b", re.I),
+    re.compile(r"^(?:to\s+succeed\s+in\s+this\s+role[,:\s]+\s*you\s+should\s*:?|to\s+be\s+successful\s+in\s+this\s+role[,:\s]+\s*you\s+will\s+need\s*:?)$", re.I),
+)
+
+
 def is_non_requirement_text(value: str) -> bool:
     """Return True for advert/process copy that must never become candidate criteria."""
 
@@ -207,6 +224,8 @@ def is_non_requirement_text(value: str) -> bool:
     if re.fullmatch(r"benefits(?:\s+of\s+working(?:\s+(?:for|with)\s+.+|\s+here)?)?", lowered):
         return True
     if any(lowered.startswith(prefix) for prefix in _NON_REQUIREMENT_PREFIXES):
+        return True
+    if any(pattern.search(text) for pattern in _NON_CANDIDATE_COPY):
         return True
     if "@" in lowered and ("contact" in lowered or "email" in lowered or "problems" in lowered):
         return True
