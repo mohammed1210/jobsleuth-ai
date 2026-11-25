@@ -9,7 +9,7 @@ from fastapi import APIRouter, Header
 from pydantic import BaseModel, Field
 
 from lib.vacancy_ai import semantic_extract
-from lib.vacancy_extraction import deterministic_extract, is_non_requirement_text
+from lib.vacancy_extraction import deterministic_extract, is_non_requirement_text, is_pure_non_requirement_source
 from routes.saved_jobs import verify_supabase_user
 
 router = APIRouter(prefix="/vacancy-intelligence", tags=["vacancy_intelligence"])
@@ -63,7 +63,7 @@ def _is_non_requirement_heading(item: dict[str, Any]) -> bool:
     # Even an otherwise grounded model output can mislabel perks or process
     # copy as Essential. Reject those lines before hybrid reconciliation.
     source = str(item.get("source_text", "")).strip()
-    if is_non_requirement_text(text) or (source and is_non_requirement_text(source)):
+    if is_non_requirement_text(text) or (source and is_pure_non_requirement_source(source)):
         return True
     return bool(
         text.endswith("?")
