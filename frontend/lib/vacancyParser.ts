@@ -21,8 +21,9 @@ export function parseVacancyText(text: string): ParsedVacancy {
   const practicalIssues: string[] = [];
   // Unlabelled lines are not necessarily requirements.
   let section: 'essential' | 'desirable' | 'practical' | 'ignore' | null = null;
+  let practicalHeading: 'location' | 'schedule' = 'schedule';
 
-  for (const raw of text.split(/\r?\n/)) {
+  for (const raw of text.replace(/\.\s+(?=(?:Experience|Ability|Knowledge|Strong\s+|Previous experience)\b)/gi, '.\n').split(/\r?\n/)) {
     const line = cleanLine(raw);
     if (!line) continue;
     const lowered = line.toLowerCase().replace(/:$/, '');
@@ -37,20 +38,28 @@ export function parseVacancyText(text: string): ParsedVacancy {
       section = 'desirable';
       continue;
     }
-    if (line.length <= 90 && ['essential criteria', 'essential requirements', 'person specification', 'what you will need'].some((cue) => lowered.includes(cue))) {
+    if (line.length <= 90 && [
+      'essential criteria', 'essential requirements', 'person specification',
+      'what you will need', 'what you need to do the job', 'about you',
+      'requirements', 'requirements of the role', 'role requirements',
+      'what we are looking for', "what we're looking for", "what you'll bring",
+      'your skills and experience',
+    ].some((cue) => lowered === cue || lowered === cue + ':')) {
       section = 'essential';
       continue;
     }
     if (line.length <= 90 && /^(?:working pattern|working arrangements|hours|location|travel requirements)(?:\s*:\s*.*)?$/.test(lowered)) {
       section = 'practical';
+      practicalHeading = /^location/.test(lowered) ? 'location' : 'schedule';
       continue;
     }
 
     if (section === 'ignore') continue;
     if (section === 'practical') {
-      if (/\b(?:hours? per week|days? per week|shift|part[- ]time|full[- ]time|hybrid|weekend|travel|location|work(?:ing)? pattern)\b/i.test(line)) {
-        practicalIssues.push(line);
-      }
+      const explicitPractical = /\b(?:hours? per week|days? per week|shift|part[- ]time|full[- ]time|hybrid|weekend|travel|location|work(?:ing)? pattern)\b/i.test(line);
+      const days = /^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)(?:\s+(?:to|and|[-–])\s+(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday))?/i.test(line);
+      const place = practicalHeading === 'location' && /^[\p{L}\p{N} ,.'\-]{2,100}$/u.test(line);
+      if (explicitPractical || days || place) practicalIssues.push(line);
       continue;
     }
 
@@ -59,7 +68,7 @@ export function parseVacancyText(text: string): ParsedVacancy {
       continue;
     }
 
-    const isBullet = /^\s*(?:[-*•]|\d+[.)])/.test(raw);
+    const isBullet = /^\s*(?:[-*•]|\d+[.)](?!\d))/.test(raw);
     const looksLikeCriterion = ['experience', 'knowledge', 'ability to', 'able to', 'skill', 'required', 'essential', 'desirable', 'qualification'].some((cue) => lowered.includes(cue));
     if (section === null && !looksLikeCriterion) continue;
     if (!isBullet && !looksLikeCriterion) continue;
