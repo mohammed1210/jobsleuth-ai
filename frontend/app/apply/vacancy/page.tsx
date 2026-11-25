@@ -94,6 +94,9 @@ export default function VacancyApplyPage() {
   const [loading, setLoading] = useState(true);
   const [draftStateReady, setDraftStateReady] = useState(false);
   const [showManualDetails, setShowManualDetails] = useState(false);
+  // User-owned disclosure state must not change as soon as the first character
+  // makes hasAnalysableCriteria true; otherwise the active textarea collapses.
+  const [requirementsEditorOpen, setRequirementsEditorOpen] = useState<boolean | null>(null);
   const [requestedJobId, setRequestedJobId] = useState<number | null>(null);
   const [sourceJob, setSourceJob] = useState<Job | null>(null);
   const [sourceJobError, setSourceJobError] = useState<string | null>(null);
@@ -162,6 +165,7 @@ export default function VacancyApplyPage() {
     setAnalysisProfileFingerprintValue(null);
     setAnalysisValidated(false);
     setShowManualDetails(false);
+    setRequirementsEditorOpen(null);
     setSourceJobLoadedIntoDraft(false);
     setLinkedSourceJobId(null);
     setNeedsReExtraction(false);
@@ -994,7 +998,9 @@ export default function VacancyApplyPage() {
               </div>
             )}
 
-            <details className="mt-5 rounded-xl border bg-white" defaultOpen={!hasAnalysableCriteria}>
+            <details className="mt-5 rounded-xl border bg-white"
+              open={requirementsEditorOpen ?? !hasAnalysableCriteria}
+              onToggle={(event) => setRequirementsEditorOpen(event.currentTarget.open)}>
               <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-gray-800">
                 {hasAnalysableCriteria ? 'Review job requirements' : 'Add missing job requirements'}
                 <span className="ml-2 text-xs font-normal text-gray-500">{hasAnalysableCriteria ? 'Optional' : 'Needed to continue'}</span>
