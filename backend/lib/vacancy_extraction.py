@@ -9,7 +9,7 @@ Category = Literal["eligibility", "essential", "desirable", "trainable", "practi
 
 
 def _clean_line(value: str) -> str:
-    return re.sub(r"^\s*(?:[-*•]|\d+[.)])\s*", "", value).strip()
+    return re.sub(r"^\s*(?:[-*•]|\d+[.)](?!\d))\s*", "", value).strip()
 
 
 def _confidence(value: float) -> float:
@@ -195,6 +195,23 @@ _NON_REQUIREMENT_PREFIXES = (
 )
 
 
+# Candidate requirements and employer-provided benefits/process information often
+# appear in one unstructured "About you" block. These highly specific patterns
+# avoid marking perks, dates and recruitment contacts as essential criteria.
+# Do not use generic words such as "support", "training" or "transport" here:
+# those can also occur in genuine applicant requirements.
+_NON_CANDIDATE_COPY = (
+    re.compile(r"^(?:applications?\s+(?:close|closing|deadline)|closing\s+date(?:\s+for\s+applications)?|application\s+deadline|interviews?\s*[:–—-]\s*(?:tbc|to\s+be\s+confirmed|on|from|at)?|interview\s+dates?|interviews?\s+(?:will|are|take))(?=\W|$)", re.I),
+    re.compile(r"^(?:if\s+you\s+(?:would\s+like|wish|want)\s+to\s+discuss\s+the\s+role|for\s+(?:further|more)\s+(?:details|information)(?:\s+about\s+the\s+role)?[,:\s]|please\s+contact\b|contact\s+(?:us|hr|recruitment)\b)", re.I),
+    re.compile(r"^(?:we\s+reserve\s+the\s+right\b|early\s+applications?\s+are\s+(?:advised|encouraged)|we\s+may\s+appoint\s+before\s+the\s+closing\s+date\b)", re.I),
+    re.compile(r"^(?:heavily\s+)?(?:subsidised|subsidized|free|discounted|complimentary)\s+(?:(?:staff|employee|on-site|onsite)\s+)?(?:gym\s+membership|childcare|nursery\s+(?:places|fees)|parking|meals?|healthcare|medical\s+insurance|eye\s+care)\b", re.I),
+    re.compile(r"^(?:bike\s*(?:2|to)\s*work\s*scheme|cycle\s+to\s+work\s*scheme|eye\s+care\s+voucher\s+scheme|employee\s+assistance\s+programme\b|staff\s+benefits?\b)", re.I),
+    re.compile(r"^(?:transport\s+links?\s+(?:are|is)\s+(?:excellent|good|convenient)|(?:located|situated)\s+(?:close|near|within)\s+.*\b(?:m1|m25|a1|a41|station)\b)", re.I),
+    re.compile(r"^(?:we|our\s+(?:school|trust|organisation|organization|company))\s+(?:offer|provide)\s+(?:(?:staff|employees?)\s+)?(?:support\s+and\s+training|a\s+range\s+of\s+benefits|subsidised\s+childcare|a\s+supportive\s+environment)\b", re.I),
+    re.compile(r"^(?:to\s+succeed\s+in\s+this\s+role[,:\s]+\s*you\s+should\s*:?|to\s+be\s+successful\s+in\s+this\s+role[,:\s]+\s*you\s+will\s+need\s*:?)$", re.I),
+)
+
+
 def is_non_requirement_text(value: str) -> bool:
     """Return True for advert/process copy that must never become candidate criteria."""
 
@@ -208,9 +225,31 @@ def is_non_requirement_text(value: str) -> bool:
         return True
     if any(lowered.startswith(prefix) for prefix in _NON_REQUIREMENT_PREFIXES):
         return True
+    # "Staff benefits administration experience is essential" is a real
+    # candidate requirement, not an employer benefit. Only exempt explicit
+    # qualification/skill assertions, not generic employer marketing.
+    if re.search(
+        r"\b(?:experience|skills?|knowledge|ability|competenc(?:y|ies)|qualifications?|certification)\s+(?:is|are)\s+(?:essential|required|mandatory|desirable)\b",
+        lowered,
+    ):
+        return False
+    if any(pattern.search(text) for pattern in _NON_CANDIDATE_COPY):
+        return True
     if "@" in lowered and ("contact" in lowered or "email" in lowered or "problems" in lowered):
         return True
     return False
+
+
+def is_pure_non_requirement_source(source: str) -> bool:
+    """Exclude benefit-only excerpts without dropping real criteria in mixed spans."""
+    if not is_non_requirement_text(source):
+        return False
+    clauses = re.split(r"(?<=[.!?])\s+", source.strip())
+    return not any(
+        re.search(r"\b(?:experience|ability|skills?|knowledge|qualification|certification|must|essential|required)\b", part, re.I)
+        and not is_non_requirement_text(part)
+        for part in clauses
+    )
 
 
 def _heading_section(line: str, raw: str, is_bullet: bool) -> Category | Literal["ignore"] | None:
@@ -462,6 +501,14 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "dbs clearance",
     )
 
+    # Advert exporters often join a benefit sentence and a genuine criterion
+    # on one line. Split at a new, clearly candidate-oriented sentence so a
+    # preceding "We offer..." cannot swallow its actual requirement.
+    vacancy_text = re.sub(
+        r"(?i)(?<=\.)\s+(?=(?:experience|ability|knowledge|skills?|strong\s+|previous\s+experience|qualified\s+)\b)",
+        "\n",
+        vacancy_text,
+    )
     vacancy_text = re.sub(
         r"(?i)(?<=[.!?])\s+(requirements?\s+of\s+the\s+role\s*:)",
         r"\n\1",
