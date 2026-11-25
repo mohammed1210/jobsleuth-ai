@@ -8,15 +8,30 @@ export type ParsedVacancy = {
 
 const cleanLine = (value: string) => value.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim();
 
+const employerOnlyLine = (text: string): boolean => [
+  /^(?:closing date(?: for applications)?|application deadline|applications? close|interviews?\s*[:–—-]|we reserve the right)\b/i,
+  /^(?:free gym membership|heavily subsidised childcare|employee assistance programme|eye care voucher scheme|bike\s*(?:2|to)\s*work scheme|cycle to work scheme)\b/i,
+  /^(?:transport links? (?:are|is) excellent|if you would like to discuss the role|please contact\b|we offer support and training)\b/i,
+].some((pattern) => pattern.test(text));
+
+const ignoredSection = /^(?:benefits?|employee benefits|what we offer|what we can offer|our benefits|perks(?: and benefits)?|why join us|how to apply|application process|closing date|interviews?|contact(?: us)?)\s*:?\s*$/i;
+
 export function parseVacancyText(text: string): ParsedVacancy {
   const requirements: Requirement[] = [];
   const practicalIssues: string[] = [];
-  let section: 'essential' | 'desirable' | 'practical' = 'essential';
+  // Unlabelled lines are not necessarily requirements.
+  let section: 'essential' | 'desirable' | 'practical' | 'ignore' | null = null;
 
   for (const raw of text.split(/\r?\n/)) {
     const line = cleanLine(raw);
     if (!line) continue;
     const lowered = line.toLowerCase().replace(/:$/, '');
+
+    if (ignoredSection.test(line)) {
+      section = 'ignore';
+      continue;
+    }
+    if (employerOnlyLine(line)) continue;
 
     if (line.length <= 90 && (lowered.includes('desirable') || lowered.includes('nice to have'))) {
       section = 'desirable';
@@ -31,8 +46,11 @@ export function parseVacancyText(text: string): ParsedVacancy {
       continue;
     }
 
+    if (section === 'ignore') continue;
     if (section === 'practical') {
-      practicalIssues.push(line);
+      if (/\b(?:hours? per week|days? per week|shift|part[- ]time|full[- ]time|hybrid|weekend|travel|location|work(?:ing)? pattern)\b/i.test(line)) {
+        practicalIssues.push(line);
+      }
       continue;
     }
 
@@ -43,6 +61,7 @@ export function parseVacancyText(text: string): ParsedVacancy {
 
     const isBullet = /^\s*(?:[-*•]|\d+[.)])/.test(raw);
     const looksLikeCriterion = ['experience', 'knowledge', 'ability to', 'able to', 'skill', 'required', 'essential', 'desirable', 'qualification'].some((cue) => lowered.includes(cue));
+    if (section === null && !looksLikeCriterion) continue;
     if (!isBullet && !looksLikeCriterion) continue;
     if (line.length > 350) continue;
 
