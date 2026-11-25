@@ -638,3 +638,10 @@ Essential requirements
 """
     items = deterministic_extract(advert)
     assert len([item for item in items if item["category"] == "essential"]) == 3
+
+
+def test_decimal_working_hours_are_preserved_as_practical_metadata():
+    advert = "Working pattern:\n12.5 hours per week\nEssential criteria:\n- Reliable and punctual."
+    items = deterministic_extract(advert)
+    assert any(item["category"] == "practical" and item["text"] == "12.5 hours per week" for item in items)
+    assert any(item["category"] == "essential" and "Reliable and punctual" in item["text"] for item in items)
