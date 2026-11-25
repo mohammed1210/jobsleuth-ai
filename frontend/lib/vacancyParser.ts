@@ -6,7 +6,7 @@ export type ParsedVacancy = {
   practicalIssues: string[];
 };
 
-const cleanLine = (value: string) => value.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim();
+const cleanLine = (value: string) => value.replace(/^\s*(?:[-*•]|\d+[.)](?!\d))\s*/, '').trim();
 
 const employerOnlyLine = (text: string): boolean => [
   /^(?:closing date(?: for applications)?|application deadline|applications? close|interviews?\s*[:–—-]|we reserve the right)\b/i,
