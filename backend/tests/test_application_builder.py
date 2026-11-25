@@ -294,3 +294,19 @@ def test_fallback_warning_list_is_bounded_and_source_benefits_excluded(monkeypat
     assert len(data["warnings"]) <= 8
     assert any("additional essential requirements" in warning for warning in data["warnings"])
     assert len(data["coverage"]) == 16
+
+
+def test_no_essential_section_still_allows_strongly_supported_desirable_fallback(monkeypatch):
+    monkeypatch.setattr("routes.application_builder.semantic_application_draft", lambda *a, **k: (None, "no_api_key"))
+    card = evidence_card()
+    data = client.post("/application-builder", headers=HEADERS, json={
+        "job": {"title": "Operations Analyst"},
+        "application_type": "cover_letter",
+        "requirements": [
+            {"text": "Experience comparing operational risks", "category": "desirable", "match_strength": "strong", "evidence_ids": [card.id]},
+        ],
+        "evidence_cards": [card.model_dump()],
+    }).json()
+    assert data["can_generate"] is True
+    assert data["provider"] == "deterministic-grounded-cover-letter-v1"
+    assert "operational risks" in data["draft"]
