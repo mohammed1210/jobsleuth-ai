@@ -9,7 +9,7 @@ Category = Literal["eligibility", "essential", "desirable", "trainable", "practi
 
 
 def _clean_line(value: str) -> str:
-    return re.sub(r"^\s*(?:[-*•]|\d+[.)])\s*", "", value).strip()
+    return re.sub(r"^\s*(?:[-*•]|\d+[.)](?!\d))\s*", "", value).strip()
 
 
 def _confidence(value: float) -> float:
