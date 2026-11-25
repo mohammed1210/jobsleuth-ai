@@ -45,3 +45,30 @@ test('real experience and support skills are retained when explicitly advertised
 - Strong communication skills`;
   assert.equal(parseVacancyText(advert).requirements.length, 3);
 });
+
+test('local fallback resumes after Benefits with a new About you heading', () => {
+  const advert = `Benefits
+- Free gym membership
+About you
+- Experience supporting vulnerable children
+- Ability to arrange transport for pupils`;
+  const result = parseVacancyText(advert);
+  assert.equal(result.requirements.length, 2);
+  assert.deepEqual(result.requirements.map((item) => item.text), [
+    'Experience supporting vulnerable children',
+    'Ability to arrange transport for pupils',
+  ]);
+});
+
+test('local fallback retains metadata values under their headings', () => {
+  const advert = `Location
+London
+Working pattern
+Monday to Friday
+12.5 hours per week
+Essential criteria
+- Strong communication skills`;
+  const result = parseVacancyText(advert);
+  assert.deepEqual(result.practicalIssues, ['London', 'Monday to Friday', '12.5 hours per week']);
+  assert.equal(result.requirements.length, 1);
+});
