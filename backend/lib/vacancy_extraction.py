@@ -201,7 +201,7 @@ _NON_REQUIREMENT_PREFIXES = (
 # Do not use generic words such as "support", "training" or "transport" here:
 # those can also occur in genuine applicant requirements.
 _NON_CANDIDATE_COPY = (
-    re.compile(r"^(?:applications?\s+(?:close|closing|deadline)|closing\s+date(?:\s+for\s+applications)?|application\s+deadline|interviews?\s*[:–—-]|interview\s+dates?|interviews?\s+(?:will|are|take))\b", re.I),
+    re.compile(r"^(?:applications?\s+(?:close|closing|deadline)|closing\s+date(?:\s+for\s+applications)?|application\s+deadline|interviews?\s*[:–—-]\s*(?:tbc|to\s+be\s+confirmed|on|from|at)?|interview\s+dates?|interviews?\s+(?:will|are|take))(?=\W|$)", re.I),
     re.compile(r"^(?:if\s+you\s+(?:would\s+like|wish|want)\s+to\s+discuss\s+the\s+role|for\s+(?:further|more)\s+(?:details|information)(?:\s+about\s+the\s+role)?[,:\s]|please\s+contact\b|contact\s+(?:us|hr|recruitment)\b)", re.I),
     re.compile(r"^(?:we\s+reserve\s+the\s+right\b|early\s+applications?\s+are\s+(?:advised|encouraged)|we\s+may\s+appoint\s+before\s+the\s+closing\s+date\b)", re.I),
     re.compile(r"^(?:heavily\s+)?(?:subsidised|subsidized|free|discounted|complimentary)\s+(?:(?:staff|employee|on-site|onsite)\s+)?(?:gym\s+membership|childcare|nursery\s+(?:places|fees)|parking|meals?|healthcare|medical\s+insurance|eye\s+care)\b", re.I),
