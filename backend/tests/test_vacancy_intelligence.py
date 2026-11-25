@@ -560,3 +560,81 @@ def test_route_supplements_under_extracted_semantic_result(monkeypatch):
     assert data["provider"] == "hybrid-grounded-v4"
     assert data["summary"]["items"] >= 7
     assert len([item for item in data["requirements"] if item["category"] == "trainable"]) == 2
+
+
+def test_school_receptionist_benefits_and_application_process_never_become_essentials():
+    advert = """
+Afternoon Receptionist at Bushey Meads School
+Essential criteria:
+- Excellent organisational skills
+- Outstanding communication skills with the ability to liaise with staff, students and visitors
+- Administration experience
+- Flexibility and a 'can-do' approach to meet changing needs and priorities
+
+We offer support and training based on individual needs
+Transport links are excellent with the M1, M25, A1 and A41 being close by
+Heavily subsidised childcare at our Little Gems Nursery
+Free gym membership to all employees across the Trust
+Employee Assistance Programme for support and guidance on health, legal and personal matters
+Eye Care Voucher Scheme
+Bike 2 work scheme
+If you would like to discuss the role, please contact the HR on 020 8955 8833.
+Closing Date for applications: Tuesday 1st December 2026 (9am)
+Interviews: TBC
+We reserve the right to make an appointment before the closing date, so early applications are advised
+"""
+    items = deterministic_extract(advert)
+    legitimate = [item["text"] for item in items if item["category"] == "essential"]
+    assert len(legitimate) == 4, legitimate
+    assert any("Administration experience" in text for text in legitimate)
+    assert all("gym membership" not in text.lower() for text in legitimate)
+    assert all("transport links" not in text.lower() for text in legitimate)
+    assert all("interviews" not in text.lower() for text in legitimate)
+
+    fake_semantic = [
+        {
+            "text": text, "source_text": text, "category": "essential",
+            "confidence": 0.96, "explicit_blocker": False,
+        }
+        for text in [
+            "Free gym membership to all employees across the Trust",
+            "Heavily subsidised childcare at our Little Gems Nursery",
+            "Closing Date for applications: Tuesday 1st December 2026 (9am)",
+            "Eye Care Voucher Scheme",
+            "Interviews: TBC",
+            "Employee Assistance Programme for support and guidance on health, legal and personal matters",
+        ]
+    ]
+    for item in fake_semantic:
+        assert _validate_item(item, advert) is None
+    merged, _ = _reconcile_items(fake_semantic, items)
+    assert {item["text"] for item in merged if item["category"] == "essential"} == set(legitimate)
+
+
+def test_non_candidate_copy_inside_labelled_essential_section_is_not_a_requirement():
+    advert = """
+Essential requirements
+- Experience working as a school receptionist
+- Strong telephone communication skills
+- Free gym membership for employees
+- Eye Care Voucher Scheme
+- Interviews: TBC
+- Closing Date for applications: Tuesday 1st December 2026 (9am)
+- We reserve the right to make an appointment before the closing date
+"""
+    items = deterministic_extract(advert)
+    assert [item["text"] for item in items if item["category"] == "essential"] == [
+        "Experience working as a school receptionist",
+        "Strong telephone communication skills",
+    ]
+
+
+def test_candidate_support_or_transport_requirements_survive_benefit_filter():
+    advert = """
+Essential requirements
+- Experience supporting vulnerable children
+- Ability to arrange transport to schools
+- Knowledge of employee assistance and support policies
+"""
+    items = deterministic_extract(advert)
+    assert len([item for item in items if item["category"] == "essential"]) == 3
