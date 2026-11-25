@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from lib.settings import settings
@@ -36,8 +37,18 @@ def _validate_item(raw: Any, vacancy_text: str) -> dict[str, Any] | None:
     source = str(raw.get("source_text", "")).strip()
     if category not in _ALLOWED_CATEGORIES or not text or not _source_is_grounded(source, vacancy_text):
         return None
-    if is_non_requirement_text(text) or is_non_requirement_text(source):
+    if is_non_requirement_text(text):
         return None
+    # A quoted source span can contain both an employer perk and a genuine
+    # criterion. Reject a *pure* non-requirement, but do not veto a supported
+    # criterion just because the source starts with "We offer...".
+    if is_non_requirement_text(source):
+        clauses = [part.strip() for part in re.split(r"(?<=[.!?])\s+", source)]
+        candidate_cues = re.compile(
+            r"\b(?:experience|ability|skills?|knowledge|qualification|certification|must|essential|required)\b", re.I
+        )
+        if not any(candidate_cues.search(part) and not is_non_requirement_text(part) for part in clauses):
+            return None
     try:
         confidence = round(max(0.0, min(1.0, float(raw.get("confidence", 0.7)))), 2)
     except (TypeError, ValueError):
