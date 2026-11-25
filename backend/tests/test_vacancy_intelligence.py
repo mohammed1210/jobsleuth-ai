@@ -645,3 +645,49 @@ def test_decimal_working_hours_are_preserved_as_practical_metadata():
     items = deterministic_extract(advert)
     assert any(item["category"] == "practical" and item["text"] == "12.5 hours per week" for item in items)
     assert any(item["category"] == "essential" and "Reliable and punctual" in item["text"] for item in items)
+
+
+def test_benefits_administration_and_employee_support_experience_are_real_requirements():
+    advert = """
+Essential criteria:
+- Staff benefits administration experience is essential
+- Employee Assistance Programme counselling experience is required
+- Free gym membership to all employees
+"""
+    items = deterministic_extract(advert)
+    essentials = [item["text"] for item in items if item["category"] == "essential"]
+    assert "Staff benefits administration experience is essential" in essentials
+    assert "Employee Assistance Programme counselling experience is required" in essentials
+    assert not any("Free gym membership" in item for item in essentials)
+    for item_text in essentials:
+        assert _validate_item({
+            "category": "essential", "text": item_text, "source_text": item_text,
+            "confidence": .96, "explicit_blocker": False,
+        }, advert) is not None
+
+
+def test_mixed_employer_offer_and_real_criterion_are_separated_and_grounded():
+    advert = "Essential criteria:\nWe offer support and training. Experience supporting vulnerable children is essential."
+    real_item = "Experience supporting vulnerable children is essential."
+    items = deterministic_extract(advert)
+    assert any(item["text"] == real_item for item in items), items
+    semantic = _validate_item({
+        "text": real_item,
+        "source_text": "We offer support and training. Experience supporting vulnerable children is essential.",
+        "category": "essential",
+        "confidence": .95,
+        "explicit_blocker": False,
+    }, advert)
+    assert semantic is not None
+    merged, _ = _reconcile_items([semantic], items)
+    assert any(item["text"] == real_item for item in merged)
+    assert not any("We offer support" in item["text"] for item in merged)
+
+
+def test_pure_benefit_mixed_source_remains_filtered():
+    advert = "We offer support and training. Free gym membership to all employees."
+    item = {
+        "category": "essential", "text": "Free gym membership to all employees.",
+        "source_text": advert, "confidence": .9, "explicit_blocker": False,
+    }
+    assert _validate_item(item, advert) is None
