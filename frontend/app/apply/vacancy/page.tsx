@@ -994,7 +994,7 @@ export default function VacancyApplyPage() {
               </div>
             )}
 
-            <details className="mt-5 rounded-xl border bg-white" open={!hasAnalysableCriteria || undefined}>
+            <details className="mt-5 rounded-xl border bg-white" defaultOpen={!hasAnalysableCriteria}>
               <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-gray-800">
                 {hasAnalysableCriteria ? 'Review job requirements' : 'Add missing job requirements'}
                 <span className="ml-2 text-xs font-normal text-gray-500">{hasAnalysableCriteria ? 'Optional' : 'Needed to continue'}</span>
