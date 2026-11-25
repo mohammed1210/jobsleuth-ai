@@ -142,13 +142,14 @@ async def build_application(
     # a full-length freight narrative for an unrelated receptionist vacancy
     # is misleading even when the applicant clicked "use current evidence".
     # A grounded semantic draft can still proceed when it passes validation.
-    strong_essential_evidence = any(
-        item.category == "essential"
-        and item.match_strength == "strong"
+    has_essential_requirements = any(item.category == "essential" for item in requirements)
+    strong_role_evidence = any(
+        item.match_strength == "strong"
+        and (item.category == "essential" or not has_essential_requirements)
         and any(evidence_id in cards_by_id for evidence_id in item.evidence_ids)
         for item in requirements
     )
-    if fallback_used and not strong_essential_evidence:
+    if fallback_used and not strong_role_evidence:
         return {
             "ok": True,
             "can_generate": False,
