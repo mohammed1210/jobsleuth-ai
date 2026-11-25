@@ -240,6 +240,18 @@ def is_non_requirement_text(value: str) -> bool:
     return False
 
 
+def is_pure_non_requirement_source(source: str) -> bool:
+    """Exclude benefit-only excerpts without dropping real criteria in mixed spans."""
+    if not is_non_requirement_text(source):
+        return False
+    clauses = re.split(r"(?<=[.!?])\s+", source.strip())
+    return not any(
+        re.search(r"\b(?:experience|ability|skills?|knowledge|qualification|certification|must|essential|required)\b", part, re.I)
+        and not is_non_requirement_text(part)
+        for part in clauses
+    )
+
+
 def _heading_section(line: str, raw: str, is_bullet: bool) -> Category | Literal["ignore"] | None:
     if is_bullet or len(line) > 120:
         return None
