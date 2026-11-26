@@ -33,6 +33,31 @@ def _specialist_administration(requirement: str) -> bool:
     )
 
 
+def _deadline_delivered(outcome: str) -> bool:
+    """Require an affirmative result, not simply a reference to a deadline."""
+    if (_match(r"\b(?:missed|late|overdue|failed)\b", outcome)
+            and _match(r"\b(?:deadlines?|midday|on\s+time)\b", outcome)):
+        return False
+    return _match(
+        r"\b(?:met|achieved|completed|delivered|submitted|updated|prepared|"
+        r"finished|provided|shared|available)\b.{0,100}"
+        r"\b(?:deadlines?|midday|on\s+time|before\s+midday)\b",
+        outcome,
+    ) or _match(r"\b(?:by|before)\s+(?:midday|the\s+deadline)\b", outcome)
+
+
+def _handles_telephone_enquiries(actions: str) -> bool:
+    return (
+        _candidate_verb(actions, r"answer\w*|handl\w*|respond\w*|manag\w*")
+        and _match(r"\b(?:telephone|phone|calls?|enquir\w*|inbound|incoming)\b", actions)
+    )
+
+
+def has_telephone_requirement_gap(requirement: str, card: Any) -> bool:
+    return (_match(r"\b(?:telephone|phone)\b", requirement)
+            and not _handles_telephone_enquiries(_action_text(card)))
+
+
 def _action_text(card: Any) -> str:
     actions = [
         str(item).strip()
@@ -57,11 +82,7 @@ def has_compound_accuracy_deadline_gap(requirement: str, card: Any) -> bool:
     deadline_action = _candidate_verb(
         actions, r"prioriti[sz]\w*|updat\w*|deliver\w*|report\w*|plan\w*|complet\w*|met|meet"
     )
-    deadline_context = _match(
-        r"\b(?:deadlines?|midday|time.sensitive|on\s+time|before\s+midday)\b",
-        f"{actions} {outcome}",
-    )
-    return not (deadline_action and deadline_context)
+    return not (deadline_action and _deadline_delivered(outcome))
 
 def transferable_action_support(requirement: str, card: Any) -> tuple[float, str] | None:
     """Return a cautious score floor and explanation for concrete actions.
@@ -103,11 +124,20 @@ def transferable_action_support(requirement: str, card: Any) -> tuple[float, str
                     and _match(r"\b(?:record|document|discrepanc\w*|error|audit|detail|data|information)\w*\b", actions))
         deadline_requested = _match(r"\b(?:deadlines?|time\s+pressure|timel\w*)\b", requirement)
         deadline = (_candidate_verb(actions, r"prioriti[sz]\w*|updat\w*|deliver\w*|report\w*|plan\w*|complet\w*|met|meet")
-                    and _match(r"\b(?:deadline|midday|urgent|time.sensitive|on\s+time|before\s+midday)\b", combined))
+                    and _deadline_delivered(outcome))
         if accurate and (deadline or not deadline_requested):
-            return 75.0, "checking records carefully and meeting time-sensitive work"
+            return 75.0, ("checking records carefully and delivering work on time"
+                          if deadline else "checking and correcting records carefully")
         if accurate or (deadline_requested and deadline):
             return 60.0, "one documented aspect of accuracy and deadline management"
+
+    if _match(r"\b(?:telephone|phone)\b", requirement):
+        if _handles_telephone_enquiries(actions):
+            return 75.0, "handling telephone enquiries directly"
+        if (_match(r"\b(?:phone|telephone|calls?)\b", actions)
+                and _candidate_verb(actions, r"contact\w*|maintain\w*|call\w*|spoke|answer\w*|handl\w*")):
+            return 56.0, "making telephone contact without confirmed reception call handling"
+        return None
 
     if _match(r"\b(?:communicat\w*|liais\w*|interpersonal)\b", requirement):
         if (_candidate_verb(actions, r"explain\w*|communicat\w*|liais\w*|inform\w*|brief\w*|email\w*|contact\w*|spoke|speak")
@@ -117,11 +147,6 @@ def transferable_action_support(requirement: str, card: Any) -> tuple[float, str
             specialised_audience = _match(r"\b(?:students?\s+and\s+visitors?|staff,\s*students?\s+and\s+visitors?)\b", requirement)
             has_audience = _match(r"\b(?:students?|visitors?)\b", actions)
             return (65.0 if specialised_audience and not has_audience else 75.0), "adapting communication and liaising with other people"
-
-    if _match(r"\b(?:telephone|phone)\b", requirement):
-        if (_match(r"\b(?:phone|telephone|calls?)\b", actions)
-                and _candidate_verb(actions, r"contact\w*|maintain\w*|call\w*|spoke|answer\w*|handl\w*")):
-            return 56.0, "making real telephone contact; front-desk call handling is not yet established"
 
     if (_match(r"\bindependen\w*\b", requirement)
             and _match(r"\bteam\b", requirement)):
