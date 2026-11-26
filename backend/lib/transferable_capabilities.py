@@ -28,6 +28,24 @@ def _action_text(card: Any) -> str:
     )
 
 
+
+def has_compound_accuracy_deadline_gap(requirement: str, card: Any) -> bool:
+    """An accurate audit does not prove deadline delivery on its own."""
+    if not (_match(r"\b(?:attention\s+to\s+detail|accurac\w*|accurat\w*)\b", requirement)
+            and _match(r"\b(?:deadline|timel\w*)\b", requirement)):
+        return False
+    actions = _action_text(card)
+    outcome = str(getattr(card, "outcome", "") or "")
+    deadline_action = _match(
+        r"\b(?:prioriti[sz]\w*|updat\w*|deliver\w*|report\w*|plan\w*|complet\w*|met\b|meet\b)\b",
+        actions,
+    )
+    deadline_context = _match(
+        r"\b(?:deadline|midday|time.sensitive|on\s+time|before\s+midday)\b",
+        f"{actions} {outcome}",
+    )
+    return not (deadline_action and deadline_context)
+
 def transferable_action_support(requirement: str, card: Any) -> tuple[float, str] | None:
     """Return a cautious score floor and explanation for concrete actions.
 
