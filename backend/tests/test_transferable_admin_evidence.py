@@ -258,3 +258,54 @@ def test_compound_accuracy_and_deadline_may_be_strong_when_both_are_proved():
     assert deterministic_match(
         "Attention to detail and ability to work to deadlines", card
     )["strength"] == "strong"
+
+
+def test_handling_enquiries_by_email_does_not_prove_telephone_manner():
+    card = Evidence(
+        id="email-enquiries", title="Written enquiry handling",
+        situation="I supported an office inbox.",
+        task="Respond to customer queries in writing.",
+        actions=["I handled customer enquiries by email."],
+        outcome="The customers received their email replies.",
+    )
+    match = deterministic_match("Confident telephone manner", card)
+    assert match["strength"] != "strong"
+    assert any("telephone" in gap for gap in match["gaps"])
+
+
+def test_actual_handling_of_telephone_calls_can_be_supported():
+    card = Evidence(
+        id="phone-enquiries", title="Handling telephone enquiries",
+        situation="I was responsible for a customer service phone line.",
+        task="Answer callers' questions accurately and politely.",
+        actions=["I answered incoming telephone calls and handled customers' questions."],
+        outcome="Callers received the information they needed.",
+    )
+    match = deterministic_match("Confident telephone manner", card)
+    assert match["strength"] == "strong"
+
+
+def test_submission_after_deadline_is_not_treated_as_timely():
+    card = Evidence(
+        id="too-late", title="Late report correction",
+        situation="A staff report contained discrepancies and was due by midday.",
+        task="Check the records and update the report.",
+        actions=[
+            "I reviewed records and corrected errors.",
+            "I updated the reporting file.",
+        ],
+        outcome="The accurate report was submitted after the deadline.",
+    )
+    match = deterministic_match("Attention to detail and ability to work to deadlines", card)
+    assert match["strength"] != "strong"
+    assert any("deadline" in gap for gap in match["gaps"])
+
+
+def test_office_work_does_not_prove_business_admin_credential():
+    for criterion in (
+        "Level 3 qualification in Business Administration",
+        "Recognised Business Administration diploma",
+        "Business Administration certification",
+    ):
+        strength = deterministic_match(criterion, admin_card())["strength"]
+        assert strength != "strong", (criterion, strength)
