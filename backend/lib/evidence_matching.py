@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from lib.transferable_capabilities import has_compound_accuracy_deadline_gap, transferable_action_support
+from lib.transferable_capabilities import (has_compound_accuracy_deadline_gap, has_telephone_requirement_gap, transferable_action_support)
 
 _STOPWORDS = {
     "able", "about", "across", "also", "and", "are", "been", "being", "can", "demonstrate",
@@ -267,6 +267,9 @@ def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
     accuracy_deadline_gap = has_compound_accuracy_deadline_gap(requirement, card)
     if accuracy_deadline_gap:
         score = min(score, 69.0)
+    telephone_gap = has_telephone_requirement_gap(requirement, card)
+    if telephone_gap:
+        score = min(score, 69.0)
 
     strength = _strength(score)
     has_actions = bool(getattr(card, "actions", []) and any(str(value).strip() for value in getattr(card, "actions", []) or []))
@@ -301,7 +304,9 @@ def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
     if school_setting_gap:
         gaps.append("The evidence does not establish experience working in the required primary or secondary school setting.")
     if accuracy_deadline_gap:
-        gaps.append("This example demonstrates record accuracy, but not delivering work to a deadline.")
+        gaps.append("This example does not demonstrate accurate work delivered to a deadline.")
+    if telephone_gap:
+        gaps.append("This example does not demonstrate handling telephone enquiries.")
     if signals["concepts"] == [] and strength != "missing" and not (transferable and score >= transferable[0]):
         gaps.append("The evidence does not clearly demonstrate the underlying capability, only related wording.")
     if strength == "missing":
