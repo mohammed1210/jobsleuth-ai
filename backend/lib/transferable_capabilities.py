@@ -15,6 +15,24 @@ def _match(pattern: str, value: str) -> bool:
     return bool(re.search(pattern, value, flags=re.IGNORECASE))
 
 
+def _candidate_verb(actions: str, verb_pattern: str) -> bool:
+    """Qualifying verb must belong to the candidate, not a person observed."""
+    return _match(
+        rf"\bI\s+(?:(?:personally|regularly|then|also|directly|quickly|promptly|carefully)\s+){{0,2}}(?:{verb_pattern})\b",
+        actions,
+    )
+
+
+def _specialist_administration(requirement: str) -> bool:
+    """An office-admin example cannot verify technical system administration."""
+    return _match(
+        r"\b(?:database|linux|windows\s+server|network|server|cloud|"
+        r"systems?|infrastructure|IT|sql|salesforce|kubernetes)\b"
+        r".{0,48}\badministrat\w*\b",
+        requirement,
+    )
+
+
 def _action_text(card: Any) -> str:
     actions = [
         str(item).strip()
@@ -36,9 +54,8 @@ def has_compound_accuracy_deadline_gap(requirement: str, card: Any) -> bool:
         return False
     actions = _action_text(card)
     outcome = str(getattr(card, "outcome", "") or "")
-    deadline_action = _match(
-        r"\b(?:prioriti[sz]\w*|updat\w*|deliver\w*|report\w*|plan\w*|complet\w*|met\b|meet\b)\b",
-        actions,
+    deadline_action = _candidate_verb(
+        actions, r"prioriti[sz]\w*|updat\w*|deliver\w*|report\w*|plan\w*|complet\w*|met|meet"
     )
     deadline_context = _match(
         r"\b(?:deadlines?|midday|time.sensitive|on\s+time|before\s+midday)\b",
@@ -66,25 +83,26 @@ def transferable_action_support(requirement: str, card: Any) -> tuple[float, str
     combined = f"{actions} {outcome}"
 
     if _match(r"\b(?:organi[sz]\w*|planning\s+skills|time\s+management)\b", requirement):
-        if (_match(r"\b(?:prioriti[sz]\w*|allocat\w*|plan\w*|schedul\w*|organi[sz]\w*|roster\w*|coordinat\w*)\b", actions)
+        if (_candidate_verb(actions, r"prioriti[sz]\w*|allocat\w*|plan\w*|schedul\w*|organi[sz]\w*|roster\w*|coordinat\w*")
                 and _match(r"\b(?:task|staff|roster|team|workload|priority|priorities|report|deadline|meeting|training)\b", actions)):
             return 75.0, "organising and prioritising real work"
 
-    if _match(r"\b(?:administrat\w*|office\s+support|clerical)\b", requirement):
-        if (_match(r"\b(?:used|maintain\w*|prepar\w*|produc\w*|compil\w*|updat\w*|record\w*|audit\w*|check\w*|review\w*|arrang\w*|manag\w*)\b", actions)
+    if (_match(r"\b(?:administrat\w*|office\s+support|clerical)\b", requirement)
+            and not _specialist_administration(requirement)):
+        if (_candidate_verb(actions, r"used|maintain\w*|prepar\w*|produc\w*|compil\w*|updat\w*|record\w*|audit\w*|check\w*|review\w*|arrang\w*|manag\w*")
                 and _match(r"\b(?:spreadsheet|roster|staffing\s+figure|record|report|audit|sickness|HR|meeting|Outlook|email|document|training)\w*\b", actions)):
             return 75.0, "carrying out administrative record-keeping and reporting tasks"
 
     if _match(r"\b(?:flexib\w*|can.do\s+approach|changing\s+(?:needs|priorities)|adaptab\w*)\b", requirement):
-        if (_match(r"\b(?:adapt\w*|alternat\w*|resum\w*|switch\w*|reorgan\w*|adjust\w*|re-prioriti[sz]\w*|return\w*)\b", actions)
+        if (_candidate_verb(actions, r"adapt\w*|alternat\w*|resum\w*|switch\w*|reorgan\w*|adjust\w*|re-prioriti[sz]\w*|return\w*")
                 and _match(r"\b(?:interrupt\w*|operational|workload|changing|urgent|priorit\w*|location|task|duties|demand)\b", actions)):
             return 75.0, "adapting work as priorities and demands changed"
 
     if _match(r"\b(?:attention\s+to\s+detail|accurac\w*|accurat\w*)\b", requirement):
-        accurate = (_match(r"\b(?:audit\w*|cross.check\w*|verif\w*|review\w*|correct\w*|identif\w*|reconcil\w*)\b", actions)
+        accurate = (_candidate_verb(actions, r"audit\w*|cross.check\w*|verif\w*|review\w*|correct\w*|identif\w*|reconcil\w*")
                     and _match(r"\b(?:record|document|discrepanc\w*|error|audit|detail|data|information)\w*\b", actions))
         deadline_requested = _match(r"\b(?:deadlines?|time\s+pressure|timel\w*)\b", requirement)
-        deadline = (_match(r"\b(?:prioriti[sz]\w*|updat\w*|deliver\w*|report\w*|plan\w*|complet\w*|met\b|meet\b)\b", actions)
+        deadline = (_candidate_verb(actions, r"prioriti[sz]\w*|updat\w*|deliver\w*|report\w*|plan\w*|complet\w*|met|meet")
                     and _match(r"\b(?:deadline|midday|urgent|time.sensitive|on\s+time|before\s+midday)\b", combined))
         if accurate and (deadline or not deadline_requested):
             return 75.0, "checking records carefully and meeting time-sensitive work"
@@ -92,7 +110,7 @@ def transferable_action_support(requirement: str, card: Any) -> tuple[float, str
             return 60.0, "one documented aspect of accuracy and deadline management"
 
     if _match(r"\b(?:communicat\w*|liais\w*|interpersonal)\b", requirement):
-        if (_match(r"\b(?:explain\w*|communicat\w*|liais\w*|inform\w*|brief\w*|email\w*|contact\w*|spoke\b|speak\b)\b", actions)
+        if (_candidate_verb(actions, r"explain\w*|communicat\w*|liais\w*|inform\w*|brief\w*|email\w*|contact\w*|spoke|speak")
                 and _match(r"\b(?:staff|colleague|partner|stakeholder|passenger|visitor|student|team|manager|HMRC|client|customer)\w*\b", combined)):
             # School reception requires communicating with students/visitors;
             # cross-sector communication alone should not assert that setting.
@@ -102,7 +120,7 @@ def transferable_action_support(requirement: str, card: Any) -> tuple[float, str
 
     if _match(r"\b(?:telephone|phone)\b", requirement):
         if (_match(r"\b(?:phone|telephone|calls?)\b", actions)
-                and _match(r"\b(?:contact\w*|maintain\w*|call\w*|spoke\b|answer\w*|handl\w*)\b", actions)):
+                and _candidate_verb(actions, r"contact\w*|maintain\w*|call\w*|spoke|answer\w*|handl\w*")):
             return 56.0, "making real telephone contact; front-desk call handling is not yet established"
 
     if (_match(r"\bindependen\w*\b", requirement)
