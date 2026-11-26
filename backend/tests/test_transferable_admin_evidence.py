@@ -163,3 +163,39 @@ def test_receptionist_fixture_with_semantic_fallback(monkeypatch):
     assert strength[requirements[6]] == "strong"
     assert strength[requirements[2]] != "strong"
     assert data["analysis_provider"] == "structured-evidence-v2"
+
+
+def test_technical_system_administration_is_not_office_administration():
+    for requirement in (
+        "Experience with Linux system administration",
+        "Database administration experience",
+        "Network administration experience",
+        "Cloud infrastructure administration experience",
+    ):
+        match = deterministic_match(requirement, admin_card())
+        assert match["strength"] in {"weak", "missing"}, (requirement, match)
+
+
+def test_watching_a_manager_do_admin_is_not_personal_administration_experience():
+    card = Evidence(
+        id="observer",
+        title="Shadowing a manager",
+        situation="I shadowed the reporting process for training.",
+        task="Observe the manager compiling staffing returns.",
+        actions=["I observed while my manager compiled staffing reports and updated the roster."],
+        outcome="The manager completed the staffing report.",
+    )
+    match = deterministic_match("Administration experience", card)
+    assert match["strength"] in {"weak", "missing"}
+
+
+def test_observing_others_organise_work_is_not_organisational_achievement():
+    card = Evidence(
+        id="observer-workload",
+        title="Shadowing another team",
+        situation="I was present while another team planned its work.",
+        task="Observe the process.",
+        actions=["I watched as the team manager allocated shifts and organised team tasks."],
+        outcome="The manager allocated work for the team.",
+    )
+    assert deterministic_match("Excellent organisational skills", card)["strength"] != "strong"
