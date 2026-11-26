@@ -24,32 +24,49 @@ def _candidate_verb(actions: str, verb_pattern: str) -> bool:
 
 
 def _specialist_administration(requirement: str) -> bool:
-    """An office-admin example cannot verify technical system administration."""
-    return _match(
+    """Office record-keeping cannot prove technical admin or qualifications."""
+    technical = _match(
         r"\b(?:database|linux|windows\s+server|network|server|cloud|"
         r"systems?|infrastructure|IT|sql|salesforce|kubernetes)\b"
         r".{0,48}\badministrat\w*\b",
         requirement,
     )
+    credentials = _match(
+        r"\b(?:qualif\w*|certif\w*|diploma|degree|NVQ|BTEC|HNC|HND|"
+        r"level\s+[1-9]|licen[cs]e)\b",
+        requirement,
+    )
+    return technical or credentials
 
 
 def _deadline_delivered(outcome: str) -> bool:
-    """Require an affirmative result, not simply a reference to a deadline."""
-    if (_match(r"\b(?:missed|late|overdue|failed)\b", outcome)
-            and _match(r"\b(?:deadlines?|midday|on\s+time)\b", outcome)):
+    """An explicit on-time result is required, not a nearby deadline word."""
+    negative = (
+        _match(r"\b(?:after|past|beyond)\s+(?:the\s+)?(?:deadline|midday|cut.?off)\b", outcome)
+        or _match(r"\b(?:missed|late|overdue|failed|not\s+met)\b.{0,45}\b(?:deadline|midday)\b", outcome)
+        or _match(r"\bdeadlines?\b.{0,45}\b(?:missed|late|overdue|failed|not\s+met)\b", outcome)
+    )
+    if negative:
         return False
-    return _match(
-        r"\b(?:met|achieved|completed|delivered|submitted|updated|prepared|"
-        r"finished|provided|shared|available)\b.{0,100}"
-        r"\b(?:deadlines?|midday|on\s+time|before\s+midday)\b",
+    if _match(r"\b(?:met|beat)\b(?:\s+\w+){0,6}\s+deadlines?\b", outcome):
+        return True
+    if _match(r"\bdeadlines?\s+(?:was|were)\s+met\b", outcome):
+        return True
+    delivered = _match(
+        r"\b(?:completed|delivered|submitted|updated|prepared|finished|"
+        r"provided|shared|available|sent)\b",
         outcome,
-    ) or _match(r"\b(?:by|before)\s+(?:midday|the\s+deadline)\b", outcome)
+    )
+    return bool(delivered and (
+        _match(r"\b(?:by|before)\s+(?:the\s+)?(?:deadline|midday|noon)\b", outcome)
+        or _match(r"\bon\s+time\b", outcome)
+    ))
 
 
 def _handles_telephone_enquiries(actions: str) -> bool:
     return (
         _candidate_verb(actions, r"answer\w*|handl\w*|respond\w*|manag\w*")
-        and _match(r"\b(?:telephone|phone|calls?|enquir\w*|inbound|incoming)\b", actions)
+        and _match(r"\b(?:telephone|phone|calls?)\b", actions)
     )
 
 
