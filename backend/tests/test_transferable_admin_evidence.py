@@ -199,3 +199,62 @@ def test_observing_others_organise_work_is_not_organisational_achievement():
         outcome="The manager allocated work for the team.",
     )
     assert deterministic_match("Excellent organisational skills", card)["strength"] != "strong"
+
+
+def test_stating_planning_skill_is_not_a_planning_action():
+    card = Evidence(
+        id="claims", title="Generic skills",
+        situation="I applied for office work.",
+        task="Describe my skills.",
+        actions=["I have good planning skills and staff organisation."],
+        outcome="I completed the form.",
+    )
+    assert deterministic_match("Excellent organisational skills", card)["strength"] != "strong"
+
+
+def test_email_only_communication_cannot_prove_telephone_manner():
+    card = Evidence(
+        id="email", title="Email update",
+        situation="Colleagues needed written guidance.",
+        task="Provide updates.",
+        actions=["I explained the process by email to colleagues."],
+        outcome="Colleagues were informed.",
+    )
+    match = deterministic_match("Confident telephone manner and excellent communication skills", card)
+    assert match["strength"] != "strong"
+    assert any("telephone enquiries" in gap for gap in match["gaps"])
+
+
+def test_missing_deadline_cannot_be_converted_into_success():
+    card = Evidence(
+        id="late", title="Careful late correction",
+        situation="A reporting file contained an error.",
+        task="Identify the cause and update records.",
+        actions=["I reviewed records, corrected errors and reported the discrepancy."],
+        outcome="The records were corrected but I missed the deadline.",
+    )
+    match = deterministic_match("Attention to detail and ability to work to deadlines", card)
+    assert match["strength"] != "strong"
+    assert any("deadline" in gap for gap in match["gaps"])
+
+
+def test_accuracy_only_reason_does_not_claim_deadline_delivery():
+    match = deterministic_match("Attention to detail", accuracy_card())
+    assert match["strength"] == "strong"
+    assert "delivering work on time" not in match["why"]
+
+
+def test_compound_accuracy_and_deadline_may_be_strong_when_both_are_proved():
+    card = Evidence(
+        id="timely-audit", title="Auditing time-critical records",
+        situation="A daily report had a midday deadline.",
+        task="Verify records and share a correct update.",
+        actions=[
+            "I cross-checked records against the audit log and corrected discrepancies.",
+            "I updated the verified reporting file before midday.",
+        ],
+        outcome="The accurate report was updated before midday for the planning team.",
+    )
+    assert deterministic_match(
+        "Attention to detail and ability to work to deadlines", card
+    )["strength"] == "strong"
