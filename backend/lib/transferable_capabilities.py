@@ -32,7 +32,7 @@ def _action_text(card: Any) -> str:
 def has_compound_accuracy_deadline_gap(requirement: str, card: Any) -> bool:
     """An accurate audit does not prove deadline delivery on its own."""
     if not (_match(r"\b(?:attention\s+to\s+detail|accurac\w*|accurat\w*)\b", requirement)
-            and _match(r"\b(?:deadline|timel\w*)\b", requirement)):
+            and _match(r"\b(?:deadlines?|timel\w*)\b", requirement)):
         return False
     actions = _action_text(card)
     outcome = str(getattr(card, "outcome", "") or "")
@@ -41,7 +41,7 @@ def has_compound_accuracy_deadline_gap(requirement: str, card: Any) -> bool:
         actions,
     )
     deadline_context = _match(
-        r"\b(?:deadline|midday|time.sensitive|on\s+time|before\s+midday)\b",
+        r"\b(?:deadlines?|midday|time.sensitive|on\s+time|before\s+midday)\b",
         f"{actions} {outcome}",
     )
     return not (deadline_action and deadline_context)
@@ -83,7 +83,7 @@ def transferable_action_support(requirement: str, card: Any) -> tuple[float, str
     if _match(r"\b(?:attention\s+to\s+detail|accurac\w*|accurat\w*)\b", requirement):
         accurate = (_match(r"\b(?:audit\w*|cross.check\w*|verif\w*|review\w*|correct\w*|identif\w*|reconcil\w*)\b", actions)
                     and _match(r"\b(?:record|document|discrepanc\w*|error|audit|detail|data|information)\w*\b", actions))
-        deadline_requested = _match(r"\b(?:deadline|time\s+pressure|timel\w*)\b", requirement)
+        deadline_requested = _match(r"\b(?:deadlines?|time\s+pressure|timel\w*)\b", requirement)
         deadline = (_match(r"\b(?:prioriti[sz]\w*|updat\w*|deliver\w*|report\w*|plan\w*|complet\w*|met\b|meet\b)\b", actions)
                     and _match(r"\b(?:deadline|midday|urgent|time.sensitive|on\s+time|before\s+midday)\b", combined))
         if accurate and (deadline or not deadline_requested):
