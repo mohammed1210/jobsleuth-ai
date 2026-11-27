@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any, Literal
 
@@ -15,6 +16,7 @@ from lib.vacancy_extraction import is_non_requirement_text
 from routes.saved_jobs import verify_supabase_user
 
 router = APIRouter(prefix="/application-builder", tags=["application_builder"])
+logger = logging.getLogger(__name__)
 
 _META_VERBS = r"demonstrates|shows|illustrates|supports|underpins|evidences|addresses|highlights"
 _META_COMMENTARY_RE = re.compile(
@@ -224,6 +226,10 @@ async def build_application(
         )
     if not paragraphs:
         warnings.append("No Strong or Partial matched evidence is available to build a supported draft.")
+
+    # Operational metadata only; never log draft text or applicant evidence.
+    logger.warning("application_builder completed generated=%s provider=%s words=%d paragraphs=%d",
+                   bool(paragraphs), provider, total_words, len(paragraphs))
 
     return {
         "ok": True,
