@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Literal
 
 from fastapi import APIRouter, Header
@@ -214,7 +215,7 @@ def _semantic_candidates(ranked: list[tuple[Evidence, dict[str, Any]]]) -> list[
         card, assessment = item
         personal_actions = sum(
             1 for action in card.actions
-            if __import__("re").search(r"\\bI\\s+\\w+", action, __import__("re").I)
+            if re.search(r"\\bI\\s+\\w+", action, re.I)
         )
         complete = bool(card.situation or card.task) and bool(card.outcome)
         return (int(complete and personal_actions > 0), min(personal_actions, 3) + float(assessment["score"]) / 1000)
