@@ -97,3 +97,41 @@ def test_route_passes_broader_candidates_to_semantic_without_promoting_unsupport
     assert len(calls) == 1
     assert "risk-only" in [card.id for card in calls[0][2]]
     assert response.json()["requirements"][0]["match_strength"] != "strong"
+
+
+def test_semantic_strong_cannot_bypass_compound_skill_or_thin_card_caps(monkeypatch):
+    from fastapi.testclient import TestClient
+    from backend.main import app
+
+    cases = [
+        ("Confident telephone manner",
+         _card("no-phone", "Record checking", ["I checked records in person."], "Records corrected."),
+         "telephone"),
+        ("Attention to detail and ability to work to deadlines",
+         _card("no-deadline", "Audit", ["I checked reports for errors."], "Records corrected."),
+         "deadline"),
+        ("Excellent organisational skills",
+         Evidence(id="thin", title="Organising", skills=["organisation"]),
+         "Personal actions"),
+    ]
+    for requirement, card, expected_gap in cases:
+        def semantic_override(entries):
+            assert entries
+            return {0: {card.id: {
+                "strength": "strong", "score": 95, "confidence": 0.9,
+                "why": "Overoptimistic provider assessment", "gaps": [],
+                "supporting_facts": [], "signals": {"semantic": True},
+            }}}
+
+        monkeypatch.setattr("routes.vacancy_analysis.semantic_assess_batch", semantic_override)
+        response = TestClient(app).post(
+            "/vacancy-analysis", headers={"Authorization": "Bearer valid_token"},
+            json={"job": {"title": "Receptionist"},
+                  "requirements": [{"text": requirement, "category": "essential"}],
+                  "evidence_cards": [card.model_dump()]},
+        )
+        assert response.status_code == 200
+        result = response.json()["requirements"][0]
+        assert result["match_strength"] == "partial"
+        assert result["evidence"][0]["score"] <= 69
+        assert expected_gap in " ".join(result["gaps"])
