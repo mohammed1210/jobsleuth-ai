@@ -508,7 +508,13 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         if heading is not None:
             in_person_specification = lowered == "person specification"
             in_candidate_list = lowered in _CANDIDATE_LIST_HEADINGS
-            section = None if heading == "ignore" else heading
+            if heading == "ignore":
+                section = None
+            elif in_candidate_list and section in {"desirable", "eligibility"}:
+                # An informal introduction inherits the explicit prior scope.
+                pass
+            else:
+                section = heading
             continue
 
         # Blank lines commonly separate publisher bullets; prose ends scope.
@@ -516,6 +522,7 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
             is_bullet
             or _CANDIDATE_ATTRIBUTE_PREFIX.match(line)
             or _looks_like_person_spec_criterion(line, False)
+            or re.fullmatch(r"(?:qualified teacher status(?:\s*\(qts\))?|qts)\.?", lowered)
         ):
             in_candidate_list = False
             section = None
@@ -644,6 +651,16 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
             and _INLINE_CANDIDATE_PREFERENCE.match(lowered)
             and not re.search(r"\b(?:not|never|no)\b", lowered)
         ):
+            clauses = re.split(r"\s*[,;]?\s+\b(?:but|however|whereas)\b\s*,?\s+", line, flags=re.IGNORECASE)
+            if len(clauses) > 1:
+                mandatory = [clause.strip(" ,;:") for clause in clauses[1:]
+                             if re.search(r"\b(?:is essential|is required|are essential|are required|must demonstrate|must have|must hold)\b", clause, re.IGNORECASE)]
+                if mandatory:
+                    # Do not classify an explicitly mandatory clause as a preference.
+                    items.append(_item(clauses[0].strip(" ,;:"), "desirable", 0.88))
+                    for clause in mandatory:
+                        items.append(_item(clause, "essential", 0.9))
+                    continue
             items.append(_item(line, "desirable", 0.88, explicit_blocker=False))
             continue
 
