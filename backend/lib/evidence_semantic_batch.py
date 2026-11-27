@@ -39,12 +39,12 @@ def semantic_assess_batch(
     payload_entries: list[dict[str, Any]] = []
     cards_by_requirement: dict[int, dict[str, Any]] = {}
     for index, requirement, cards in entries[:8]:
-        compact_cards = [item for card in cards[:3] if (item := _compact_card(card)) is not None]
+        compact_cards = [item for card in cards[:6] if (item := _compact_card(card)) is not None]
         if not compact_cards:
             continue
         cards_by_requirement[index] = {
             str(getattr(card, "id", "")): card
-            for card in cards[:3]
+            for card in cards[:6]
             if str(getattr(card, "id", "") or "")
         }
         payload_entries.append(
@@ -65,7 +65,7 @@ def semantic_assess_batch(
             model="gpt-4o-mini",
             response_format={"type": "json_object"},
             temperature=0,
-            max_tokens=3200,
+            max_tokens=4800,
             messages=[
                 {
                     "role": "system",
