@@ -62,3 +62,38 @@ def test_small_evidence_banks_keep_existing_order():
     cards = [(_card(f"card-{i}", "Audit", ["I verified reports."], "Records were corrected."),
               {"score": 55.0-i}) for i in range(3)]
     assert [c.id for c in _semantic_candidates(cards)] == ["card-0", "card-1", "card-2"]
+
+
+def test_route_passes_broader_candidates_to_semantic_without_promoting_unsupported_scope(monkeypatch):
+    from fastapi.testclient import TestClient
+    from backend.main import app
+
+    calls = []
+
+    def observe(entries):
+        calls.extend(entries)
+        return None
+
+    monkeypatch.setattr("routes.vacancy_analysis.semantic_assess_batch", observe)
+    cards = [
+        Evidence(id=f"keyword-{i}", title="Previous experience at management level within security operations",
+                 skills=["security operations management"])
+        for i in range(3)
+    ]
+    cards.append(_card("risk-only", "Operational risk",
+                      ["I assessed security risks and implemented controls."],
+                      "The security risk was reduced."))
+    response = TestClient(app).post(
+        "/vacancy-analysis",
+        headers={"Authorization": "Bearer valid_token"},
+        json={
+            "job": {"title": "Security Manager"},
+            "requirements": [{"text": "Previous experience at management level within security operations",
+                              "category": "essential"}],
+            "evidence_cards": [card.model_dump() for card in cards],
+        },
+    )
+    assert response.status_code == 200
+    assert len(calls) == 1
+    assert "risk-only" in [card.id for card in calls[0][2]]
+    assert response.json()["requirements"][0]["match_strength"] != "strong"
