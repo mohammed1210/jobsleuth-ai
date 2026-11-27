@@ -61,3 +61,27 @@ def test_candidate_list_preserves_explicit_qts_blocker():
 def test_negated_preference_does_not_create_requirement():
     advert = HANDOFF + "\nThe successful candidate will ideally have no experience in the role."
     assert not any(i["category"] != "practical" for i in deterministic_extract(advert))
+
+
+def test_unbulleted_qts_does_not_end_candidate_list():
+    advert = HANDOFF + "\nAbout You\nWe'd love to hear from someone who:\nQualified Teacher Status.\nExperience leading a primary school team."
+    items = deterministic_extract(advert)
+    assert any(i["category"] == "eligibility" and i["explicit_blocker"] and "Qualified Teacher Status" in i["text"] for i in items)
+    assert any(i["category"] == "essential" and "Experience leading" in i["text"] for i in items)
+
+
+def test_informal_intro_inherits_desirable_scope():
+    advert = HANDOFF + "\nDesirable criteria:\nWe'd love to hear from someone who:\n• Qualified Teacher Status."
+    items = deterministic_extract(advert)
+    qts = [i for i in items if "Qualified Teacher Status" in i["text"]]
+    assert len(qts) == 1
+    assert qts[0]["category"] == "desirable"
+    assert not qts[0]["explicit_blocker"]
+
+
+def test_inline_preference_does_not_swallow_mandatory_experience():
+    advert = HANDOFF + "\nThe successful candidate will ideally have experience in a primary school, but experience working with children is essential."
+    items = deterministic_extract(advert)
+    assert any(i["category"] == "desirable" and "primary school" in i["text"] for i in items)
+    assert any(i["category"] == "essential" and "experience working with children" in i["text"] for i in items)
+    assert all(i["source_text"] in advert for i in items)
