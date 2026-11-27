@@ -199,6 +199,31 @@ def _profile_support(requirement: str, profile: CandidateProfileData | None) -> 
     }
 
 
+def _semantic_candidates(ranked: list[tuple[Evidence, dict[str, Any]]]) -> list[Evidence]:
+    """Broaden semantic recall without submitting every Evidence Bank card.
+
+    Keep the highest deterministic matches, plus action-and-outcome-rich cards
+    beyond the lexical top three. This is only candidate discovery; semantic
+    facts are validated and scope restrictions still apply after reassessment.
+    """
+    primary = [card for card, _assessment in ranked[:3]]
+    if len(ranked) <= 3:
+        return primary
+
+    def grounding(item: tuple[Evidence, dict[str, Any]]) -> tuple[int, float]:
+        card, assessment = item
+        personal_actions = sum(
+            1 for action in card.actions
+            if __import__("re").search(r"\\bI\\s+\\w+", action, __import__("re").I)
+        )
+        complete = bool(card.situation or card.task) and bool(card.outcome)
+        return (int(complete and personal_actions > 0), min(personal_actions, 3) + float(assessment["score"]) / 1000)
+
+    additions = sorted(ranked[3:], key=grounding, reverse=True)
+    # Preserve a strict per-requirement cap for API cost and token limits.
+    return primary + [card for card, _assessment in additions[:3]]
+
+
 @router.post("")
 async def vacancy_analysis(request: AnalysisRequest, authorization: str | None = Header(None)) -> dict[str, Any]:
     await verify_supabase_user(authorization)
@@ -212,7 +237,7 @@ async def vacancy_analysis(request: AnalysisRequest, authorization: str | None =
         ranked_by_index[index] = ranked
         top_strength = ranked[0][1]["strength"] if ranked else "missing"
         if top_strength != "strong" and ranked:
-            ambiguous_entries.append((index, requirement.text, [card for card, _assessment in ranked[:3]]))
+            ambiguous_entries.append((index, requirement.text, _semantic_candidates(ranked)))
 
     semantic_by_index = semantic_assess_batch(ambiguous_entries) or {}
     semantic_used = bool(semantic_by_index)
