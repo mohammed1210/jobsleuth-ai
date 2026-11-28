@@ -14,6 +14,29 @@ from lib.settings import settings
 logger = logging.getLogger(__name__)
 
 
+_MATCH_PROPERTIES = {
+    "evidence_id": {"type": "string"},
+    "strength": {"type": "string", "enum": ["strong", "partial", "weak", "missing"]},
+    "score": {"type": "number"},
+    "confidence": {"type": "number"},
+    "why": {"type": "string"},
+    "gaps": {"type": "array", "items": {"type": "string"}},
+    "supporting_fact_ids": {"type": "array", "items": {"type": "string"}},
+}
+_MATCH_SCHEMA = {"type": "object", "properties": _MATCH_PROPERTIES,
+                 "required": list(_MATCH_PROPERTIES), "additionalProperties": False}
+_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {"assessments": {"type": "array", "items": {
+        "type": "object", "properties": {
+            "requirement_id": {"type": "string"},
+            "matches": {"type": "array", "items": _MATCH_SCHEMA},
+        }, "required": ["requirement_id", "matches"], "additionalProperties": False,
+    }}},
+    "required": ["assessments"], "additionalProperties": False,
+}
+
+
 def _failure_reason(exc: Exception) -> str:
     # Never log exception messages: provider errors can contain sensitive data.
     status = getattr(exc, "status_code", None)
@@ -72,8 +95,10 @@ def _validate_batch_match(raw: Any, cards_by_id: dict[str, Any],
     # Exact quoted facts remain supported for existing responses; fabricated
     # text still fails the same source validator. Never rescue invalid IDs
     # by substituting another card or ignoring a bad reference.
-    if not isinstance(hydrated.get("supporting_facts", []), list) or not isinstance(hydrated.get("gaps", []), list):
-        return None, "invalid_match_shape"
+    if not isinstance(hydrated.get("supporting_facts", []), list):
+        return None, "invalid_supporting_facts_shape"
+    if not isinstance(hydrated.get("gaps", []), list):
+        return None, "invalid_gaps_shape"
     validated = _validated_match(hydrated, cards_by_id)
     return (validated, "ok") if validated is not None else (None, "failed_grounding_or_strength")
 
@@ -130,7 +155,7 @@ def semantic_assess_batch(
         client = OpenAI(api_key=settings.OPENAI_API_KEY, timeout=30.0, max_retries=0)
         response = client.chat.completions.create(
             model="gpt-4o-mini",
-            response_format={"type": "json_object"},
+            response_format={"type": "json_schema", "json_schema": {"name": "grounded_match_batch", "strict": True, "schema": _RESPONSE_SCHEMA}},
             temperature=0,
             max_tokens=4800,
             messages=[
@@ -143,7 +168,7 @@ def semantic_assess_batch(
                         "Assess every listed candidate, but return at most two best relevant matches per requirement; omit irrelevant cards. "
                         "Each match has evidence_id, strength, score, confidence, why, gaps, supporting_fact_ids. "
                         "Keep why to one short sentence, gaps to at most two short phrases, and supporting_fact_ids to at most three fact IDs from that evidence card. "
-                        "Strength is strong, partial, weak, or missing. Shared wording alone is not evidence. "
+                        "Strength is strong, partial, weak, or missing. Score is 0 to 100, confidence is 0 to 1. Gaps must be an array of strings, even when empty. Shared wording alone is not evidence. "
                         "Strong evidence needs clear personal action plus relevant responsibility or result. "
                         "Return only exact fact_id strings from the selected card in supporting_fact_ids. Do not rewrite or copy fact text. "
                         "Never invent achievements, authority, outcomes or experience. Prefer a lower strength when uncertain."
