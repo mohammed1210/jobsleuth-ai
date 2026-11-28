@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from collections import Counter
 import json
 import logging
 from time import monotonic
 from typing import Any
 
-from lib.evidence_semantic import _validated_match
+from lib.evidence_semantic import _ALLOWED_FIELDS, _field_values, _validated_match
 from lib.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -43,23 +44,38 @@ def _report(reason: str, requested: int, validated: int = 0) -> None:
     logger.warning("semantic_batch status=%s requested=%d validated=%d", reason, requested, validated)
 
 
-def _compact_card(card: Any) -> dict[str, Any] | None:
+def _compact_card(card: Any, first_fact: int) -> dict[str, Any] | None:
     evidence_id = str(getattr(card, "id", "") or "")
     if not evidence_id:
         return None
-    return {
-        "id": evidence_id,
-        "title": getattr(card, "title", ""),
-        "situation": getattr(card, "situation", ""),
-        "task": getattr(card, "task", ""),
-        "actions": getattr(card, "actions", []) or [],
-        "outcome": getattr(card, "outcome", ""),
-        "reflection": getattr(card, "reflection", ""),
-        "authority_context": getattr(card, "authority_context", ""),
-        "skills": getattr(card, "skills", []) or [],
-        "behaviours": getattr(card, "behaviours", []) or [],
-        "tags": getattr(card, "tags", []) or [],
-    }
+    facts = []
+    for field in sorted(_ALLOWED_FIELDS):
+        for value in _field_values(card, field):
+            facts.append({"fact_id": f"f{first_fact + len(facts)}", "field": field, "text": value})
+    return {"id": evidence_id, "facts": facts}
+
+
+def _validate_batch_match(raw: Any, cards_by_id: dict[str, Any],
+                          facts_by_card: dict[str, dict[str, dict[str, str]]]) -> tuple[dict[str, Any] | None, str]:
+    if not isinstance(raw, dict):
+        return None, "invalid_match_shape"
+    evidence_id = str(raw.get("evidence_id", "")).strip()
+    if evidence_id not in cards_by_id:
+        return None, "unlisted_card"
+    hydrated = dict(raw)
+    if "supporting_fact_ids" in raw:
+        refs = raw["supporting_fact_ids"]
+        lookup = facts_by_card.get(evidence_id, {})
+        if not isinstance(refs, list) or any(not isinstance(ref, str) or ref not in lookup for ref in refs):
+            return None, "invalid_fact_reference"
+        hydrated["supporting_facts"] = [lookup[ref] for ref in dict.fromkeys(refs)]
+    # Exact quoted facts remain supported for existing responses; fabricated
+    # text still fails the same source validator. Never rescue invalid IDs
+    # by substituting another card or ignoring a bad reference.
+    if not isinstance(hydrated.get("supporting_facts", []), list) or not isinstance(hydrated.get("gaps", []), list):
+        return None, "invalid_match_shape"
+    validated = _validated_match(hydrated, cards_by_id)
+    return (validated, "ok") if validated is not None else (None, "failed_grounding_or_strength")
 
 
 def semantic_assess_batch(
@@ -77,17 +93,25 @@ def semantic_assess_batch(
     payload_entries: list[dict[str, Any]] = []
     cards_by_requirement: dict[int, dict[str, Any]] = {}
     card_catalog: dict[str, dict[str, Any]] = {}
+    facts_by_card: dict[str, dict[str, dict[str, str]]] = {}
+    next_fact = 0
     for index, requirement, cards in entries[:8]:
-        compact_cards = [item for card in cards[:6] if (item := _compact_card(card)) is not None]
-        if not compact_cards:
+        if not any(str(getattr(card, "id", "") or "") for card in cards[:6]):
             continue
         cards_by_requirement[index] = {
             str(getattr(card, "id", "")): card
             for card in cards[:6]
             if str(getattr(card, "id", "") or "")
         }
-        for compact in compact_cards:
-            card_catalog.setdefault(compact["id"], compact)
+        for evidence_id, card in cards_by_requirement[index].items():
+            if evidence_id in card_catalog:
+                continue
+            compact = _compact_card(card, next_fact)
+            if compact is None:
+                continue
+            card_catalog[evidence_id] = compact
+            facts_by_card[evidence_id] = {fact["fact_id"]: {"field": fact["field"], "text": fact["text"]} for fact in compact["facts"]}
+            next_fact += len(compact["facts"])
         payload_entries.append(
             {
                 "requirement_id": str(index),
@@ -117,11 +141,11 @@ def semantic_assess_batch(
                         "Return JSON with an assessments array. Each assessment has requirement_id and matches. "
                         "Evidence cards are supplied once in a shared catalog; use only evidence_ids listed for each requirement. "
                         "Assess every listed candidate, but return at most two best relevant matches per requirement; omit irrelevant cards. "
-                        "Each match has evidence_id, strength, score, confidence, why, gaps, supporting_facts. "
-                        "Keep why to one short sentence, gaps to at most two short phrases, and supporting_facts to at most three concise exact excerpts. "
+                        "Each match has evidence_id, strength, score, confidence, why, gaps, supporting_fact_ids. "
+                        "Keep why to one short sentence, gaps to at most two short phrases, and supporting_fact_ids to at most three fact IDs from that evidence card. "
                         "Strength is strong, partial, weak, or missing. Shared wording alone is not evidence. "
                         "Strong evidence needs clear personal action plus relevant responsibility or result. "
-                        "Every supporting fact must contain field and text copied exactly from that Evidence Card field. "
+                        "Return only exact fact_id strings from the selected card in supporting_fact_ids (for example [\\\"f0\\\", \\\"f3\\\"]). Do not rewrite or copy fact text. "
                         "Never invent achievements, authority, outcomes or experience. Prefer a lower strength when uncertain."
                     ),
                 },
@@ -146,27 +170,38 @@ def semantic_assess_batch(
             _report("invalid_response_shape", len(payload_entries))
             return None
         result: dict[int, dict[str, dict[str, Any]]] = {}
+        rejections: Counter[str] = Counter()
+        returned_matches = 0
         for raw_assessment in assessments:
             if not isinstance(raw_assessment, dict):
+                rejections["invalid_assessment_shape"] += 1
                 continue
             try:
                 index = int(raw_assessment.get("requirement_id"))
             except (TypeError, ValueError):
+                rejections["invalid_requirement_id"] += 1
                 continue
             cards_by_id = cards_by_requirement.get(index)
             if not cards_by_id:
+                rejections["unlisted_requirement"] += 1
                 continue
             matches = raw_assessment.get("matches", [])
             if not isinstance(matches, list):
+                rejections["invalid_matches_shape"] += 1
                 continue
-            validated = [
-                match
-                for raw in matches
-                if (match := _validated_match(raw, cards_by_id)) is not None
-            ]
+            validated = []
+            returned_matches += len(matches)
+            for raw in matches:
+                match, reason = _validate_batch_match(raw, cards_by_id, facts_by_card)
+                if match is not None:
+                    validated.append(match)
+                else:
+                    rejections[reason] += 1
             if validated:
                 result[index] = {item["evidence_id"]: item for item in validated}
         reason = "success" if len(result) == len(payload_entries) else ("partial_coverage" if result else "no_validated_matches")
+        logger.warning("semantic_batch validation assessments=%d returned_matches=%d accepted_matches=%d rejected=%s",
+                       len(assessments), returned_matches, sum(len(matches) for matches in result.values()), dict(rejections))
         if reason == "success":
             logger.info("semantic_batch status=success requested=%d validated=%d", len(payload_entries), len(result))
         else:
