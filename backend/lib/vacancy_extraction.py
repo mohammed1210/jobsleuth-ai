@@ -517,6 +517,11 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
                 section = heading
             continue
 
+        # Recognised candidate lead-ins are structure, not unrelated prose.
+        # Preserve the inherited category for the criteria that follow.
+        if in_candidate_list and lowered.rstrip(":?!").strip() in _LEAD_INS:
+            continue
+
         # Blank lines commonly separate publisher bullets; prose ends scope.
         if in_candidate_list and not (
             is_bullet
