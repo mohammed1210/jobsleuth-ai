@@ -82,3 +82,13 @@ test('future screening belongs in practical notes rather than candidate requirem
   assert.equal(isFutureEmploymentCheck('You must hold a current Enhanced DBS certificate.'), false);
   assert.equal(isFutureEmploymentCheck('Experience preparing employment references.'), false);
 });
+
+
+test('screening administration is experience, not an offer condition', () => {
+  const criterion = 'Experience carrying out pre-employment checks.';
+  const result = parseVacancyText('Essential criteria:\n- ' + criterion);
+  assert.deepEqual(result.requirements.map(item => item.text), [criterion]);
+  assert.equal(result.practicalIssues.length, 0);
+  assert.equal(isFutureEmploymentCheck('You will be required to conduct pre-employment checks.'), false);
+  assert.equal(isFutureEmploymentCheck('A full UK driving licence is essential and appointment is subject to Enhanced DBS checks.'), false);
+});
