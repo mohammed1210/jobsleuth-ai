@@ -105,6 +105,32 @@ def _frame_cover_letter(draft: str, intro: str, closing: str, word_limit: int) -
     return framed if len(framed.split()) <= word_limit else draft
 
 
+_FRAMING_SENTENCE = re.compile(
+    r"^(?:I (?:am applying|wish to apply|would like to apply|would welcome|welcome the opportunity|look forward|would be pleased)|"
+    r"Thank you|I believe (?:my|these) .*? (?:would|could|will))\b", re.I
+)
+
+
+def _framing_only(text: str) -> bool:
+    sentences = [sentence.strip() for sentence in re.split(r"(?<=[.!?])\s+", text) if sentence.strip()]
+    return bool(sentences) and all(_FRAMING_SENTENCE.match(sentence) for sentence in sentences)
+
+
+def _semantic_quality_gate(paragraphs: list[dict[str, Any]], requirements: list[Any],
+                           cards_by_id: dict[str, Any]) -> str | None:
+    """Prevent a surviving generic close or severely incomplete body passing as a draft."""
+    if not any(not _framing_only(paragraph["text"]) for paragraph in paragraphs):
+        return "semantic_no_substantive_body"
+    strong = {index for index, requirement in enumerate(requirements)
+              if requirement.category == "essential" and requirement.match_strength == "strong"
+              and any(eid in cards_by_id for eid in requirement.evidence_ids)}
+    covered = {index for paragraph in paragraphs if not _framing_only(paragraph["text"])
+               for index in paragraph["requirement_indices"]}
+    if len(strong) >= 2 and len(strong & covered) * 2 < len(strong):
+        return "semantic_insufficient_strong_coverage"
+    return None
+
+
 @router.post("")
 async def build_application(
     request: ApplicationBuilderRequest,
@@ -163,6 +189,15 @@ async def build_application(
     if paragraphs and len(semantic_draft.split()) > request.word_limit:
         fallback_reason = "semantic_over_word_limit"
         paragraphs = None
+
+    if paragraphs:
+        # Generic framing never establishes a criterion. The server adds neutral
+        # cover-letter framing after the body passes the quality gate.
+        paragraphs = [paragraph for paragraph in paragraphs if not _framing_only(paragraph["text"])]
+        quality_failure = _semantic_quality_gate(paragraphs, requirements, cards_by_id)
+        if quality_failure:
+            fallback_reason = quality_failure
+            paragraphs = None
 
     fallback_used = not paragraphs
     # Deterministic fallback is a collection of copied evidence, not a
@@ -229,6 +264,8 @@ async def build_application(
 
     warnings: list[str] = []
     if fallback_used and paragraphs:
+        if fallback_reason in {"semantic_no_substantive_body", "semantic_insufficient_strong_coverage"}:
+            warnings.append("AI drafting did not produce a sufficiently complete evidence-backed body. The excerpt below uses available recorded evidence instead; this is a drafting limitation, not necessarily an evidence shortage.")
         warnings.append(
             "This fallback assembles recorded Evidence Bank facts rather than writing a role-tailored statement. "
             "It is a working excerpt, not a submission-ready application: review relevance to the advertised role, "
@@ -249,10 +286,10 @@ async def build_application(
         warnings.append(f"{len(evidence_gaps) - 4} additional essential requirements need review; see the full criteria coverage for details.")
     if total_words > request.word_limit:
         warnings.append(f"Draft is {total_words} words, above the requested {request.word_limit}-word limit. Edit before submitting.")
-    elif paragraphs and request.word_limit >= 300 and total_words < int(request.word_limit * 0.65):
+    elif paragraphs and not fallback_used and request.word_limit >= 300 and total_words < int(request.word_limit * 0.65):
         warnings.append(
             f"Draft uses only {total_words} of {request.word_limit} available words. "
-            "If more verified evidence is available, strengthen the Evidence Bank rather than padding the statement with unsupported detail."
+            "Review omitted criteria and linked evidence before submitting. A shorter draft may reflect drafting or validation limits, not missing experience."
         )
     if not paragraphs:
         warnings.append("No Strong or Partial matched evidence is available to build a supported draft.")
