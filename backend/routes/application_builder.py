@@ -62,11 +62,18 @@ def _clean_meta_commentary(text: str) -> str:
     return cleaned.strip(" \t\n;,-")
 
 
-def _normalise_paragraphs(paragraphs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _strip_internal_titles(text: str, titles: list[str]) -> str:
+    """Strip exact parenthetical card labels, not legitimate parenthetical prose."""
+    labels = {" ".join(title.casefold().split()) for title in titles if len(title.strip()) >= 12}
+    return re.sub(r"\s*\(([^()\n]+)\)", lambda m: "" if " ".join(m.group(1).casefold().split()) in labels else m.group(0), text)
+
+
+def _normalise_paragraphs(paragraphs: list[dict[str, Any]], cards_by_id: dict[str, Any]) -> list[dict[str, Any]]:
     normalised: list[dict[str, Any]] = []
     for paragraph in paragraphs:
         item = dict(paragraph)
-        text = _clean_meta_commentary(str(item.get("text", "")))
+        titles = [str(cards_by_id[eid].title or "") for eid in item.get("evidence_ids", []) if eid in cards_by_id]
+        text = _clean_meta_commentary(_strip_internal_titles(str(item.get("text", "")), titles))
         if not text:
             continue
         item["text"] = text
@@ -77,6 +84,24 @@ def _normalise_paragraphs(paragraphs: list[dict[str, Any]]) -> list[dict[str, An
 def _compose_draft(paragraphs: list[dict[str, Any]]) -> str:
     """Compose only evidence-bearing prose; avoid generic opening/closing filler."""
     return "\n\n".join(paragraph["text"].strip() for paragraph in paragraphs if paragraph.get("text", "").strip())
+
+
+def _frame_cover_letter(draft: str, intro: str, closing: str, word_limit: int) -> str:
+    """Add neutral framing only when missing and when it fits the word allowance."""
+    if not draft:
+        return draft
+    # The role-focused opening and professional close may already be integrated
+    # into the grounded prose. Do not duplicate those sentences.
+    opening = draft.split("\n\n", 1)[0]
+    ending = draft.rsplit("\n\n", 1)[-1]
+    parts = []
+    if not re.search(r"\b(?:applying|application|interest in|wish to apply|would like to apply)\b", opening, re.I):
+        parts.append(intro)
+    parts.append(draft)
+    if not re.search(r"\b(?:thank you|look forward|welcome the opportunity|would welcome|would be pleased)\b", ending, re.I):
+        parts.append(closing)
+    framed = "\n\n".join(parts)
+    return framed if len(framed.split()) <= word_limit else draft
 
 
 @router.post("")
@@ -129,7 +154,7 @@ async def build_application(
         request.word_limit,
     )
     if paragraphs:
-        paragraphs = _normalise_paragraphs(paragraphs)
+        paragraphs = _normalise_paragraphs(paragraphs, cards_by_id)
     provider = "openai-grounded-v1" if paragraphs else "deterministic-grounded-v2"
     fallback_reason: str | None = None if paragraphs else semantic_status
 
@@ -189,7 +214,7 @@ async def build_application(
             role_title,
             word_limit=fallback_budget,
         )
-        paragraphs = _normalise_paragraphs(paragraphs)
+        paragraphs = _normalise_paragraphs(paragraphs, cards_by_id)
         provider = "deterministic-grounded-v2"
 
     requirement_coverage = coverage(requirements, paragraphs)
@@ -197,6 +222,8 @@ async def build_application(
     if draft and fallback_used and request.application_type == "cover_letter":
         draft = f"{cover_letter_intro}\n\n{draft}\n\n{cover_letter_closing}"
         provider = "deterministic-grounded-cover-letter-v1"
+    elif draft and request.application_type == "cover_letter":
+        draft = _frame_cover_letter(draft, cover_letter_intro, cover_letter_closing, request.word_limit)
     total_words = len(draft.split()) if draft else 0
 
     warnings: list[str] = []
@@ -208,11 +235,13 @@ async def build_application(
         )
     evidence_gaps = [
         item for item in requirement_coverage
-        if item["category"] == "essential" and item["status"] in {"evidence-gap", "partially-covered"}
+        if item["category"] == "essential" and item["status"] in {"evidence-gap", "partially-covered", "not-used"}
     ]
     for item in evidence_gaps[:4]:
         if item["status"] == "evidence-gap":
             warnings.append(f"Essential requirement not drafted because supporting evidence is insufficient: {item['requirement']}")
+        elif item["status"] == "not-used":
+            warnings.append(f"Supported essential requirement not included in this draft; review linked evidence: {item['requirement']}")
         else:
             warnings.append(f"Partial evidence is being used for this essential requirement and should be reviewed carefully: {item['requirement']}")
     if len(evidence_gaps) > 4:
