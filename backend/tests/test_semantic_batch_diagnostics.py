@@ -99,6 +99,8 @@ def test_shared_card_catalog_preserves_candidate_scope_and_reduces_payload(monke
     caplog.set_level(logging.INFO, logger=batch.__name__)
     result = batch.semantic_assess_batch(entries + [(1, "another requirement", [first, second])])
     assert len(calls) == 1
+    assert calls[0]['response_format']['type'] == 'json_schema'
+    assert calls[0]['response_format']['json_schema']['strict'] is True
     payload = json.loads(calls[0]["messages"][1]["content"])
     assert [card["id"] for card in payload["evidence_cards"]] == [first.id, second.id]
     assert payload["requirements"][0]["evidence_ids"] == [first.id]
@@ -163,3 +165,13 @@ def test_empty_semantic_matches_are_distinguished_from_rejected_matches(monkeypa
     ]))
     assert batch.semantic_assess_batch(entries) is None
     assert "returned_matches=0 accepted_matches=0 rejected={}" in caplog.text
+
+
+def test_malformed_gaps_are_rejected_with_specific_reason(entries):
+    card = entries[0][2][0]
+    raw = {"evidence_id": card.id, "strength": "strong", "gaps": "none",
+           "supporting_fact_ids": ["f0"]}
+    result, reason = batch._validate_batch_match(raw, {card.id: card},
+        {card.id: {"f0": {"field": "actions", "text": card.actions[0]}}})
+    assert result is None
+    assert reason == "invalid_gaps_shape"
