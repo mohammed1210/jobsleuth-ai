@@ -68,7 +68,8 @@ def _strip_internal_titles(text: str, titles: list[str]) -> str:
     return re.sub(r"\s*\(([^()\n]+)\)", lambda m: "" if " ".join(m.group(1).casefold().split()) in labels else m.group(0), text)
 
 
-def _normalise_paragraphs(paragraphs: list[dict[str, Any]], cards_by_id: dict[str, Any]) -> list[dict[str, Any]]:
+def _normalise_paragraphs(paragraphs: list[dict[str, Any]], cards_by_id: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    cards_by_id = cards_by_id or {}
     normalised: list[dict[str, Any]] = []
     for paragraph in paragraphs:
         item = dict(paragraph)
