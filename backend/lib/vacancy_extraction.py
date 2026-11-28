@@ -418,13 +418,16 @@ _CURRENT_CREDENTIAL_CUE = re.compile(r"\b(?:(?:must|need to|required to)\s+(?:al
 
 def is_future_employment_check(text: str) -> bool:
     """Recognise explicit future screening; leave mixed/current prerequisites alone."""
-    return bool(_SCREENING_CUE.search(text) and _FUTURE_SCREENING_CUE.search(text)
+    return bool(not re.search(r"\b(?:police vetting|security vetting)\b", text, re.I)
+                and _SCREENING_CUE.search(text) and _FUTURE_SCREENING_CUE.search(text)
                 and not _CURRENT_CREDENTIAL_CUE.search(text))
 
 
 def classify_future_employment_item(item: dict[str, Any]) -> dict[str, Any]:
     text = str(item.get("text", ""))
     source = str(item.get("source_text", ""))
+    if _CURRENT_CREDENTIAL_CUE.search(source) or re.search(r"\b(?:police vetting|security vetting)\b", source, re.I):
+        return item
     if is_future_employment_check(text) or (
         is_future_employment_check(source) and _SCREENING_CUE.search(text)
         and not _CURRENT_CREDENTIAL_CUE.search(source)
