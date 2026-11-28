@@ -109,3 +109,57 @@ def test_shared_card_catalog_preserves_candidate_scope_and_reduces_payload(monke
     assert "unique_cards=2 candidate_pairs=3 input_tokens=100 output_tokens=80" in caplog.text
     assert first.id not in caplog.text
     assert "private applicant text" not in caplog.text
+
+
+def test_batch_resolves_short_fact_ids_only_within_linked_card(monkeypatch, caplog, entries):
+    first = entries[0][2][0]
+    second = SimpleNamespace(id="second-private-card", actions=["I arranged cover."])
+
+    def create(**kwargs):
+        request = json.loads(kwargs["messages"][1]["content"])
+        facts = {card["id"]: next(f["fact_id"] for f in card["facts"] if f["field"] == "actions")
+                 for card in request["evidence_cards"]}
+        assert facts[first.id] != facts[second.id]
+        def match(card, refs):
+            return {"evidence_id": card, "strength": "partial", "score": 60,
+                    "confidence": 0.8, "why": "Related", "gaps": [],
+                    "supporting_fact_ids": refs}
+        payload = {"assessments": [{"requirement_id": "0", "matches": [
+            match(first.id, [facts[first.id]]),
+            match(first.id, [facts[second.id]]),
+            match(second.id, [facts[second.id]])]},
+            {"requirement_id": "1", "matches": [
+            match(second.id, ["unknown-fact"]),
+            match(second.id, [facts[second.id]])]}]}
+        return SimpleNamespace(choices=[SimpleNamespace(finish_reason="stop",
+            message=SimpleNamespace(content=json.dumps(payload)))])
+    monkeypatch.setattr(openai, "OpenAI", lambda **kw: SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))))
+    result = batch.semantic_assess_batch(entries + [(1, "another requirement", [second])])
+    assert result[0][first.id]["supporting_facts"] == [{"field": "actions", "text": "I checked records."}]
+    assert set(result[0]) == {first.id}
+    assert set(result[1]) == {second.id}
+    assert "returned_matches=5 accepted_matches=2" in caplog.text
+    assert "'invalid_fact_reference': 2" in caplog.text
+    assert "'unlisted_card': 1" in caplog.text
+    assert first.id not in caplog.text
+    assert "unknown-fact" not in caplog.text
+
+
+def test_bad_reference_cannot_be_rescued_by_quoted_fact(entries):
+    card = entries[0][2][0]
+    raw = {"evidence_id": card.id, "strength": "strong",
+           "supporting_fact_ids": ["invented"], "supporting_facts": [
+               {"field": "actions", "text": card.actions[0]}]}
+    result, reason = batch._validate_batch_match(raw, {card.id: card}, {card.id: {}})
+    assert result is None
+    assert reason == "invalid_fact_reference"
+
+
+def test_empty_semantic_matches_are_distinguished_from_rejected_matches(monkeypatch, caplog, entries):
+    _mock_provider(monkeypatch, response=SimpleNamespace(choices=[
+        SimpleNamespace(finish_reason="stop", message=SimpleNamespace(content=json.dumps(
+            {"assessments": [{"requirement_id": "0", "matches": []}]})))
+    ]))
+    assert batch.semantic_assess_batch(entries) is None
+    assert "returned_matches=0 accepted_matches=0 rejected={}" in caplog.text
