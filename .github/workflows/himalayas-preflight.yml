@@ -1,0 +1,32 @@
+name: Himalayas read-only source preflight
+
+on:
+  pull_request:
+    paths:
+      - 'backend/scripts/probe_himalayas.py'
+      - 'backend/tests/test_himalayas_preflight.py'
+      - '.github/workflows/himalayas-preflight.yml'
+
+jobs:
+  source-contract:
+    if: github.event.pull_request.number == 109
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install probe dependency
+        run: pip install httpx==0.28.1
+      - name: Synthetic contract tests
+        run: python -m unittest discover -s tests -p test_himalayas_preflight.py
+      - name: One public page only (no persistence or AI)
+        run: python -m scripts.probe_himalayas
