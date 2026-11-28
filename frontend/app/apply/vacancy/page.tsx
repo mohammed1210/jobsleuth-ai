@@ -15,7 +15,7 @@ import { analyseVacancy, fetchEvidence, type EvidenceCard, type Requirement, typ
 import { fetchCandidateProfile, type CandidateProfile } from '@/lib/candidateProfileApi';
 import { getFreshSession, getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { extractVacancyIntelligence, type IntelligenceItem } from '@/lib/vacancyIntelligenceApi';
-import { parseVacancyText } from '@/lib/vacancyParser';
+import { isFutureEmploymentCheck, parseVacancyText } from '@/lib/vacancyParser';
 import { createExtractionGate } from '@/lib/extractionGate';
 import { preserveVacancySession } from '@/lib/vacancySession';
 import { APPLY_STAGES, canOpenApplyStage, hasUnresolvedJobSwitch, isImportedAdvertEditor, needsApplyStageDowngrade, resumeApplyStage, unansweredMandatoryQuestions, type ApplyStage } from '@/lib/guidedApply';
@@ -24,7 +24,7 @@ const lines = (value: string) => value.split('\n').map((item) => item.trim()).fi
 const VACANCY_DRAFT_KEY = 'jobsleuth.apply.vacancyDraft.v2';
 const EVIDENCE_TARGET_KEY = 'jobsleuth.evidence.target.v1';
 const EVIDENCE_REANALYSE_KEY = 'jobsleuth.evidence.reanalyse.v1';
-const ANALYSIS_SCHEMA_VERSION = 3;
+const ANALYSIS_SCHEMA_VERSION = 4;
 
 const evidenceFingerprint = (cards: EvidenceCard[]) => JSON.stringify(cards);
 const candidateProfileFingerprint = (profile: CandidateProfile | null) => JSON.stringify(profile ? { summary: profile.summary, skills: profile.skills, experience: profile.experience, qualifications: profile.qualifications, updated_at: profile.updated_at } : null);
@@ -184,7 +184,9 @@ export default function VacancyApplyPage() {
       }
       if (typeof saved.vacancyText === 'string') setVacancyText(saved.vacancyText);
       setLinkedSourceJobId(Number.isSafeInteger(saved.linkedSourceJobId) && (saved.linkedSourceJobId ?? 0) > 0 ? saved.linkedSourceJobId! : null);
-      setNeedsReExtraction(saved.needsReExtraction === true);
+      setNeedsReExtraction(saved.needsReExtraction === true || (
+        typeof saved.eligibility === 'string' && lines(saved.eligibility).some(isFutureEmploymentCheck)
+      ));
       if (typeof saved.eligibility === 'string') setEligibility(saved.eligibility);
       if (saved.eligibilityAnswers && typeof saved.eligibilityAnswers === 'object') {
         setEligibilityAnswers(saved.eligibilityAnswers as Record<string, EligibilityAnswer>);

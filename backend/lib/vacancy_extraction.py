@@ -410,6 +410,34 @@ def _eligibility_identity(text: str) -> str | None:
     return None
 
 
+# Conditions of an offer are not proof of a credential held today.
+_SCREENING_CUE = re.compile(r"\b(?:dbs|disclosure and barring service|occupational health|(?:employment|written|satisfactory) references|(?:pre|pe)[- ]employment checks?|security vetting|security checks?|security clearance|police vetting)\b", re.I)
+_FUTURE_SCREENING_CUE = re.compile(r"\b(?:subject to|conditional on|before (?:appointment|employment|starting)|upon (?:appointment|employment)|will (?:be required to (?:undergo|pass|complete|obtain)|need to (?:undergo|pass|complete|obtain)|undergo|be subject to)|must (?:undergo|pass|complete|obtain))\b", re.I)
+_CURRENT_CREDENTIAL_CUE = re.compile(r"\b(?:(?:must|need to|required to)\s+(?:already\s+|currently\s+)?(?:hold|have|possess)|(?:current|existing|valid)\s+(?:enhanced\s+)?(?:dbs|security clearance|police vetting|sc clearance)|(?:dbs|security clearance|police vetting)\s+(?:must be|is)\s+(?:current|valid)|(?:licen[cs]e|qualification|certificate|right to work|citizenship|registration|clearance)\b[^.;\n]{0,45}?\b(?:is|are)\s+(?:essential|required|mandatory)|\b(?:essential|required|mandatory|valid|current)\s+(?:[\w’-]+\s+){0,5}(?:licen[cs]e|qualification|certificate|registration)\b)\b", re.I)
+
+
+def is_future_employment_check(text: str) -> bool:
+    """Recognise explicit future screening; leave mixed/current prerequisites alone."""
+    return bool(not re.search(r"\b(?:police vetting|security vetting)\b", text, re.I)
+                and _SCREENING_CUE.search(text) and _FUTURE_SCREENING_CUE.search(text)
+                and not _CURRENT_CREDENTIAL_CUE.search(text))
+
+
+def classify_future_employment_item(item: dict[str, Any]) -> dict[str, Any]:
+    text = str(item.get("text", ""))
+    source = str(item.get("source_text", ""))
+    if _CURRENT_CREDENTIAL_CUE.search(source) or re.search(r"\b(?:police vetting|security vetting)\b", source, re.I):
+        return item
+    if is_future_employment_check(text) or (
+        is_future_employment_check(source) and _SCREENING_CUE.search(text)
+        and not _CURRENT_CREDENTIAL_CUE.search(source)
+    ):
+        # Preserve the advert's actual condition, rather than a model's claim
+        # that the applicant must already possess the screening outcome.
+        return {**item, "text": source or text, "category": "practical", "explicit_blocker": False}
+    return item
+
+
 def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
     """Extract grounded criteria from vacancy text without external services.
 
@@ -579,6 +607,10 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         ):
             in_candidate_list = False
             section = None
+
+        if is_future_employment_check(line):
+            items.append(_item(line, "practical", 0.96, explicit_blocker=False))
+            continue
 
         if is_non_requirement_text(line):
             continue

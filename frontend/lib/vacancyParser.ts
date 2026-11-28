@@ -16,6 +16,13 @@ const employerOnlyLine = (text: string): boolean => [
 
 const ignoredSection = /^(?:benefits?|employee benefits|what we offer|what we can offer|our benefits|perks(?: and benefits)?|why join us|how to apply|application process|closing date|interviews?|contact(?: us)?)\s*:?\s*$/i;
 
+export function isFutureEmploymentCheck(text: string): boolean {
+  const screening = /\b(?:dbs|disclosure and barring service|occupational health|(?:employment|written|satisfactory) references|(?:pre|pe)[- ]employment checks?|security vetting|security checks?|security clearance|police vetting)\b/i;
+  const future = /\b(?:subject to|conditional on|before (?:appointment|employment|starting)|upon (?:appointment|employment)|will (?:be required to (?:undergo|pass|complete|obtain)|need to (?:undergo|pass|complete|obtain)|undergo|be subject to)|must (?:undergo|pass|complete|obtain))\b/i;
+  const current = /\b(?:(?:must|need to|required to)\s+(?:already\s+|currently\s+)?(?:hold|have|possess)|(?:current|existing|valid)\s+(?:enhanced\s+)?(?:dbs|security clearance|police vetting|sc clearance)|(?:dbs|security clearance|police vetting)\s+(?:must be|is)\s+(?:current|valid)|(?:licen[cs]e|qualification|certificate|right to work|citizenship|registration|clearance)\b[^.;\n]{0,45}?\b(?:is|are)\s+(?:essential|required|mandatory)|\b(?:essential|required|mandatory|valid|current)\s+(?:[\w’-]+\s+){0,5}(?:licen[cs]e|qualification|certificate|registration)\b)\b/i;
+  return !/\b(?:police vetting|security vetting)\b/i.test(text) && screening.test(text) && future.test(text) && !current.test(text);
+}
+
 export function parseVacancyText(text: string): ParsedVacancy {
   const requirements: Requirement[] = [];
   const practicalIssues: string[] = [];
@@ -30,6 +37,10 @@ export function parseVacancyText(text: string): ParsedVacancy {
 
     if (ignoredSection.test(line)) {
       section = 'ignore';
+      continue;
+    }
+    if (isFutureEmploymentCheck(line)) {
+      practicalIssues.push(line);
       continue;
     }
     if (employerOnlyLine(line)) continue;

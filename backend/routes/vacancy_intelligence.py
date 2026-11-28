@@ -9,7 +9,10 @@ from fastapi import APIRouter, Header
 from pydantic import BaseModel, Field
 
 from lib.vacancy_ai import semantic_extract
-from lib.vacancy_extraction import deterministic_extract, is_non_requirement_text, is_pure_non_requirement_source
+from lib.vacancy_extraction import (
+    classify_future_employment_item, deterministic_extract, is_non_requirement_text,
+    is_pure_non_requirement_source,
+)
 from routes.saved_jobs import verify_supabase_user
 
 router = APIRouter(prefix="/vacancy-intelligence", tags=["vacancy_intelligence"])
@@ -74,6 +77,7 @@ def _is_non_requirement_heading(item: dict[str, Any]) -> bool:
 def _dedupe_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     deduped: list[dict[str, Any]] = []
     for candidate in items:
+        candidate = classify_future_employment_item(candidate)
         if _is_non_requirement_heading(candidate):
             continue
         if any(_same_requirement(candidate, existing) for existing in deduped):
