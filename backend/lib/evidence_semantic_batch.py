@@ -44,7 +44,7 @@ def _report(reason: str, requested: int, validated: int = 0) -> None:
     logger.warning("semantic_batch status=%s requested=%d validated=%d", reason, requested, validated)
 
 
-def _compact_card(card: Any, first_fact: int) -> dict[str, Any] | None:
+def _compact_card(card: Any, first_fact: int = 0) -> dict[str, Any] | None:
     evidence_id = str(getattr(card, "id", "") or "")
     if not evidence_id:
         return None
@@ -145,7 +145,7 @@ def semantic_assess_batch(
                         "Keep why to one short sentence, gaps to at most two short phrases, and supporting_fact_ids to at most three fact IDs from that evidence card. "
                         "Strength is strong, partial, weak, or missing. Shared wording alone is not evidence. "
                         "Strong evidence needs clear personal action plus relevant responsibility or result. "
-                        "Return only exact fact_id strings from the selected card in supporting_fact_ids (for example [\\\"f0\\\", \\\"f3\\\"]). Do not rewrite or copy fact text. "
+                        "Return only exact fact_id strings from the selected card in supporting_fact_ids. Do not rewrite or copy fact text. "
                         "Never invent achievements, authority, outcomes or experience. Prefer a lower strength when uncertain."
                     ),
                 },
