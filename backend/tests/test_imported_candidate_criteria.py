@@ -85,3 +85,16 @@ def test_inline_preference_does_not_swallow_mandatory_experience():
     assert any(i["category"] == "desirable" and "primary school" in i["text"] for i in items)
     assert any(i["category"] == "essential" and "experience working with children" in i["text"] for i in items)
     assert all(i["source_text"] in advert for i in items)
+
+
+@pytest.mark.parametrize("heading,expected", [("About You", "essential"), ("Desirable criteria:", "desirable")])
+@pytest.mark.parametrize("lead_in", ["You will have:", "You should have:", "The successful candidate will have:"])
+def test_recognised_lead_in_does_not_end_informal_scope(heading, expected, lead_in):
+    advert = HANDOFF + "\n" + heading + "\nWe'd love to hear from someone who:\n" + lead_in + "\n• Qualified Teacher Status.\n• Experience leading a primary school team."
+    items = deterministic_extract(advert)
+    qts = [i for i in items if "Qualified Teacher Status" in i["text"]]
+    assert len(qts) == 1
+    assert qts[0]["category"] == ("eligibility" if expected == "essential" else "desirable")
+    assert qts[0]["explicit_blocker"] == (expected == "essential")
+    assert any(i["category"] == expected and "Experience leading" in i["text"] for i in items)
+    assert not any(i["text"] == lead_in for i in items)
