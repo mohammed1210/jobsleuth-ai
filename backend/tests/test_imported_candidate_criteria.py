@@ -98,3 +98,13 @@ def test_recognised_lead_in_does_not_end_informal_scope(heading, expected, lead_
     assert qts[0]["explicit_blocker"] == (expected == "essential")
     assert any(i["category"] == expected and "Experience leading" in i["text"] for i in items)
     assert not any(i["text"] == lead_in for i in items)
+
+
+@pytest.mark.parametrize("heading,category", [("About You", "essential"), ("Desirable criteria:", "desirable")])
+@pytest.mark.parametrize("skill", ["Excellent communication skills.", "Good organisational skills.", "Outstanding written and verbal communication skills."])
+def test_unbulleted_skill_keeps_candidate_scope(heading, category, skill):
+    advert = HANDOFF + "\n" + heading + "\nWe'd love to hear from someone who:\n" + skill + "\n• Experience leading a primary school team.\nWe offer excellent training opportunities.\n• Staff pension scheme."
+    items = deterministic_extract(advert)
+    assert any(i["category"] == category and i["text"] == skill for i in items)
+    assert any(i["category"] == category and "Experience leading" in i["text"] for i in items)
+    assert not any("pension" in i["text"].lower() for i in items)
