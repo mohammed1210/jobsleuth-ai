@@ -310,3 +310,39 @@ def test_no_essential_section_still_allows_strongly_supported_desirable_fallback
     assert data["can_generate"] is True
     assert data["provider"] == "deterministic-grounded-cover-letter-v1"
     assert "operational risks" in data["draft"]
+
+
+def test_semantic_cover_letter_frames_and_cleans_internal_card_titles(monkeypatch):
+    card = evidence_card().model_copy(update={"title": "Review of operational recommendations"})
+    paragraph = {
+        "text": "I checked the options (including operational risks) and consulted colleagues (Review of operational recommendations).",
+        "requirement_indices": [0], "evidence_ids": [card.id],
+        "supporting_facts": [{"evidence_id": card.id, "field": "actions", "text": card.actions[0]}],
+        "grounding_status": "grounded",
+    }
+    monkeypatch.setattr("routes.application_builder.semantic_application_draft", lambda *a, **k: ([paragraph], "ok"))
+    data = client.post("/application-builder", headers=HEADERS, json={
+        "job": {"title": "Receptionist", "organisation": "Example School"},
+        "application_type": "cover_letter", "word_limit": 100,
+        "requirements": [
+            {"text": "Organise workloads", "match_strength": "strong", "evidence_ids": [card.id]},
+            {"text": "Communicate effectively", "match_strength": "partial", "evidence_ids": [card.id]},
+        ],
+        "evidence_cards": [card.model_dump()],
+    }).json()
+    assert data["provider"] == "openai-grounded-v1"
+    assert data["draft"].startswith("I am applying for the Receptionist role at Example School.")
+    assert data["draft"].endswith("Thank you for considering my application.")
+    assert "(including operational risks)" in data["draft"]
+    assert "(Review of operational recommendations)" not in data["draft"]
+    assert data["paragraphs"][0]["supporting_facts"] == paragraph["supporting_facts"]
+    assert data["coverage"][1]["status"] == "not-used"
+    assert any("not included in this draft" in w and "Communicate effectively" in w for w in data["warnings"])
+    assert data["word_count"] == len(data["draft"].split()) <= 100
+
+
+def test_cover_letter_framing_preserves_existing_open_and_close_and_word_limit():
+    from routes.application_builder import _frame_cover_letter
+    original = "I am applying for this role. I reviewed records. Thank you for your time."
+    assert _frame_cover_letter(original, "Intro.", "Close.", 100) == original
+    assert _frame_cover_letter("I checked records.", "Intro.", "Close.", 3) == "I checked records."
