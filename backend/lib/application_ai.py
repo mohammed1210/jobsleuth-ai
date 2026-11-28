@@ -156,7 +156,8 @@ def semantic_application_draft(
     if application_type == "cover_letter":
         style_instruction = (
             "Write a concise professional UK cover letter in first person. Open with a short role-focused introduction, "
-            "use grounded evidence to show fit against the strongest supported requirements, and end with a brief professional close. "
+            "use grounded evidence to show fit across the supported essential requirements, and end with a brief professional close. "
+            "Integrate opening and closing into evidence-bearing paragraphs so they survive validation. Explain how demonstrated skills transfer to the target role without claiming direct sector experience. "
             "Do not invent motivation, qualifications or experience."
         )
     elif application_type == "statement_of_suitability":
@@ -185,7 +186,9 @@ def semantic_application_draft(
                 f"When the supplied evidence contains enough useful detail, aim for approximately {target_min}-{target_max} words in total, while never exceeding the {word_limit}-word limit. "
                 "Treat that range as a quality target, not permission to add filler: if the evidence cannot genuinely support that length, write a shorter answer. "
                 "Spend the word budget on concrete actions, decision rationale, trade-offs, stakeholder handling, outcomes and reflection that are directly supported by cited facts. "
-                "Prioritise supported essential criteria before desirable criteria. Do not waste words restating vacancy criteria. "
+                "Prioritise supported essential criteria before desirable criteria. Plan coverage across all supported essentials before writing; use partial evidence only for the specific supported aspect. "
+                "Do not waste words restating vacancy criteria. Keep evidence titles, fact IDs, source labels, audit notes and parenthetical citations out of text; supply them only through structured metadata. "
+                "Do not repeat limitations of the Evidence Bank inside the applicant-facing prose. Translate demonstrated skills into the target role without asserting unverified experience or motivation. "
                 "For every paragraph, cite only supporting_fact_ids supplied in the Evidence Card data. "
                 "EVERY paragraph must cite at least one supporting fact whose field is actions, task, or authority_context; context/title/outcome alone is not sufficient. "
                 "If a paragraph contains any number, date, percentage, duration, quantity or other numeric claim, cite the exact fact containing that number. "
@@ -256,6 +259,10 @@ def semantic_application_draft(
                 dict(rejection_reasons),
             )
             return None, f"no_validated_paragraphs_{dominant_reason}"
+        covered = {index for paragraph in validated for index in paragraph["requirement_indices"]}
+        logger.warning("application_ai validation returned=%d accepted=%d supported=%d covered=%d rejected=%s",
+                       min(len(raw_paragraphs), 8), len(validated), len(supported_indices),
+                       len(covered), dict(rejection_reasons))
         return validated, "ok"
     except Exception as exc:
         error_name = type(exc).__name__
