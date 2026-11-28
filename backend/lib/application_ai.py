@@ -155,8 +155,8 @@ def semantic_application_draft(
     target_min, target_max = _word_target(word_limit)
     if application_type == "cover_letter":
         style_instruction = (
-            "Write a concise professional UK cover letter in first person. Open with a short role-focused introduction, "
-            "use grounded evidence to show fit across the supported essential requirements, and end with a brief professional close. "
+            "Write the body of a concise professional UK cover letter in first person. "
+            "Use grounded evidence to show fit across the supported essential requirements. "
             "Return substantive evidence-bearing body paragraphs only; the server adds neutral opening and closing where needed. Never attach evidence IDs to generic greetings or closing remarks. Explain how demonstrated skills transfer to the target role without claiming direct sector experience. "
             "Do not invent motivation, qualifications or experience."
         )
