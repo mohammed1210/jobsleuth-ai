@@ -346,3 +346,76 @@ def test_cover_letter_framing_preserves_existing_open_and_close_and_word_limit()
     original = "I am applying for this role. I reviewed records. Thank you for your time."
     assert _frame_cover_letter(original, "Intro.", "Close.", 100) == original
     assert _frame_cover_letter("I checked records.", "Intro.", "Close.", 3) == "I checked records."
+
+
+def test_closing_only_semantic_result_is_replaced_by_labelled_evidence_excerpt(monkeypatch):
+    card = evidence_card()
+    closing = {"text": "I would welcome the opportunity to bring these skills to the reception team. Thank you for considering my application.",
+               "requirement_indices": [0], "evidence_ids": [card.id],
+               "supporting_facts": [{"evidence_id": card.id, "field": "actions", "text": card.actions[0]}],
+               "grounding_status": "grounded"}
+    monkeypatch.setattr("routes.application_builder.semantic_application_draft", lambda *a, **k: ([closing], "ok"))
+    data = client.post("/application-builder", headers=HEADERS, json={
+        "job": {"title": "Receptionist", "organisation": "Example School"},
+        "application_type": "cover_letter", "word_limit": 500,
+        "requirements": [{"text": "Organise work", "match_strength": "strong", "evidence_ids": [card.id]}],
+        "evidence_cards": [card.model_dump()],
+    }).json()
+    assert data["fallback_reason"] == "semantic_no_substantive_body"
+    assert data["provider"] == "deterministic-grounded-cover-letter-v1"
+    assert card.actions[0] in data["draft"]
+    assert closing["text"] not in data["draft"]
+    assert any("drafting limitation" in warning for warning in data["warnings"])
+
+
+def test_severely_incomplete_semantic_body_uses_labelled_fallback(monkeypatch):
+    card = evidence_card()
+    paragraph = {"text": card.actions[0], "requirement_indices": [0], "evidence_ids": [card.id],
+                 "supporting_facts": [{"evidence_id": card.id, "field": "actions", "text": card.actions[0]}],
+                 "grounding_status": "grounded"}
+    monkeypatch.setattr("routes.application_builder.semantic_application_draft", lambda *a, **k: ([paragraph], "ok"))
+    data = client.post("/application-builder", headers=HEADERS, json={
+        "job": {"title": "Operations Officer"}, "word_limit": 500,
+        "requirements": [{"text": text, "match_strength": "strong", "evidence_ids": [card.id]}
+                         for text in ["Assess risks", "Consult colleagues", "Make recommendations", "Review information"]],
+        "evidence_cards": [card.model_dump()],
+    }).json()
+    assert data["fallback_reason"] == "semantic_insufficient_strong_coverage"
+    assert data["provider"] == "deterministic-grounded-v2"
+    assert card.actions[1] in data["draft"]
+
+
+def test_generic_close_cannot_add_criterion_coverage():
+    from routes.application_builder import _framing_only, _semantic_quality_gate
+    assert _framing_only("I would welcome the opportunity to bring my skills to your team. Thank you for your time.")
+    assert not _framing_only("I checked the records and corrected the error. Thank you for your time.")
+    assert _semantic_quality_gate([], [], {}) == "semantic_no_substantive_body"
+
+
+def test_semantic_paragraph_requires_action_link_for_each_claimed_criterion(monkeypatch):
+    import json
+    from types import SimpleNamespace
+    import openai
+    from lib import application_ai
+
+    first = evidence_card()
+    second = ApplicationEvidence(id="ev-2", actions=["I maintained the staffing roster."])
+    requirements = [
+        ApplicationRequirement(text="Assess risks", match_strength="strong", evidence_ids=[first.id]),
+        ApplicationRequirement(text="Maintain rosters", match_strength="strong", evidence_ids=[second.id]),
+    ]
+    monkeypatch.setattr(application_ai.settings, "OPENAI_API_KEY", "synthetic-test-key")
+    def create(**kwargs):
+        payload = {"paragraphs": [{
+            "text": first.actions[0],
+            "requirement_indices": [0, 1],
+            "evidence_ids": [first.id, second.id],
+            "supporting_fact_ids": [f"{first.id}:actions:0"],
+        }]}
+        return SimpleNamespace(status="completed", output_text=json.dumps(payload))
+    monkeypatch.setattr(openai, "OpenAI", lambda **kw: SimpleNamespace(
+        responses=SimpleNamespace(create=create)))
+    result, reason = application_ai.semantic_application_draft(
+        requirements, {first.id: first, second.id: second}, "Officer", "", "cover_letter", 500)
+    assert result is None
+    assert reason == "no_validated_paragraphs_missing_requirement_action_fact"

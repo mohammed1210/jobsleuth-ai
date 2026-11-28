@@ -155,9 +155,9 @@ def semantic_application_draft(
     target_min, target_max = _word_target(word_limit)
     if application_type == "cover_letter":
         style_instruction = (
-            "Write a concise professional UK cover letter in first person. Open with a short role-focused introduction, "
-            "use grounded evidence to show fit across the supported essential requirements, and end with a brief professional close. "
-            "Integrate opening and closing into evidence-bearing paragraphs so they survive validation. Explain how demonstrated skills transfer to the target role without claiming direct sector experience. "
+            "Write the body of a concise professional UK cover letter in first person. "
+            "Use grounded evidence to show fit across the supported essential requirements. "
+            "Return substantive evidence-bearing body paragraphs only; the server adds neutral opening and closing where needed. Never attach evidence IDs to generic greetings or closing remarks. Explain how demonstrated skills transfer to the target role without claiming direct sector experience. "
             "Do not invent motivation, qualifications or experience."
         )
     elif application_type == "statement_of_suitability":
@@ -191,7 +191,7 @@ def semantic_application_draft(
                 "Do not repeat limitations of the Evidence Bank inside the applicant-facing prose. Translate demonstrated skills into the target role without asserting unverified experience or motivation. "
                 "For every paragraph, cite only supporting_fact_ids supplied in the Evidence Card data. "
                 "EVERY paragraph must cite at least one supporting fact whose field is actions, task, or authority_context; context/title/outcome alone is not sufficient. "
-                "If a paragraph contains any number, date, percentage, duration, quantity or other numeric claim, cite the exact fact containing that number. "
+                "Prefer qualitative wording when exact figures are not necessary. Do not add or convert numbers, dates, percentages, durations, grades or quantities. If a numeric claim is necessary, reproduce the source number and adjacent unit verbatim and cite that exact fact. "
                 "If a paragraph describes ownership, approval, leadership, management, supervision or decision authority, cite the exact authority_context or action fact that supports that wording. "
                 "Use enough cited facts to support the actual claims in the paragraph, not merely the general topic. "
                 "Use natural UK English and professional prose. Avoid generic filler and do not mention AI or JobSleuth."
@@ -248,6 +248,13 @@ def semantic_application_draft(
                 allowed_ids.update(allowed_by_requirement.get(index, set()))
             if any(evidence_id not in allowed_ids for evidence_id in paragraph["evidence_ids"]):
                 rejection_reasons["evidence_requirement_mismatch"] += 1
+                continue
+            # A requirement needs its own linked action/task/authority fact, not
+            # merely a card belonging to some other requirement in this paragraph.
+            action_cards = {fact["evidence_id"] for fact in paragraph["supporting_facts"]
+                            if fact["field"] in {"actions", "task", "authority_context"}}
+            if any(not (allowed_by_requirement[index] & action_cards) for index in indices):
+                rejection_reasons["missing_requirement_action_fact"] += 1
                 continue
             validated.append(paragraph)
 
