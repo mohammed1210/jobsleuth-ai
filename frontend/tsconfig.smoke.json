@@ -27,6 +27,9 @@
     "tests/jobDetailsApi.smoke.test.ts",
     "tests/jobApplicationHandoff.smoke.test.ts",
     "tests/extractionGate.smoke.test.ts",
+    "lib/vacancyParser.ts",
+    "tests/vacancyParser.smoke.test.ts",
+    "tests/vacancySession.smoke.test.ts",
     "lib/guidedApply.ts",
     "tests/guidedApply.smoke.test.ts"
   ]

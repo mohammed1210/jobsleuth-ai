@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from lib.transferable_capabilities import (has_compound_accuracy_deadline_gap, has_telephone_requirement_gap, transferable_action_support)
+
 _STOPWORDS = {
     "able", "about", "across", "also", "and", "are", "been", "being", "can", "demonstrate",
     "for", "from", "have", "into", "must", "our", "required", "role", "that", "the", "their",
@@ -245,6 +247,12 @@ def has_school_setting_experience(card: Any) -> bool:
 def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
     signals = _support_signals(requirement, card)
     score = signals["score"]
+    # Lexical fallback misses skills expressed as real administrative actions
+    # (rosters, auditing, shifting priorities). Only use an action-grounded
+    # floor, never a bare skill label or an inferred qualification.
+    transferable = transferable_action_support(requirement, card)
+    if transferable is not None:
+        score = max(score, transferable[0])
 
     # Scope-sensitive management requirements must be supported by the candidate's
     # own management/leadership actions, not merely by words such as "security",
@@ -256,6 +264,12 @@ def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
     school_setting_gap = requires_school_setting_experience(requirement) and not has_school_setting_experience(card)
     if school_setting_gap:
         score = min(score, 39.0)
+    accuracy_deadline_gap = has_compound_accuracy_deadline_gap(requirement, card)
+    if accuracy_deadline_gap:
+        score = min(score, 69.0)
+    telephone_gap = has_telephone_requirement_gap(requirement, card)
+    if telephone_gap:
+        score = min(score, 69.0)
 
     strength = _strength(score)
     has_actions = bool(getattr(card, "actions", []) and any(str(value).strip() for value in getattr(card, "actions", []) or []))
@@ -265,6 +279,8 @@ def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
         score = min(score, 69.0)
 
     support_parts: list[str] = []
+    if transferable is not None and score >= transferable[0]:
+        support_parts.append("recorded personal actions demonstrate " + transferable[1])
     if signals["concepts"]:
         support_parts.append("related capability: " + ", ".join(signals["concepts"][:3]))
     if signals["action_overlap"]:
@@ -287,7 +303,11 @@ def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
         gaps.append("The evidence does not demonstrate management or supervisory responsibility at the required level.")
     if school_setting_gap:
         gaps.append("The evidence does not establish experience working in the required primary or secondary school setting.")
-    if signals["concepts"] == [] and strength != "missing":
+    if accuracy_deadline_gap:
+        gaps.append("This example does not demonstrate accurate work delivered to a deadline.")
+    if telephone_gap:
+        gaps.append("This example does not demonstrate handling telephone enquiries.")
+    if signals["concepts"] == [] and strength != "missing" and not (transferable and score >= transferable[0]):
         gaps.append("The evidence does not clearly demonstrate the underlying capability, only related wording.")
     if strength == "missing":
         gaps.append("No sufficiently relevant evidence is recorded for this requirement.")
@@ -308,6 +328,7 @@ def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
             "concepts": signals["concepts"],
             "matched_terms": signals["overlap"][:8],
             "evidence_quality": signals["quality"],
+            "transferable_capability": transferable[1] if transferable and score >= transferable[0] else None,
         },
     }
 

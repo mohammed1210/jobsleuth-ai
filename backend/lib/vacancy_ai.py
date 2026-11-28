@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 from lib.settings import settings
-from lib.vacancy_extraction import is_non_requirement_text
+from lib.vacancy_extraction import is_non_requirement_text, is_pure_non_requirement_source
 
 _ALLOWED_CATEGORIES = {"eligibility", "essential", "desirable", "trainable", "practical"}
 _HARD_BLOCKER_CUES = (
@@ -36,7 +36,9 @@ def _validate_item(raw: Any, vacancy_text: str) -> dict[str, Any] | None:
     source = str(raw.get("source_text", "")).strip()
     if category not in _ALLOWED_CATEGORIES or not text or not _source_is_grounded(source, vacancy_text):
         return None
-    if is_non_requirement_text(text) or is_non_requirement_text(source):
+    if is_non_requirement_text(text):
+        return None
+    if is_pure_non_requirement_source(source):
         return None
     try:
         confidence = round(max(0.0, min(1.0, float(raw.get("confidence", 0.7)))), 2)
