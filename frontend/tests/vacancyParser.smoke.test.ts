@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseVacancyText } from '../lib/vacancyParser';
+import { isFutureEmploymentCheck, parseVacancyText } from '../lib/vacancyParser';
 
 test('local fallback excludes benefits, recruitment dates, and employer contacts', () => {
   const advert = `Afternoon Receptionist
@@ -71,4 +71,14 @@ Essential criteria
   const result = parseVacancyText(advert);
   assert.deepEqual(result.practicalIssues, ['London', 'Monday to Friday', '12.5 hours per week']);
   assert.equal(result.requirements.length, 1);
+});
+
+
+test('future screening belongs in practical notes rather than candidate requirements', () => {
+  const condition = 'An offer of employment will be subject to pre-employment checks including satisfactory references and Enhanced DBS clearance.';
+  const result = parseVacancyText('Essential criteria:\n- Excellent communication skills.\n' + condition);
+  assert.ok(result.practicalIssues.includes(condition));
+  assert.equal(result.requirements.length, 1);
+  assert.equal(isFutureEmploymentCheck('You must hold a current Enhanced DBS certificate.'), false);
+  assert.equal(isFutureEmploymentCheck('Experience preparing employment references.'), false);
 });
