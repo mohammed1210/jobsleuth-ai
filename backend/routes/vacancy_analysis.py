@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Literal
 
 from fastapi import APIRouter, Header
@@ -9,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from lib.evidence_matching import (deterministic_match, has_personal_management_scope, has_school_setting_experience, rank_evidence, requires_personal_management_scope, requires_school_setting_experience)
 from lib.evidence_semantic_batch import semantic_assess_batch
+from lib.transferable_capabilities import has_compound_accuracy_deadline_gap, has_telephone_requirement_gap
 from routes.candidate_profile import CandidateProfileData
 from routes.saved_jobs import verify_supabase_user
 
@@ -199,6 +201,31 @@ def _profile_support(requirement: str, profile: CandidateProfileData | None) -> 
     }
 
 
+def _semantic_candidates(ranked: list[tuple[Evidence, dict[str, Any]]]) -> list[Evidence]:
+    """Broaden semantic recall without submitting every Evidence Bank card.
+
+    Keep the highest deterministic matches, plus action-and-outcome-rich cards
+    beyond the lexical top three. This is only candidate discovery; semantic
+    facts are validated and scope restrictions still apply after reassessment.
+    """
+    primary = [card for card, _assessment in ranked[:3]]
+    if len(ranked) <= 3:
+        return primary
+
+    def grounding(item: tuple[Evidence, dict[str, Any]]) -> tuple[int, float]:
+        card, assessment = item
+        personal_actions = sum(
+            1 for action in card.actions
+            if re.search(r"\bI\s+\w+", action, re.I)
+        )
+        complete = bool(card.situation or card.task) and bool(card.outcome)
+        return (int(complete and personal_actions > 0), min(personal_actions, 3) + float(assessment["score"]) / 1000)
+
+    additions = sorted(ranked[3:], key=grounding, reverse=True)
+    # Preserve a strict per-requirement cap for API cost and token limits.
+    return primary + [card for card, _assessment in additions[:3]]
+
+
 @router.post("")
 async def vacancy_analysis(request: AnalysisRequest, authorization: str | None = Header(None)) -> dict[str, Any]:
     await verify_supabase_user(authorization)
@@ -212,7 +239,7 @@ async def vacancy_analysis(request: AnalysisRequest, authorization: str | None =
         ranked_by_index[index] = ranked
         top_strength = ranked[0][1]["strength"] if ranked else "missing"
         if top_strength != "strong" and ranked:
-            ambiguous_entries.append((index, requirement.text, [card for card, _assessment in ranked[:3]]))
+            ambiguous_entries.append((index, requirement.text, _semantic_candidates(ranked)))
 
     semantic_by_index = semantic_assess_batch(ambiguous_entries) or {}
     semantic_used = bool(semantic_by_index)
@@ -321,6 +348,24 @@ async def vacancy_analysis(request: AnalysisRequest, authorization: str | None =
                     gaps.append(sector_gap)
                 assessment["gaps"] = gaps[:3]
                 assessment["why"] = "Transferable experience is recorded, but the required school-setting background is not evidenced."
+            # Broader semantic recall must not bypass the deterministic
+            # safeguards for compound skills or thin evidence.
+            if str(card.id) in semantic and assessment.get("strength") == "strong":
+                grounded_gaps = []
+                if has_compound_accuracy_deadline_gap(requirement.text, card):
+                    grounded_gaps.append("This example does not demonstrate accurate work delivered to a deadline.")
+                if has_telephone_requirement_gap(requirement.text, card):
+                    grounded_gaps.append("This example does not demonstrate handling telephone enquiries.")
+                if not any(str(action).strip() for action in card.actions):
+                    grounded_gaps.append("Personal actions are not recorded clearly enough.")
+                if not card.outcome.strip():
+                    grounded_gaps.append("Outcome or impact is not recorded.")
+                if grounded_gaps:
+                    assessment = dict(assessment)
+                    assessment["strength"] = "partial"
+                    assessment["score"] = min(float(assessment.get("score", 0.0)), 69.0)
+                    assessment["gaps"] = list(dict.fromkeys(grounded_gaps + list(assessment.get("gaps", []))))[:3]
+                    assessment["why"] = "Related evidence is recorded, but a required element of the example is not established."
             merged.append((card, assessment))
         merged.sort(key=lambda item: item[1]["score"], reverse=True)
 
