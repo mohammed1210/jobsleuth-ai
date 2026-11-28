@@ -9,7 +9,7 @@ Category = Literal["eligibility", "essential", "desirable", "trainable", "practi
 
 
 def _clean_line(value: str) -> str:
-    return re.sub(r"^\s*(?:[-*•]|\d+[.)])\s*", "", value).strip()
+    return re.sub(r"^\s*(?:[-*•]|\d+[.)](?!\d))\s*", "", value).strip()
 
 
 def _confidence(value: float) -> float:
@@ -25,6 +25,30 @@ def _item(text: str, category: Category, confidence: float, *, explicit_blocker:
         "explicit_blocker": explicit_blocker,
     }
 
+
+# Informal candidate-list introductions: scope to candidate attributes.
+_CANDIDATE_LIST_HEADINGS = {
+    "we'd love to hear from someone who",
+    "we would love to hear from someone who",
+    "we'd love to hear from candidates who",
+    "we would love to hear from candidates who",
+    "we are looking for someone who",
+    "we're looking for someone who",
+}
+
+_CANDIDATE_ATTRIBUTE_PREFIX = re.compile(
+    r"^(?:has|have|demonstrates?|possesses?|shares?|is|are|can)\s+",
+    re.IGNORECASE,
+)
+
+# A stated preference about an applicant is not a hard blocker.
+_INLINE_CANDIDATE_PREFERENCE = re.compile(
+    r"^(?:the\s+)?(?:successful|ideal)\s+(?:candidate|applicant)\s+"
+    r"(?:will|would|should)\s+ideally\s+(?:have|hold|possess|demonstrate)\s+"
+    r"(?:experience|knowledge|skills?|qualifications?|a\s+qualification|"
+    r"a\s+degree|a\s+licen[cs]e|a\s+certificate)\b",
+    re.IGNORECASE,
+)
 
 _SECTION_HEADINGS: dict[str, Category] = {
     "eligibility": "eligibility",
@@ -148,6 +172,10 @@ _LEAD_INS = {
     "we'll assess you against these technical skills during the selection process",
     "we will assess you against these technical skills during the selection process",
     "to be successful in this role, you will need",
+    "you will have",
+    "you should have",
+    "the successful candidate will have",
+    "the successful applicant will have",
 }
 
 _PERSON_SPEC_CRITERION_PREFIXES = (
@@ -191,6 +219,23 @@ _NON_REQUIREMENT_PREFIXES = (
 )
 
 
+# Candidate requirements and employer-provided benefits/process information often
+# appear in one unstructured "About you" block. These highly specific patterns
+# avoid marking perks, dates and recruitment contacts as essential criteria.
+# Do not use generic words such as "support", "training" or "transport" here:
+# those can also occur in genuine applicant requirements.
+_NON_CANDIDATE_COPY = (
+    re.compile(r"^(?:applications?\s+(?:close|closing|deadline)|closing\s+date(?:\s+for\s+applications)?|application\s+deadline|interviews?\s*[:–—-]\s*(?:tbc|to\s+be\s+confirmed|on|from|at)?|interview\s+dates?|interviews?\s+(?:will|are|take))(?=\W|$)", re.I),
+    re.compile(r"^(?:if\s+you\s+(?:would\s+like|wish|want)\s+to\s+discuss\s+the\s+role|for\s+(?:further|more)\s+(?:details|information)(?:\s+about\s+the\s+role)?[,:\s]|please\s+contact\b|contact\s+(?:us|hr|recruitment)\b)", re.I),
+    re.compile(r"^(?:we\s+reserve\s+the\s+right\b|early\s+applications?\s+are\s+(?:advised|encouraged)|we\s+may\s+appoint\s+before\s+the\s+closing\s+date\b)", re.I),
+    re.compile(r"^(?:heavily\s+)?(?:subsidised|subsidized|free|discounted|complimentary)\s+(?:(?:staff|employee|on-site|onsite)\s+)?(?:gym\s+membership|childcare|nursery\s+(?:places|fees)|parking|meals?|healthcare|medical\s+insurance|eye\s+care)\b", re.I),
+    re.compile(r"^(?:bike\s*(?:2|to)\s*work\s*scheme|cycle\s+to\s+work\s*scheme|eye\s+care\s+voucher\s+scheme|employee\s+assistance\s+programme\b|staff\s+benefits?\b)", re.I),
+    re.compile(r"^(?:transport\s+links?\s+(?:are|is)\s+(?:excellent|good|convenient)|(?:located|situated)\s+(?:close|near|within)\s+.*\b(?:m1|m25|a1|a41|station)\b)", re.I),
+    re.compile(r"^(?:we|our\s+(?:school|trust|organisation|organization|company))\s+(?:offer|provide)\s+(?:(?:staff|employees?)\s+)?(?:support\s+and\s+training|a\s+range\s+of\s+benefits|subsidised\s+childcare|a\s+supportive\s+environment)\b", re.I),
+    re.compile(r"^(?:to\s+succeed\s+in\s+this\s+role[,:\s]+\s*you\s+should\s*:?|to\s+be\s+successful\s+in\s+this\s+role[,:\s]+\s*you\s+will\s+need\s*:?)$", re.I),
+)
+
+
 def is_non_requirement_text(value: str) -> bool:
     """Return True for advert/process copy that must never become candidate criteria."""
 
@@ -198,15 +243,39 @@ def is_non_requirement_text(value: str) -> bool:
     if not text:
         return True
     lowered = text.lower().rstrip(":?!").strip()
+    if lowered.replace("’", "'").replace("‘", "'") in _CANDIDATE_LIST_HEADINGS:
+        return True
     if lowered in _IGNORED_SECTION_HEADINGS or lowered in _SECTION_HEADINGS or lowered in _LEAD_INS:
         return True
     if re.fullmatch(r"benefits(?:\s+of\s+working(?:\s+(?:for|with)\s+.+|\s+here)?)?", lowered):
         return True
     if any(lowered.startswith(prefix) for prefix in _NON_REQUIREMENT_PREFIXES):
         return True
+    # "Staff benefits administration experience is essential" is a real
+    # candidate requirement, not an employer benefit. Only exempt explicit
+    # qualification/skill assertions, not generic employer marketing.
+    if re.search(
+        r"\b(?:experience|skills?|knowledge|ability|competenc(?:y|ies)|qualifications?|certification)\s+(?:is|are)\s+(?:essential|required|mandatory|desirable)\b",
+        lowered,
+    ):
+        return False
+    if any(pattern.search(text) for pattern in _NON_CANDIDATE_COPY):
+        return True
     if "@" in lowered and ("contact" in lowered or "email" in lowered or "problems" in lowered):
         return True
     return False
+
+
+def is_pure_non_requirement_source(source: str) -> bool:
+    """Exclude benefit-only excerpts without dropping real criteria in mixed spans."""
+    if not is_non_requirement_text(source):
+        return False
+    clauses = re.split(r"(?<=[.!?])\s+", source.strip())
+    return not any(
+        re.search(r"\b(?:experience|ability|skills?|knowledge|qualification|certification|must|essential|required)\b", part, re.I)
+        and not is_non_requirement_text(part)
+        for part in clauses
+    )
 
 
 def _heading_section(line: str, raw: str, is_bullet: bool) -> Category | Literal["ignore"] | None:
@@ -218,6 +287,8 @@ def _heading_section(line: str, raw: str, is_bullet: bool) -> Category | Literal
     looks_like_heading = raw.strip().endswith(":") or len(line.split()) <= 8
     if not looks_like_heading:
         return None
+    if lowered in _CANDIDATE_LIST_HEADINGS:
+        return "essential"
     if lowered in _SECTION_HEADINGS:
         return _SECTION_HEADINGS[lowered]
     if lowered in _IGNORED_SECTION_HEADINGS or re.fullmatch(
@@ -351,6 +422,7 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     section: Category | None = None
     in_person_specification = False
+    in_candidate_list = False
 
     eligibility_cues = (
         "right to work",
@@ -458,6 +530,14 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         "dbs clearance",
     )
 
+    # Advert exporters often join a benefit sentence and a genuine criterion
+    # on one line. Split at a new, clearly candidate-oriented sentence so a
+    # preceding "We offer..." cannot swallow its actual requirement.
+    vacancy_text = re.sub(
+        r"(?i)(?<=\.)\s+(?=(?:experience|ability|knowledge|skills?|strong\s+|previous\s+experience|qualified\s+)\b)",
+        "\n",
+        vacancy_text,
+    )
     vacancy_text = re.sub(
         r"(?i)(?<=[.!?])\s+(requirements?\s+of\s+the\s+role\s*:)",
         r"\n\1",
@@ -474,8 +554,31 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         heading = _heading_section(line, raw, is_bullet)
         if heading is not None:
             in_person_specification = lowered == "person specification"
-            section = None if heading == "ignore" else heading
+            in_candidate_list = lowered in _CANDIDATE_LIST_HEADINGS
+            if heading == "ignore":
+                section = None
+            elif in_candidate_list and section in {"desirable", "eligibility"}:
+                # An informal introduction inherits the explicit prior scope.
+                pass
+            else:
+                section = heading
             continue
+
+        # Recognised candidate lead-ins are structure, not unrelated prose.
+        # Preserve the inherited category for the criteria that follow.
+        if in_candidate_list and lowered.rstrip(":?!").strip() in _LEAD_INS:
+            continue
+
+        # Blank lines commonly separate publisher bullets; prose ends scope.
+        if in_candidate_list and not (
+            is_bullet
+            or _CANDIDATE_ATTRIBUTE_PREFIX.match(line)
+            or _looks_like_person_spec_criterion(line, False)
+            or re.fullmatch(r"(?:excellent|good|effective|outstanding|well-developed|proven|sound|strong)\s+(?:[\w/-]+\s+){0,9}(?:skills?|abilities|ability|knowledge|experience)\.?", lowered)
+            or re.fullmatch(r"(?:qualified teacher status(?:\s*\(qts\))?|qts)\.?", lowered)
+        ):
+            in_candidate_list = False
+            section = None
 
         if is_non_requirement_text(line):
             continue
@@ -539,6 +642,52 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
         if credential_optional:
             items.append(_item(line, "desirable", 0.88, explicit_blocker=False))
             continue
+
+        # Explicitly negated or optional qualifications should not turn
+        # into mandatory checks or automatic essential evidence criteria.
+        qts_mentioned = bool(re.search(r"\b(?:qualified teacher status|qts)\b", lowered))
+        if qts_mentioned and re.search(r"\bnot\s+(?:required|essential|mandatory|needed)\b", lowered):
+            # Reject only the *negated qualification*, not a separate essential
+            # criterion in the same publisher sentence (for example:
+            # "QTS is not required, but experience supporting pupils is essential").
+            for clause in re.split(r"\b(?:but|however|whereas)\b|;", line, flags=re.IGNORECASE):
+                candidate = clause.strip(" ,;:")
+                if not candidate or re.search(
+                    r"\b(?:qualified teacher status|qts)\b", candidate, re.IGNORECASE
+                ):
+                    continue
+                if not re.search(
+                    r"\b(?:experience|knowledge|ability|skills?|qualification|essential|required|must|should|desirable)\b",
+                    candidate, re.IGNORECASE,
+                ):
+                    continue
+                if section in {"essential", "desirable"} or re.search(
+                    r"\b(?:is essential|is required|must|is desirable)\b", candidate, re.IGNORECASE
+                ):
+                    category = "desirable" if "desirable" in candidate.lower() else (
+                        section if section == "desirable" else "essential"
+                    )
+                    items.append(_item(candidate, category, 0.86))
+            continue
+        if qts_mentioned and re.search(r"\b(?:desirable|preferred|optional|advantageous)\b", lowered):
+            items.append(_item(line, "desirable", 0.88, explicit_blocker=False))
+            continue
+
+        # A standalone professional qualification under About You / an
+        # explicit essential list is a candidate-confirmed prerequisite.
+        # Treat it as an eligibility check rather than pretending an Evidence
+        # Bank anecdote can prove possession of that qualification.
+        bare_qts_requirement = (
+            section in {"essential", "eligibility"}
+            and bool(re.fullmatch(
+                r"(?:qualified teacher status(?:\s*\(qts\))?|qts)\.?",
+                lowered,
+            ))
+        )
+        if bare_qts_requirement:
+            items.append(_item(line, "eligibility", 0.96, explicit_blocker=True))
+            continue
+
         if section != "desirable" and (any(cue in lowered for cue in eligibility_cues) or credential_mandatory):
             items.append(_item(line, "eligibility", 0.9, explicit_blocker=explicit_blocker))
             continue
@@ -548,6 +697,24 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
 
         if re.match(r"^(?:salary|pay|benefits?)\s*:", lowered):
             section = None
+            continue
+
+        if (
+            len(line) <= 420
+            and _INLINE_CANDIDATE_PREFERENCE.match(lowered)
+            and not re.search(r"\b(?:not|never|no)\b", lowered)
+        ):
+            clauses = re.split(r"\s*[,;]?\s+\b(?:but|however|whereas)\b\s*,?\s+", line, flags=re.IGNORECASE)
+            if len(clauses) > 1:
+                mandatory = [clause.strip(" ,;:") for clause in clauses[1:]
+                             if re.search(r"\b(?:is essential|is required|are essential|are required|must demonstrate|must have|must hold)\b", clause, re.IGNORECASE)]
+                if mandatory:
+                    # Do not classify an explicitly mandatory clause as a preference.
+                    items.append(_item(clauses[0].strip(" ,;:"), "desirable", 0.88))
+                    for clause in mandatory:
+                        items.append(_item(clause, "essential", 0.9))
+                    continue
+            items.append(_item(line, "desirable", 0.88, explicit_blocker=False))
             continue
 
         if section == "essential" and re.search(

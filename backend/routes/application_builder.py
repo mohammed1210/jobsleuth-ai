@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any, Literal
 
@@ -10,9 +11,12 @@ from pydantic import BaseModel, Field
 
 from lib.application_ai import semantic_application_draft
 from lib.application_draft import coverage, deterministic_draft
+from lib.application_readiness import missing_direct_school_experience
+from lib.vacancy_extraction import is_non_requirement_text
 from routes.saved_jobs import verify_supabase_user
 
 router = APIRouter(prefix="/application-builder", tags=["application_builder"])
+logger = logging.getLogger(__name__)
 
 _META_VERBS = r"demonstrates|shows|illustrates|supports|underpins|evidences|addresses|highlights"
 _META_COMMENTARY_RE = re.compile(
@@ -85,9 +89,39 @@ async def build_application(
     role_title = str(request.job.get("title", "the role") or "the role").strip()[:300]
     organisation = str(request.job.get("organisation", request.job.get("company", "")) or "").strip()[:300]
     cards_by_id = {card.id: card for card in request.evidence_cards if card.id}
+    # Defence in depth: saved assessments or older clients may still send
+    # employer perks, deadlines and contact information as fake essentials.
+    requirements = [item for item in request.requirements if not is_non_requirement_text(item.text)]
+
+    # A school-workplace experience requirement is not met by generic
+    # transferable operations skills. Return useful gaps rather than an
+    # unrelated submission-style narrative, even if a client supplies an
+    # optimistic match_strength. Other role types remain unaffected.
+    role_experience_gaps = missing_direct_school_experience(requirements, cards_by_id)
+    if role_experience_gaps:
+        return {
+            "ok": True,
+            "can_generate": False,
+            "provider": "role-readiness-guard-v1",
+            "fallback_reason": "missing_direct_school_experience",
+            "application_type": request.application_type,
+            "word_limit": request.word_limit,
+            "word_count": 0,
+            "draft": "",
+            "paragraphs": [],
+            "coverage": coverage(requirements, []),
+            "warnings": [
+                "A full role-specific application draft is paused because direct school-setting experience "
+                "required by the vacancy is not verified in the linked Evidence Bank examples. "
+                "Transferable experience may still be useful, but it does not establish this requirement.",
+                *[f"Add a genuine, verifiable example for: {item}" for item in role_experience_gaps[:5]],
+                "You can still review the employer's instructions and strengthen your evidence; this is not "
+                "a determination of whether the employer will consider your application.",
+            ],
+        }
 
     paragraphs, semantic_status = semantic_application_draft(
-        request.requirements,
+        requirements,
         cards_by_id,
         role_title,
         organisation,
@@ -105,6 +139,38 @@ async def build_application(
         paragraphs = None
 
     fallback_used = not paragraphs
+    # Deterministic fallback is a collection of copied evidence, not a
+    # role-tailored letter. With only Partial/Weak/Missing matches, publishing
+    # a full-length freight narrative for an unrelated receptionist vacancy
+    # is misleading even when the applicant clicked "use current evidence".
+    # A grounded semantic draft can still proceed when it passes validation.
+    has_essential_requirements = any(item.category == "essential" for item in requirements)
+    strong_role_evidence = any(
+        item.match_strength == "strong"
+        and (item.category == "essential" or not has_essential_requirements)
+        and any(evidence_id in cards_by_id for evidence_id in item.evidence_ids)
+        for item in requirements
+    )
+    if fallback_used and not strong_role_evidence:
+        return {
+            "ok": True,
+            "can_generate": False,
+            "provider": "evidence-readiness-guard-v2",
+            "fallback_reason": "no_strong_essential_evidence",
+            "application_type": request.application_type,
+            "word_limit": request.word_limit,
+            "word_count": 0,
+            "draft": "",
+            "paragraphs": [],
+            "coverage": coverage(requirements, []),
+            "warnings": [
+                "A relevant application draft could not be prepared from the current evidence. "
+                "The recorded examples do not strongly demonstrate an essential requirement, "
+                "and the assisted drafting service did not return a verified role-specific draft.",
+                "Add or strengthen a genuine example that demonstrates the advertised role's "
+                "essential skills, then try again. You can still review the employer's advert.",
+            ],
+        }
     cover_letter_intro = ""
     cover_letter_closing = ""
     if request.application_type == "cover_letter":
@@ -118,7 +184,7 @@ async def build_application(
             framing_words = len(cover_letter_intro.split()) + len(cover_letter_closing.split())
             fallback_budget = max(1, request.word_limit - framing_words)
         paragraphs = deterministic_draft(
-            request.requirements,
+            requirements,
             cards_by_id,
             role_title,
             word_limit=fallback_budget,
@@ -126,7 +192,7 @@ async def build_application(
         paragraphs = _normalise_paragraphs(paragraphs)
         provider = "deterministic-grounded-v2"
 
-    requirement_coverage = coverage(request.requirements, paragraphs)
+    requirement_coverage = coverage(requirements, paragraphs)
     draft = _compose_draft(paragraphs)
     if draft and fallback_used and request.application_type == "cover_letter":
         draft = f"{cover_letter_intro}\n\n{draft}\n\n{cover_letter_closing}"
@@ -134,11 +200,23 @@ async def build_application(
     total_words = len(draft.split()) if draft else 0
 
     warnings: list[str] = []
-    for item in requirement_coverage:
-        if item["category"] == "essential" and item["status"] == "evidence-gap":
+    if fallback_used and paragraphs:
+        warnings.append(
+            "This fallback assembles recorded Evidence Bank facts rather than writing a role-tailored statement. "
+            "It is a working excerpt, not a submission-ready application: review relevance to the advertised role, "
+            "mandatory qualifications and employer instructions before using it."
+        )
+    evidence_gaps = [
+        item for item in requirement_coverage
+        if item["category"] == "essential" and item["status"] in {"evidence-gap", "partially-covered"}
+    ]
+    for item in evidence_gaps[:4]:
+        if item["status"] == "evidence-gap":
             warnings.append(f"Essential requirement not drafted because supporting evidence is insufficient: {item['requirement']}")
-        elif item["category"] == "essential" and item["status"] == "partially-covered":
+        else:
             warnings.append(f"Partial evidence is being used for this essential requirement and should be reviewed carefully: {item['requirement']}")
+    if len(evidence_gaps) > 4:
+        warnings.append(f"{len(evidence_gaps) - 4} additional essential requirements need review; see the full criteria coverage for details.")
     if total_words > request.word_limit:
         warnings.append(f"Draft is {total_words} words, above the requested {request.word_limit}-word limit. Edit before submitting.")
     elif paragraphs and request.word_limit >= 300 and total_words < int(request.word_limit * 0.65):
@@ -148,6 +226,10 @@ async def build_application(
         )
     if not paragraphs:
         warnings.append("No Strong or Partial matched evidence is available to build a supported draft.")
+
+    # Operational metadata only; never log draft text or applicant evidence.
+    logger.warning("application_builder completed generated=%s provider=%s words=%d paragraphs=%d",
+                   bool(paragraphs), provider, total_words, len(paragraphs))
 
     return {
         "ok": True,

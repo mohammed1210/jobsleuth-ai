@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from lib.transferable_capabilities import (has_compound_accuracy_deadline_gap, has_telephone_requirement_gap, transferable_action_support)
+
 _STOPWORDS = {
     "able", "about", "across", "also", "and", "are", "been", "being", "can", "demonstrate",
     "for", "from", "have", "into", "must", "our", "required", "role", "that", "the", "their",
@@ -204,9 +206,53 @@ def has_personal_management_scope(card: Any) -> bool:
     )
 
 
+def requires_school_setting_experience(requirement: str) -> bool:
+    """Detect a *specific* direct-experience requirement, not general school knowledge.
+
+    A requirement such as "leadership experience within a primary school setting"
+    cannot be fulfilled by unrelated operations leadership.
+    """
+    return bool(
+        re.search(r"\b(?:experience|worked|working|employed|taught)\b", requirement, re.I)
+        and re.search(
+            r"\b(?:within|in|at)\s+(?:(?:a|an|the)\s+)?(?:primary|secondary)\s+schools?\b",
+            requirement, re.I,
+        )
+    )
+
+
+def has_school_setting_experience(card: Any) -> bool:
+    """Require an explicit school-setting work example, not generic transferable skills."""
+    title = str(getattr(card, "title", "") or "")
+    task = str(getattr(card, "task", "") or "")
+    actions = [str(v) for v in (getattr(card, "actions", []) or [])]
+    situation = str(getattr(card, "situation", "") or "")
+    authority = str(getattr(card, "authority_context", "") or "")
+    # A school is named as the candidate's role/workplace, or their actions
+    # explicitly describe working in that type of school.
+    if re.search(r"\b(?:primary|secondary)\s+school\b", title, re.I):
+        return True
+    workplace_action = re.compile(
+        r"\b(?:worked|working|taught|teaching|led|managed|supervised|coached|supported)\b"
+        r".{0,100}\b(?:primary|secondary)\s+schools?\b", re.I,
+    )
+    personal_role = re.compile(
+        r"\b(?:I\s+(?:was|am|served|held|worked|taught|led)\b|my\s+(?:role|position)\s+(?:was|at)\b)"
+        r"[^.\n]{0,120}\b(?:primary|secondary)\s+schools?\b", re.I,
+    )
+    facts = [task, situation, authority, *actions]
+    return any(workplace_action.search(value) or personal_role.search(value) for value in facts)
+
+
 def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
     signals = _support_signals(requirement, card)
     score = signals["score"]
+    # Lexical fallback misses skills expressed as real administrative actions
+    # (rosters, auditing, shifting priorities). Only use an action-grounded
+    # floor, never a bare skill label or an inferred qualification.
+    transferable = transferable_action_support(requirement, card)
+    if transferable is not None:
+        score = max(score, transferable[0])
 
     # Scope-sensitive management requirements must be supported by the candidate's
     # own management/leadership actions, not merely by words such as "security",
@@ -215,6 +261,15 @@ def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
     has_management_scope = has_personal_management_scope(card)
     if management_requirement and not has_management_scope:
         score = min(score, 39.0)
+    school_setting_gap = requires_school_setting_experience(requirement) and not has_school_setting_experience(card)
+    if school_setting_gap:
+        score = min(score, 39.0)
+    accuracy_deadline_gap = has_compound_accuracy_deadline_gap(requirement, card)
+    if accuracy_deadline_gap:
+        score = min(score, 69.0)
+    telephone_gap = has_telephone_requirement_gap(requirement, card)
+    if telephone_gap:
+        score = min(score, 69.0)
 
     strength = _strength(score)
     has_actions = bool(getattr(card, "actions", []) and any(str(value).strip() for value in getattr(card, "actions", []) or []))
@@ -224,6 +279,8 @@ def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
         score = min(score, 69.0)
 
     support_parts: list[str] = []
+    if transferable is not None and score >= transferable[0]:
+        support_parts.append("recorded personal actions demonstrate " + transferable[1])
     if signals["concepts"]:
         support_parts.append("related capability: " + ", ".join(signals["concepts"][:3]))
     if signals["action_overlap"]:
@@ -244,12 +301,20 @@ def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
         gaps.append("Outcome or impact is not recorded.")
     if management_requirement and not has_management_scope:
         gaps.append("The evidence does not demonstrate management or supervisory responsibility at the required level.")
-    if signals["concepts"] == [] and strength != "missing":
+    if school_setting_gap:
+        gaps.append("The evidence does not establish experience working in the required primary or secondary school setting.")
+    if accuracy_deadline_gap:
+        gaps.append("This example does not demonstrate accurate work delivered to a deadline.")
+    if telephone_gap:
+        gaps.append("This example does not demonstrate handling telephone enquiries.")
+    if signals["concepts"] == [] and strength != "missing" and not (transferable and score >= transferable[0]):
         gaps.append("The evidence does not clearly demonstrate the underlying capability, only related wording.")
     if strength == "missing":
         gaps.append("No sufficiently relevant evidence is recorded for this requirement.")
 
     why = "; ".join(support_parts) if support_parts else "No meaningful support found in this Evidence Card."
+    if school_setting_gap:
+        why = "Some transferable skills may overlap, but the required school-setting experience is not evidenced."
     confidence = round(min(0.96, 0.48 + (signals["quality"] * 0.2) + (abs(score - 50) / 100)), 2)
 
     return {
@@ -263,6 +328,7 @@ def deterministic_match(requirement: str, card: Any) -> dict[str, Any]:
             "concepts": signals["concepts"],
             "matched_terms": signals["overlap"][:8],
             "evidence_quality": signals["quality"],
+            "transferable_capability": transferable[1] if transferable and score >= transferable[0] else None,
         },
     }
 

@@ -17,8 +17,8 @@ Move from ad hoc conversations and PR-by-PR fixes to a small, repeatable improve
 1. Refresh repository `main`, open PRs, review threads, failing checks, outstanding GitHub issues, latest Railway deployment and any pilot feedback. Work from fresh state, not chat memory.
 2. Prioritise one high-impact item: **P0 incident > P1 evidence/eligibility/auth/privacy issue > common-path pilot blocker > billing safety > regression coverage > cosmetics**.
 3. Choose the smallest independently testable fix. Prefer existing issues, especially #90, #88, #60 and #48. Avoid duplicate PRs.
-4. Make changes on a new topic branch. Include tests and a short reproduction/acceptance checklist. Open a draft PR; never push directly to `main`.
-5. Let Backend CI, Frontend CI and relevant GitHub checks run. Fix P0/P1 and common-path P2 findings, but defer theoretical P2 parser variations unless observed in real pilot use.
+4. Prefer an existing PR branch. Use at most two active engineering PRs; create a new branch only for an existing defect without a suitable PR. Include tests and an acceptance checklist. Never push directly to `main`.
+5. Run latest-head CI and relevant checks. Resolve actionable review findings with regression evidence; request fresh review after substantive changes. Do not merge merely because CI is green.
 6. Request human review at the merge gate. Check deployment status, live `/health` and end-to-end smoke flow after an approved release.
 7. Record what was accomplished, proof (checks/links), blockers, and one next action. Do not report an unmerged PR as shipped.
 
@@ -41,14 +41,13 @@ Move from ad hoc conversations and PR-by-PR fixes to a small, repeatable improve
 - [ ] Any migration has a rollback plan and explicit approval
 - [ ] Reviewer has confirmed deployment implications
 
-## Current priorities and release order
+## Current priorities and release order (2026-11-28)
 
-1. Reconcile **PR #90** with latest `main`; finish verified Stripe lifecycle persistence, but keep checkout disabled.
-2. Close **issue #88** safety work only after authenticated checkout/portal, server-side feature gates, test catalogue and real sandbox lifecycle checks are proven.
-3. Confirm frontend and backend deployments correspond to intended commits; establish post-deploy smoke checks.
-4. Run **issue #60** five-tester pilot and collect anonymised outcomes. An actual payment signal is distinct from stated willingness to pay.
-5. Keep **issue #48** review debt bounded by observed P1 issues; do not indefinitely delay pilot validation for speculative P2s.
-6. Reassess scope and monetisation only after the pilot decision gate in **issue #13**.
+1. Verify guided Apply and draft retention in production; address semantic timeout, eligibility classification and drafting quality under existing work.
+2. Clear remaining review debt: #92 guardrails, #95 migration security/supersession, #109 source rights, #90 billing. Keep payment and feed activation separately gated.
+3. Track #102 security, #93 deployment freshness, #116 stale analysis, #117 eligibility, #118 matcher modifiers, #106 draft quality and #48 review debt.
+4. Keep #60 pilot, #13 scorecard and other milestone issues open until their acceptance criteria are demonstrated.
+5. Audit stale branches against merged PR heads, branch protection, open PR dependencies and deployment pins. Preserve closed-unmerged and security branches. Enable automatic head-branch deletion in repository settings only by owner action. Never overwrite a branch to simulate deletion.
 
 ## Automation coverage
 
@@ -58,7 +57,7 @@ Move from ad hoc conversations and PR-by-PR fixes to a small, repeatable improve
 
 ## Progress ledger template
 
-Date | Latest main SHA | Backend deployed SHA/date | Open PRs | Checks | Work performed | Approval needed | Next single priority
+Date | Latest main SHA | Backend deployed SHA/date | Open PRs | Open issues | Branches | Checks | Work performed | Approval needed | Next single priority
 
 ## What the owner retains
 

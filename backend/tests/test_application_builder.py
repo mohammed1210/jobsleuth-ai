@@ -102,6 +102,7 @@ def test_deterministic_builder_uses_supported_evidence_and_reports_gap(monkeypat
     assert data["can_generate"] is True
     assert data["provider"] == "deterministic-grounded-v2"
     assert data["fallback_reason"] == "openai_RateLimitError"
+    assert any("not a submission-ready application" in warning for warning in data["warnings"])
     assert card.actions[0] in data["draft"]
     assert data["coverage"][0]["status"] == "covered"
     assert data["coverage"][1]["status"] == "evidence-gap"
@@ -176,6 +177,7 @@ def test_successful_semantic_draft_has_no_fallback_reason(monkeypatch):
     data = client.post("/application-builder", headers=HEADERS, json=payload).json()
     assert data["provider"] == "openai-grounded-v1"
     assert data["fallback_reason"] is None
+    assert not any("not a submission-ready application" in warning for warning in data["warnings"])
     assert any("uses only" in warning for warning in data["warnings"])
 
 
@@ -245,3 +247,66 @@ def test_cover_letter_fallback_has_cover_letter_framing(monkeypatch):
     assert data["draft"].endswith("Thank you for considering my application.")
     assert card.actions[0] in data["draft"]
     assert data["word_count"] <= 500
+
+
+def test_partial_only_unrelated_evidence_cannot_turn_into_full_receptionist_cover_letter(monkeypatch):
+    monkeypatch.setattr("routes.application_builder.semantic_application_draft", lambda *a, **k: (None, "no_api_key"))
+    card = evidence_card().model_copy(update={"title": "High-risk freight examination and relocation decision"})
+    data = client.post("/application-builder", headers=HEADERS, json={
+        "job": {"title": "Afternoon Receptionist", "organisation": "Bushey Meads School"},
+        "application_type": "cover_letter",
+        "word_limit": 600,
+        "requirements": [
+            {"text": "Excellent organisational skills", "category": "essential", "match_strength": "partial", "evidence_ids": [card.id]},
+            {"text": "Administration experience", "category": "essential", "match_strength": "missing", "evidence_ids": []},
+            {"text": "Outstanding telephone manner", "category": "essential", "match_strength": "weak", "evidence_ids": [card.id]},
+            {"text": "Free gym membership to all employees across the Trust", "category": "essential", "match_strength": "missing", "evidence_ids": []},
+            {"text": "Closing Date for applications: Tuesday 1st December 2026 (9am)", "category": "essential", "match_strength": "missing", "evidence_ids": []},
+        ],
+        "evidence_cards": [card.model_dump()],
+    }).json()
+    assert data["can_generate"] is False
+    assert data["draft"] == ""
+    assert data["paragraphs"] == []
+    assert data["provider"] == "evidence-readiness-guard-v2"
+    assert data["fallback_reason"] == "no_strong_essential_evidence"
+    assert not any("gym membership" in item["requirement"] for item in data["coverage"])
+    assert not any("closing date" in item["requirement"].lower() for item in data["coverage"])
+
+
+def test_fallback_warning_list_is_bounded_and_source_benefits_excluded(monkeypatch):
+    monkeypatch.setattr("routes.application_builder.semantic_application_draft", lambda *a, **k: (None, "no_api_key"))
+    card = evidence_card()
+    requirements = [
+        {"text": "Make evidence-based recommendations", "category": "essential", "match_strength": "strong", "evidence_ids": [card.id]},
+        *[
+            {"text": f"Demonstrate specialist skill {i}", "category": "essential", "match_strength": "missing", "evidence_ids": []}
+            for i in range(15)
+        ],
+        {"text": "Bike 2 work scheme", "category": "essential", "match_strength": "missing", "evidence_ids": []},
+    ]
+    data = client.post("/application-builder", headers=HEADERS, json={
+        "job": {"title": "Operations Officer"},
+        "requirements": requirements,
+        "evidence_cards": [card.model_dump()],
+    }).json()
+    assert data["can_generate"] is True
+    assert len(data["warnings"]) <= 8
+    assert any("additional essential requirements" in warning for warning in data["warnings"])
+    assert len(data["coverage"]) == 16
+
+
+def test_no_essential_section_still_allows_strongly_supported_desirable_fallback(monkeypatch):
+    monkeypatch.setattr("routes.application_builder.semantic_application_draft", lambda *a, **k: (None, "no_api_key"))
+    card = evidence_card()
+    data = client.post("/application-builder", headers=HEADERS, json={
+        "job": {"title": "Operations Analyst"},
+        "application_type": "cover_letter",
+        "requirements": [
+            {"text": "Experience comparing operational risks", "category": "desirable", "match_strength": "strong", "evidence_ids": [card.id]},
+        ],
+        "evidence_cards": [card.model_dump()],
+    }).json()
+    assert data["can_generate"] is True
+    assert data["provider"] == "deterministic-grounded-cover-letter-v1"
+    assert "operational risks" in data["draft"]

@@ -5,7 +5,8 @@ import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import HeaderClient from '@/components/HeaderClient';
-import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { getFreshSession, getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { safeLoginReturnPath } from '@/lib/jobApplicationHandoff';
 
 type Mode = 'sign-in' | 'sign-up';
 
@@ -22,9 +23,11 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!isSupabaseConfigured()) return;
-    const supabase = getSupabaseClient();
-    void supabase.auth.getSession().then(({ data }) => {
-      if (data.session) router.replace('/apply/vacancy');
+    void getFreshSession().then((session) => {
+      if (session) {
+        const target = safeLoginReturnPath(new URLSearchParams(window.location.search).get('next'));
+        router.replace(target);
+      }
     });
   }, [router]);
 
@@ -53,7 +56,8 @@ export default function LoginPage() {
         const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
         if (authError) throw authError;
         if (!data.session) throw new Error('Sign in did not create a session.');
-        router.replace('/apply/vacancy');
+        const target = safeLoginReturnPath(new URLSearchParams(window.location.search).get('next'));
+        router.replace(target);
         router.refresh();
         return;
       }
@@ -61,7 +65,8 @@ export default function LoginPage() {
       const { data, error: authError } = await supabase.auth.signUp({ email, password });
       if (authError) throw authError;
       if (data.session) {
-        router.replace('/apply/vacancy');
+        const target = safeLoginReturnPath(new URLSearchParams(window.location.search).get('next'));
+        router.replace(target);
         router.refresh();
       } else {
         setMessage('Account created. If email confirmation is enabled for this project, confirm your address before signing in.');

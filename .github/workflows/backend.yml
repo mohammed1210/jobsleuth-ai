@@ -32,3 +32,29 @@ jobs:
 
       - name: Backend tests
         run: pytest -q
+
+      # A real read-only page-one response MUST validate for the pilot.
+      # No credentials, no vacancy imports, and no raw job descriptions logged.
+      - name: DfE FIRST-PAGE source contract - required for pilot
+        if: github.event_name == 'pull_request' && github.event.pull_request.number == 99
+        timeout-minutes: 3
+        run: python -m scripts.probe_dfe
+
+      # Stage 4 experience release relies on per-slug enrichment, never
+      # pagination-derived expiry. Verify one official publisher detail.
+      - name: DfE INDIVIDUAL-JOB contract - required before salary backfill
+        if: github.event_name == 'pull_request' && github.event.pull_request.number == 101
+        timeout-minutes: 3
+        run: python -m scripts.probe_dfe --individual
+
+      # Upstream publish-date-only sorting is not a stable full snapshot.
+      # Diagnostic only: green CI MUST NOT be interpreted as full-feed approval.
+      - name: DfE FULL-SCAN diagnostic - advisory, NOT approved for import
+        if: github.event_name == 'pull_request' && github.event.pull_request.number == 99
+        continue-on-error: true
+        timeout-minutes: 5
+        run: python -m scripts.probe_dfe --full
+
+      - name: Isolated Supabase bootstrap and RLS tests
+        timeout-minutes: 5
+        run: bash ../ops/supabase/verify_fresh_project.sh

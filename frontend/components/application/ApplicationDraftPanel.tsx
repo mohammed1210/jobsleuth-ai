@@ -16,7 +16,7 @@ import {
   type PilotFeedbackDraft,
 } from '@/lib/pilotFeedbackForm';
 
-type Props = { session: Session; analysis: VacancyAnalysis; evidence: EvidenceCard[]; vacancyText: string };
+type Props = { session: Session; analysis: VacancyAnalysis; evidence: EvidenceCard[]; vacancyText: string; originalAdvertUrl?: string | null };
 
 const EVIDENCE_TARGET_KEY = 'jobsleuth.evidence.target.v1';
 
@@ -29,13 +29,14 @@ const statusLabel: Record<string, string> = {
 
 const normalise = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
-export default function ApplicationDraftPanel({ session, analysis, evidence, vacancyText }: Props) {
+export default function ApplicationDraftPanel({ session, analysis, evidence, vacancyText, originalAdvertUrl }: Props) {
   const instructions = useMemo(() => detectApplicationInstructions(vacancyText), [vacancyText]);
   const [roleTitle, setRoleTitle] = useState('');
   const [organisation, setOrganisation] = useState('');
   const [selectedPartId, setSelectedPartId] = useState('');
   const [applicationType, setApplicationType] = useState<ApplicationType>('statement_of_suitability');
   const [wordLimitInput, setWordLimitInput] = useState('500');
+  const [wordLimitEdited, setWordLimitEdited] = useState(false);
   const [draftAnyway, setDraftAnyway] = useState(false);
   const [result, setResult] = useState<ApplicationDraftResult | null>(null);
   const [draft, setDraft] = useState('');
@@ -57,6 +58,7 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
     setSelectedPartId(first?.id ?? '');
     setApplicationType(first?.kind === 'criteria' ? 'criteria_response' : first?.kind === 'cover_letter' ? 'cover_letter' : 'statement_of_suitability');
     setWordLimitInput(String(first?.wordLimit ?? instructions.wordLimit ?? 500));
+    setWordLimitEdited(false);
     setDraftAnyway(false);
     setResult(null);
     setDraft('');
@@ -72,6 +74,7 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
           : 'statement_of_suitability',
     );
     setWordLimitInput(String(selectedPart.wordLimit ?? (selectedPart.kind === 'behaviour' ? 250 : instructions.wordLimit ?? 500)));
+    setWordLimitEdited(false);
     setDraftAnyway(false);
     setResult(null);
     setDraft('');
@@ -124,6 +127,10 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
   }, [analysis.requirements, evidence, selectedPart]);
 
   const liveWordCount = useMemo(() => draft.trim() ? draft.trim().split(/\s+/).length : 0, [draft]);
+  const unmetEligibility = useMemo(
+    () => analysis.requirements.filter((item) => item.category === 'eligibility' && item.status === 'not-met'),
+    [analysis.requirements],
+  );
 
   const readiness = useMemo(() => {
     const essential = activeRequirements.filter((item) => item.category === 'essential');
@@ -149,6 +156,10 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
   }, [activeRequirements]);
 
   const build = async () => {
+    if (unmetEligibility.length) {
+      setMessage('A mandatory eligibility requirement is marked not met. Review your answers and re-analyse before building this vacancy application.');
+      return;
+    }
     if (readiness.needsStrengthening && !draftAnyway) {
       setMessage('Review the evidence-readiness warning first. Strengthen your Evidence Bank or explicitly choose to draft with current evidence.');
       return;
@@ -166,7 +177,7 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
       setFeedbackSaved(false);
       setPilotFeedback({ ...EMPTY_PILOT_FEEDBACK });
       setResult(next); setDraft(next.draft);
-      if (!next.can_generate) setMessage('JobSleuth did not find enough supported evidence to draft safely. Strengthen the Evidence Bank first.');
+      if (!next.can_generate) setMessage(next.warnings[0] || 'Not enough verified role-specific evidence to draft safely. Strengthen the Evidence Bank first.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Application Builder could not generate a draft. Please try again.');
     } finally { setBuilding(false); }
@@ -266,6 +277,13 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
         </div>
       )}
 
+      {unmetEligibility.length > 0 && (
+        <div role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+          <strong>Mandatory eligibility not met.</strong> You marked {unmetEligibility.length} required check(s) as not met.
+          This vacancy's draft action is paused. Revisit Eligibility checks in Step 2 and re-analyse only if your answer changes.
+        </div>
+      )}
+
       {readiness.needsStrengthening ? (
         <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
           <p className="font-semibold text-amber-950">Some essential evidence needs strengthening</p>
@@ -285,6 +303,26 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
         </div>
       )}
 
+      <div role="note" className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+        <p className="font-semibold">Confirm the employer's application requirements</p>
+        <p className="mt-2">
+          {instructions.applicationFormatConfirmed
+            ? 'A document type was detected in the vacancy text, but the original employer application form remains authoritative.'
+            : 'The imported advert does not clearly specify a required written application format. The statement option is a JobSleuth drafting suggestion, not an employer instruction.'}
+        </p>
+        <p className="mt-1">
+          {instructions.wordLimitConfirmed
+            ? 'A word allowance was detected in the vacancy text; check it applies to the document you are preparing.'
+            : 'No employer word limit was identified. The 500-word allowance is only JobSleuth’s editable working default.'}
+        </p>
+        <p className="mt-1">Before submitting, check the original advert for the required form, documents, selection criteria, closing date and any separate person specification.</p>
+        {originalAdvertUrl && /^https?:\/\//i.test(originalAdvertUrl) && (
+          <a href={originalAdvertUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex font-semibold underline">
+            Review original employer vacancy
+          </a>
+        )}
+      </div>
+
       <details className="mt-4 rounded-xl border bg-white">
         <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-gray-800">
           Draft settings
@@ -292,7 +330,9 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
         </summary>
         <div className="space-y-4 border-t p-4">
           <div className="rounded-xl bg-gray-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Detected application instructions</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              {instructions.applicationFormatConfirmed ? 'Document references found in advert' : 'Suggested drafting format — not employer-confirmed'}
+            </p>
             <div className="mt-2 flex flex-wrap gap-2">
               {instructions.applicationParts.map((part) => (
                 <span key={part.id} className="rounded-full bg-white px-3 py-1 text-sm font-medium text-gray-800">
@@ -309,16 +349,16 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
             <label className="text-sm font-medium text-gray-700">Role title<input value={roleTitle} onChange={(e) => setRoleTitle(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2" placeholder="e.g. Counter Fraud Officer" /></label>
             <label className="text-sm font-medium text-gray-700">Organisation<input value={organisation} onChange={(e) => setOrganisation(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2" placeholder="Optional" /></label>
             <label className="text-sm font-medium text-gray-700">Draft format<select value={applicationType} onChange={(e) => setApplicationType(e.target.value as ApplicationType)} className="mt-1 w-full rounded-xl border px-3 py-2"><option value="statement_of_suitability">Personal statement / statement of suitability</option><option value="cover_letter">Cover letter</option><option value="criteria_response">Criteria / behaviour response</option></select></label>
-            <label className="text-sm font-medium text-gray-700">Word limit<input inputMode="numeric" value={wordLimitInput} onChange={(e) => setWordLimitInput(e.target.value.replace(/[^0-9]/g, ''))} onBlur={() => setWordLimitInput(String(wordLimit))} className="mt-1 w-full rounded-xl border px-3 py-2" placeholder="e.g. 750" /></label>
+            <label className="text-sm font-medium text-gray-700">Word limit<input inputMode="numeric" value={wordLimitInput} onChange={(e) => { setWordLimitInput(e.target.value.replace(/[^0-9]/g, '')); setWordLimitEdited(true); }} onBlur={() => setWordLimitInput(String(wordLimit))} className="mt-1 w-full rounded-xl border px-3 py-2" placeholder="e.g. 750" /></label>
           </div>
         </div>
       </details>
 
       <div className="mt-5 flex flex-wrap items-center gap-3">
-        <button type="button" onClick={build} disabled={building || (readiness.needsStrengthening && !draftAnyway)} className="btn-primary disabled:cursor-not-allowed disabled:opacity-50">
+        <button type="button" onClick={build} disabled={building || unmetEligibility.length > 0 || (readiness.needsStrengthening && !draftAnyway)} className="btn-primary disabled:cursor-not-allowed disabled:opacity-50">
           {building ? 'Building evidence-backed draft…' : `Build ${selectedPart?.label ?? 'application'} draft`}
         </button>
-        <span className="text-xs text-gray-500">{wordLimit} word limit</span>
+        <span className="text-xs text-gray-500">{wordLimit} words · {wordLimitEdited ? 'your chosen working limit (check employer cap)' : instructions.wordLimitConfirmed ? 'advert text (verify)' : 'JobSleuth working default'}</span>
       </div>
 
       {message && <div className="mt-4 rounded-xl border bg-white px-4 py-3 text-sm text-gray-700">{message}</div>}
@@ -327,16 +367,29 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
         <div className="mt-6 space-y-5 border-t pt-6">
           {result.warnings.length > 0 && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-              <p className="font-semibold text-amber-900">Review before submitting</p>
+              <p className="font-semibold text-amber-900">{result.can_generate ? 'Review before submitting' : 'Full draft not generated — evidence gaps'}</p>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-900">{result.warnings.map((w) => <li key={w}>{w}</li>)}</ul>
             </div>
           )}
 
+          {result.provider.startsWith('deterministic-grounded') && (
+            <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <strong>Evidence excerpt — manual tailoring required.</strong> AI drafting was unavailable or did not pass grounding checks.
+              This version assembles your recorded examples; it does not itself explain why they meet the
+              advertised role, confirm professional qualifications or replace the employer's application instructions.
+            </p>
+          )}
+
+          {result.can_generate && (
           <div>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h3 className="font-semibold text-gray-900">{selectedPart?.label ?? 'Editable'} draft</h3>
-                <p className="text-xs text-gray-500">Edit freely, then check the facts before submitting.</p>
+                <h3 className="font-semibold text-gray-900">
+                  {result.provider.startsWith('deterministic-grounded')
+                    ? 'Editable evidence-based working draft'
+                    : `${selectedPart?.label ?? 'Editable'} draft`}
+                </h3>
+                <p className="text-xs text-gray-500">Edit freely, then check the facts and relevance before submitting.</p>
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-sm text-gray-600">{liveWordCount} / {wordLimit} words</span>
@@ -345,6 +398,7 @@ export default function ApplicationDraftPanel({ session, analysis, evidence, vac
             </div>
             <textarea value={draft} onChange={(e) => setDraft(e.target.value)} className="min-h-[22rem] w-full rounded-xl border px-4 py-3 leading-7" placeholder="A supported draft will appear here." />
           </div>
+          )}
 
           <details className="rounded-xl border bg-white">
             <summary className="cursor-pointer list-none px-4 py-3">

@@ -560,3 +560,134 @@ def test_route_supplements_under_extracted_semantic_result(monkeypatch):
     assert data["provider"] == "hybrid-grounded-v4"
     assert data["summary"]["items"] >= 7
     assert len([item for item in data["requirements"] if item["category"] == "trainable"]) == 2
+
+
+def test_school_receptionist_benefits_and_application_process_never_become_essentials():
+    advert = """
+Afternoon Receptionist at Bushey Meads School
+Essential criteria:
+- Excellent organisational skills
+- Outstanding communication skills with the ability to liaise with staff, students and visitors
+- Administration experience
+- Flexibility and a 'can-do' approach to meet changing needs and priorities
+
+We offer support and training based on individual needs
+Transport links are excellent with the M1, M25, A1 and A41 being close by
+Heavily subsidised childcare at our Little Gems Nursery
+Free gym membership to all employees across the Trust
+Employee Assistance Programme for support and guidance on health, legal and personal matters
+Eye Care Voucher Scheme
+Bike 2 work scheme
+If you would like to discuss the role, please contact the HR on 020 8955 8833.
+Closing Date for applications: Tuesday 1st December 2026 (9am)
+Interviews: TBC
+We reserve the right to make an appointment before the closing date, so early applications are advised
+"""
+    items = deterministic_extract(advert)
+    legitimate = [item["text"] for item in items if item["category"] == "essential"]
+    assert len(legitimate) == 4, legitimate
+    assert any("Administration experience" in text for text in legitimate)
+    assert all("gym membership" not in text.lower() for text in legitimate)
+    assert all("transport links" not in text.lower() for text in legitimate)
+    assert all("interviews" not in text.lower() for text in legitimate)
+
+    fake_semantic = [
+        {
+            "text": text, "source_text": text, "category": "essential",
+            "confidence": 0.96, "explicit_blocker": False,
+        }
+        for text in [
+            "Free gym membership to all employees across the Trust",
+            "Heavily subsidised childcare at our Little Gems Nursery",
+            "Closing Date for applications: Tuesday 1st December 2026 (9am)",
+            "Eye Care Voucher Scheme",
+            "Interviews: TBC",
+            "Employee Assistance Programme for support and guidance on health, legal and personal matters",
+        ]
+    ]
+    for item in fake_semantic:
+        assert _validate_item(item, advert) is None
+    merged, _ = _reconcile_items(fake_semantic, items)
+    assert {item["text"] for item in merged if item["category"] == "essential"} == set(legitimate)
+
+
+def test_non_candidate_copy_inside_labelled_essential_section_is_not_a_requirement():
+    advert = """
+Essential requirements
+- Experience working as a school receptionist
+- Strong telephone communication skills
+- Free gym membership for employees
+- Eye Care Voucher Scheme
+- Interviews: TBC
+- Closing Date for applications: Tuesday 1st December 2026 (9am)
+- We reserve the right to make an appointment before the closing date
+"""
+    items = deterministic_extract(advert)
+    assert [item["text"] for item in items if item["category"] == "essential"] == [
+        "Experience working as a school receptionist",
+        "Strong telephone communication skills",
+    ]
+
+
+def test_candidate_support_or_transport_requirements_survive_benefit_filter():
+    advert = """
+Essential requirements
+- Experience supporting vulnerable children
+- Ability to arrange transport to schools
+- Knowledge of employee assistance and support policies
+"""
+    items = deterministic_extract(advert)
+    assert len([item for item in items if item["category"] == "essential"]) == 3
+
+
+def test_decimal_working_hours_are_preserved_as_practical_metadata():
+    advert = "Working pattern:\n12.5 hours per week\nEssential criteria:\n- Reliable and punctual."
+    items = deterministic_extract(advert)
+    assert any(item["category"] == "practical" and item["text"] == "12.5 hours per week" for item in items)
+    assert any(item["category"] == "essential" and "Reliable and punctual" in item["text"] for item in items)
+
+
+def test_benefits_administration_and_employee_support_experience_are_real_requirements():
+    advert = """
+Essential criteria:
+- Staff benefits administration experience is essential
+- Employee Assistance Programme counselling experience is required
+- Free gym membership to all employees
+"""
+    items = deterministic_extract(advert)
+    essentials = [item["text"] for item in items if item["category"] == "essential"]
+    assert "Staff benefits administration experience is essential" in essentials
+    assert "Employee Assistance Programme counselling experience is required" in essentials
+    assert not any("Free gym membership" in item for item in essentials)
+    for item_text in essentials:
+        assert _validate_item({
+            "category": "essential", "text": item_text, "source_text": item_text,
+            "confidence": .96, "explicit_blocker": False,
+        }, advert) is not None
+
+
+def test_mixed_employer_offer_and_real_criterion_are_separated_and_grounded():
+    advert = "Essential criteria:\nWe offer support and training. Experience supporting vulnerable children is essential."
+    real_item = "Experience supporting vulnerable children is essential."
+    items = deterministic_extract(advert)
+    assert any(item["text"] == real_item for item in items), items
+    semantic = _validate_item({
+        "text": real_item,
+        "source_text": "We offer support and training. Experience supporting vulnerable children is essential.",
+        "category": "essential",
+        "confidence": .95,
+        "explicit_blocker": False,
+    }, advert)
+    assert semantic is not None
+    merged, _ = _reconcile_items([semantic], items)
+    assert any(item["text"] == real_item for item in merged)
+    assert not any("We offer support" in item["text"] for item in merged)
+
+
+def test_pure_benefit_mixed_source_remains_filtered():
+    advert = "We offer support and training. Free gym membership to all employees."
+    item = {
+        "category": "essential", "text": "Free gym membership to all employees.",
+        "source_text": advert, "confidence": .9, "explicit_blocker": False,
+    }
+    assert _validate_item(item, advert) is None

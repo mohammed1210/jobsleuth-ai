@@ -14,6 +14,8 @@ export type Job = {
   date_posted?: string | null;
   description?: string | null;
   ai_score?: number | null;
+  is_active?: boolean;
+  expires_at?: string | null;
 };
 
 export type SavedJob = {
@@ -26,56 +28,20 @@ export type SavedJob = {
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
-export const fallbackJobs: Job[] = [
-  {
-    id: 1,
-    title: 'Senior Software Engineer',
-    company: 'Northstar Labs',
-    location: 'Remote',
-    salary: '$140k - $180k',
-    salary_min: 140000,
-    salary_max: 180000,
-    role_type: 'Remote',
-    source: 'JobSleuth seed',
-    date_posted: '2 days ago',
-    url: 'https://example.com/jobs/1',
-    ai_score: 0.88,
-  },
-  {
-    id: 2,
-    title: 'Product Manager, AI Tools',
-    company: 'SignalWorks',
-    location: 'New York, NY',
-    salary: '$125k - $165k',
-    salary_min: 125000,
-    salary_max: 165000,
-    role_type: 'Hybrid',
-    source: 'LinkedIn',
-    date_posted: '4 days ago',
-    url: 'https://example.com/jobs/2',
-    ai_score: 0.81,
-  },
-  {
-    id: 3,
-    title: 'Frontend Engineer',
-    company: 'Cedar Systems',
-    location: 'Austin, TX',
-    salary: '$105k - $145k',
-    salary_min: 105000,
-    salary_max: 145000,
-    role_type: 'Full-time',
-    source: 'Indeed',
-    date_posted: '1 week ago',
-    url: 'https://example.com/jobs/3',
-    ai_score: 0.76,
-  },
-];
-
 export async function fetchJobs(params: Record<string, string>) {
   const query = new URLSearchParams(params);
   const response = await fetch(`${BACKEND_URL}/jobs?${query.toString()}`, { cache: 'no-store' });
   if (!response.ok) throw new Error('Failed to fetch jobs');
   return response.json() as Promise<{ jobs: Job[]; total: number; page: number; per_page: number }>;
+}
+
+/** A missing vacancy is distinct from an unavailable backend. */
+export async function fetchJobDetail(jobId: number): Promise<Job | null> {
+  if (!Number.isSafeInteger(jobId) || jobId <= 0) return null;
+  const response = await fetch(`${BACKEND_URL}/jobs/${jobId}`, { cache: 'no-store' });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error('Job details are temporarily unavailable. Please try again.');
+  return response.json() as Promise<Job>;
 }
 
 export async function fetchSavedJobs(session: Session) {
