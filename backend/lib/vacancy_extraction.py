@@ -527,6 +527,7 @@ def deterministic_extract(vacancy_text: str) -> list[dict[str, Any]]:
             is_bullet
             or _CANDIDATE_ATTRIBUTE_PREFIX.match(line)
             or _looks_like_person_spec_criterion(line, False)
+            or re.fullmatch(r"(?:excellent|good|effective|outstanding|well-developed|proven|sound|strong)\s+(?:[\w/-]+\s+){0,9}(?:skills?|abilities|ability|knowledge|experience)\.?", lowered)
             or re.fullmatch(r"(?:qualified teacher status(?:\s*\(qts\))?|qts)\.?", lowered)
         ):
             in_candidate_list = False
