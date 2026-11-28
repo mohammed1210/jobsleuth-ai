@@ -390,3 +390,32 @@ def test_generic_close_cannot_add_criterion_coverage():
     assert _framing_only("I would welcome the opportunity to bring my skills to your team. Thank you for your time.")
     assert not _framing_only("I checked the records and corrected the error. Thank you for your time.")
     assert _semantic_quality_gate([], [], {}) == "semantic_no_substantive_body"
+
+
+def test_semantic_paragraph_requires_action_link_for_each_claimed_criterion(monkeypatch):
+    import json
+    from types import SimpleNamespace
+    import openai
+    from lib import application_ai
+
+    first = evidence_card()
+    second = ApplicationEvidence(id="ev-2", actions=["I maintained the staffing roster."])
+    requirements = [
+        ApplicationRequirement(text="Assess risks", match_strength="strong", evidence_ids=[first.id]),
+        ApplicationRequirement(text="Maintain rosters", match_strength="strong", evidence_ids=[second.id]),
+    ]
+    monkeypatch.setattr(application_ai.settings, "OPENAI_API_KEY", "synthetic-test-key")
+    def create(**kwargs):
+        payload = {"paragraphs": [{
+            "text": first.actions[0],
+            "requirement_indices": [0, 1],
+            "evidence_ids": [first.id, second.id],
+            "supporting_fact_ids": [f"{first.id}:actions:0"],
+        }]}
+        return SimpleNamespace(status="completed", output_text=json.dumps(payload))
+    monkeypatch.setattr(openai, "OpenAI", lambda **kw: SimpleNamespace(
+        responses=SimpleNamespace(create=create)))
+    result, reason = application_ai.semantic_application_draft(
+        requirements, {first.id: first, second.id: second}, "Officer", "", "cover_letter", 500)
+    assert result is None
+    assert reason == "no_validated_paragraphs_missing_requirement_action_fact"
