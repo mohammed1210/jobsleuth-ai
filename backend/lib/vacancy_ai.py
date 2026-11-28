@@ -83,6 +83,8 @@ def semantic_extract(vacancy_text: str) -> list[dict[str, Any]] | None:
                         "eligibility, essential, desirable, trainable, practical. source_text must "
                         "be copied from the supplied vacancy and must directly support the item. "
                         "Extract actual candidate criteria and genuine work-pattern/eligibility constraints only. "
+                        "Future DBS, reference, occupational health or vetting checks that are conditions of an offer belong in practical, not eligibility; set explicit_blocker false. "
+                        "Keep explicit existing credentials and right-to-work requirements separate. "
                         "Do NOT extract employer culture statements, duties merely describing the job, application dates, "
                         "CV or personal-statement instructions, sift/interview process, presentation instructions, "
                         "contact/help text, reserve-list information, salary text, benefits, behaviour/technical section "
