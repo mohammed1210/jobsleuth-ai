@@ -1,0 +1,21 @@
+name: Atomic billing persistence
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  billing-postgres:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Atomic billing persistence (disposable PostgreSQL)
+        timeout-minutes: 5
+        run: bash ops/billing/verify_atomic_subscription_sync.sh
