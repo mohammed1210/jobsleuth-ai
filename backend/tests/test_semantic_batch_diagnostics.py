@@ -70,3 +70,42 @@ def test_missing_configuration_reports_reason(monkeypatch, caplog, entries):
     monkeypatch.setattr(batch.settings, "OPENAI_API_KEY", None)
     assert batch.semantic_assess_batch(entries) is None
     assert "status=not_configured" in caplog.text
+
+
+def test_shared_card_catalog_preserves_candidate_scope_and_reduces_payload(monkeypatch, caplog, entries):
+    first = entries[0][2][0]
+    second = SimpleNamespace(id="other-card", title="Other", actions=["I arranged cover."])
+    calls = []
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        def match(card, action):
+            return {"evidence_id": card, "strength": "partial", "score": 60,
+                    "confidence": 0.8, "why": "Related", "gaps": [],
+                    "supporting_facts": [{"field": "actions", "text": action}]}
+        payload = {"assessments": [
+            {"requirement_id": "0", "matches": [
+                match(first.id, "I checked records."),
+                match(second.id, "I arranged cover.")]},
+            {"requirement_id": "1", "matches": [
+                match(first.id, "I checked records."),
+                match(second.id, "I invented an outcome.")]}]}
+        return SimpleNamespace(choices=[SimpleNamespace(finish_reason="stop",
+            message=SimpleNamespace(content=json.dumps(payload)))],
+            usage=SimpleNamespace(prompt_tokens=100, completion_tokens=80))
+
+    monkeypatch.setattr(openai, "OpenAI", lambda **kwargs: SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))))
+    caplog.set_level(logging.INFO, logger=batch.__name__)
+    result = batch.semantic_assess_batch(entries + [(1, "another requirement", [first, second])])
+    assert len(calls) == 1
+    payload = json.loads(calls[0]["messages"][1]["content"])
+    assert [card["id"] for card in payload["evidence_cards"]] == [first.id, second.id]
+    assert payload["requirements"][0]["evidence_ids"] == [first.id]
+    assert payload["requirements"][1]["evidence_ids"] == [first.id, second.id]
+    assert all("evidence_cards" not in item for item in payload["requirements"])
+    assert set(result[0]) == {first.id}
+    assert set(result[1]) == {first.id}
+    assert "unique_cards=2 candidate_pairs=3 input_tokens=100 output_tokens=80" in caplog.text
+    assert first.id not in caplog.text
+    assert "private applicant text" not in caplog.text
