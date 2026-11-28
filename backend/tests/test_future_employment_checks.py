@@ -36,6 +36,8 @@ def test_hybrid_corrects_semantic_misclassification_without_inventing_checks():
     "Experience preparing employment references for candidates.",
     "You must have the right to work in the UK.",
     "You must already hold a driving licence and appointment is subject to DBS checks.",
+    "A full UK driving licence is essential and appointment is subject to Enhanced DBS checks.",
+    "All successful candidates will be required to undergo Full Police Vetting",
 ])
 def test_current_or_mixed_requirements_are_not_demoted(text):
     assert not is_future_employment_check(text)
