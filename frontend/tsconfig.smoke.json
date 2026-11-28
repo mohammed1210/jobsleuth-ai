@@ -28,6 +28,7 @@
     "tests/jobApplicationHandoff.smoke.test.ts",
     "tests/extractionGate.smoke.test.ts",
     "lib/vacancyParser.ts",
-    "tests/vacancyParser.smoke.test.ts"
+    "tests/vacancyParser.smoke.test.ts",
+    "tests/vacancySession.smoke.test.ts"
   ]
 }

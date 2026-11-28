@@ -17,6 +17,7 @@ import { getFreshSession, getSupabaseClient, isSupabaseConfigured } from '@/lib/
 import { extractVacancyIntelligence, type IntelligenceItem } from '@/lib/vacancyIntelligenceApi';
 import { parseVacancyText } from '@/lib/vacancyParser';
 import { createExtractionGate } from '@/lib/extractionGate';
+import { preserveVacancySession } from '@/lib/vacancySession';
 
 const lines = (value: string) => value.split('\n').map((item) => item.trim()).filter(Boolean);
 const VACANCY_DRAFT_KEY = 'jobsleuth.apply.vacancyDraft.v2';
@@ -363,9 +364,18 @@ export default function VacancyApplyPage() {
 
     void load();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!active) return;
-      sessionUserIdRef.current = nextSession?.user.id ?? null;
+      // Supabase may emit SIGNED_IN on tab focus and TOKEN_REFRESHED
+      // during a slow draft request. Neither changes the evidence owner.
+      // Keep the builder mounted and its local edits/in-flight result intact.
+      const previousUserId = sessionUserIdRef.current;
+      const nextUserId = nextSession?.user.id ?? null;
+      if (preserveVacancySession(event, previousUserId, nextUserId)) {
+        setSession(nextSession);
+        return;
+      }
+      sessionUserIdRef.current = nextUserId;
       setSession(nextSession);
       setDraftStateReady(false);
       setCandidateProfileLoaded(false);
