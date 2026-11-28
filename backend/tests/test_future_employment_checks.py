@@ -54,3 +54,24 @@ def test_explicit_future_screening_is_not_current_eligibility(text):
     assert len(items) == 1
     assert items[0]["category"] == "practical"
     assert not items[0]["explicit_blocker"]
+
+
+@pytest.mark.parametrize("criterion", [
+    "Experience carrying out pre-employment checks.",
+    "Experience administering pe-employment checks.",
+    "You will be required to conduct pre-employment checks.",
+])
+def test_screening_work_is_not_applicant_screening(criterion):
+    assert not is_future_employment_check(criterion)
+    items = deterministic_extract("Essential criteria:\n" + criterion)
+    assert any(i["category"] == "essential" and i["text"] == criterion for i in items)
+    semantic = [{"text": criterion, "source_text": criterion, "category": "essential",
+                 "explicit_blocker": False, "confidence": 0.95}]
+    merged, _ = _reconcile_items(semantic, items)
+    assert any(i["category"] == "essential" and i["text"] == criterion for i in merged)
+
+
+def test_mixed_mandatory_licence_remains_blocker():
+    text = "A full UK driving licence is essential and appointment is subject to Enhanced DBS checks."
+    items = deterministic_extract("Eligibility:\n" + text)
+    assert any(i["category"] == "eligibility" and i["explicit_blocker"] for i in items)
