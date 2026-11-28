@@ -367,9 +367,12 @@ def test_serco_pco_pattern_extracts_real_requirements_and_practical_fit():
     assert "valid cpc" not in essential_text
 
     assert "full uk driving licence essential" in eligibility_text
-    assert "disclosure and barring service" in eligibility_text
-    assert "employment references" in eligibility_text
-    assert "occupational health checks" in eligibility_text
+    assert "disclosure and barring service" in practical_text
+    assert "disclosure and barring service" not in eligibility_text
+    assert "employment references" in practical_text
+    assert "employment references" not in eligibility_text
+    assert "occupational health checks" in practical_text
+    assert "occupational health checks" not in eligibility_text
     assert "right to work in the uk" in eligibility_text
 
     assert "24/6 across early and late shifts" in practical_text
